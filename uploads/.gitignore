@@ -1,0 +1,8 @@
+*
+!.gitignore
+!.htaccess
+!index.html
+!media/
+media/*
+!media/.gitkeep
+!media/index.html
