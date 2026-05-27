@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "project": "logeon",
+  "latest": {
+    "ready": "1.0.0",
+    "source-dev": "1.0.0"
+  },
+  "releases": [
+    {
+      "version": "1.0.0",
+      "channel": "stable",
+      "date": "2026-05-15",
+      "minimum_supported": "1.0.0",
+      "requires_php": ">=8.1",
+      "requires_db_migration": false,
+      "security": false,
+      "packages": {
+        "ready": {
+          "url": "https://github.com/Gekis-Geko/Logeon/releases/download/v1.0.0/logeon-ready-1.0.0.zip",
+          "checksum_sha256": "0ff777b727b851b2c08d4475abc02aa03f68fa5a8b318f48c2749ddf745c82c4",
+          "size_bytes": 30132529,
+          "vendor_included": true,
+          "assets_compiled": true
+        },
+        "source-dev": {
+          "url": "https://github.com/Gekis-Geko/Logeon/releases/download/v1.0.0/logeon-source-1.0.0.zip",
+          "checksum_sha256": "78f55d7eb61562e2074f0b4fc4504a67a3015efaf8b1aa80b64a63faf805c779",
+          "size_bytes": 24859265,
+          "vendor_included": false,
+          "assets_compiled": false
+        }
+      },
+      "changelog_url": "https://github.com/Gekis-Geko/Logeon/releases/tag/v1.0.0",
+      "notes": [
+        "Manifest ufficiale del canale stable.",
+        "Aggiornare URL asset, checksum e size_bytes a ogni nuova release."
+      ]
+    }
+  ]
+}
