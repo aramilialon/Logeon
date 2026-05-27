@@ -96,6 +96,85 @@ class Themes
         return (bool) preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/', $themeId);
     }
 
+    private function normalizeThemeId(string $themeId): string
+    {
+        $themeId = trim(str_replace('\\', '/', $themeId));
+        if ($themeId === '') {
+            return '';
+        }
+
+        $themeId = trim($themeId, '/');
+        if ($themeId === '') {
+            return '';
+        }
+
+        if (substr($themeId, -11) === '/theme.json') {
+            $themeId = substr($themeId, 0, -11);
+        }
+
+        $parts = array_values(array_filter(explode('/', $themeId), static function ($part) {
+            return $part !== '' && $part !== '.';
+        }));
+
+        if ($parts !== []) {
+            $themeId = (string) end($parts);
+        }
+
+        return trim($themeId);
+    }
+
+    private function resolveThemeDirectory(string $themeId): array
+    {
+        $normalizedThemeId = $this->normalizeThemeId($themeId);
+        if ($normalizedThemeId === '') {
+            return ['id' => '', 'path' => ''];
+        }
+
+        $themesRoot = $this->themesRoot();
+        $directPath = $themesRoot . '/' . $normalizedThemeId;
+        if (is_dir($directPath)) {
+            $canonicalPath = realpath($directPath);
+            if ($canonicalPath !== false) {
+                return ['id' => basename($canonicalPath), 'path' => $canonicalPath];
+            }
+
+            return ['id' => $normalizedThemeId, 'path' => $directPath];
+        }
+
+        $entries = @scandir($themesRoot);
+        if (!is_array($entries)) {
+            return ['id' => '', 'path' => ''];
+        }
+
+        foreach ($entries as $entry) {
+            $directoryThemeId = trim((string) $entry);
+            if ($directoryThemeId === '' || $directoryThemeId === '.' || $directoryThemeId === '..') {
+                continue;
+            }
+
+            $themePath = $themesRoot . '/' . $directoryThemeId;
+            if (!is_dir($themePath)) {
+                continue;
+            }
+
+            if (strcasecmp($directoryThemeId, $normalizedThemeId) === 0) {
+                return ['id' => $directoryThemeId, 'path' => $themePath];
+            }
+
+            $manifestState = $this->readThemeManifest($themePath . '/theme.json');
+            $manifest = isset($manifestState['manifest']) && is_array($manifestState['manifest'])
+                ? $manifestState['manifest']
+                : [];
+            $manifestThemeId = $this->normalizeThemeId((string) ($manifest['id'] ?? ''));
+
+            if ($manifestThemeId !== '' && strcasecmp($manifestThemeId, $normalizedThemeId) === 0) {
+                return ['id' => $directoryThemeId, 'path' => $themePath];
+            }
+        }
+
+        return ['id' => '', 'path' => ''];
+    }
+
     private function readThemeManifest(string $manifestPath): array
     {
         if (!is_file($manifestPath) || !is_readable($manifestPath)) {
@@ -195,60 +274,60 @@ class Themes
                 }
             }
             foreach ($entries as $entry) {
-                    $themeId = trim((string) $entry);
-                    if ($themeId === '' || $themeId === '.' || $themeId === '..') {
-                        continue;
-                    }
-
-                    $themePath = $themesRoot . '/' . $themeId;
-                    if (!is_dir($themePath)) {
-                        continue;
-                    }
-
-                    $errors = [];
-                    if (!$this->isValidThemeId($themeId)) {
-                        $errors[] = 'theme_id_invalid';
-                    }
-
-                    $manifestState = $this->readThemeManifest($themePath . '/theme.json');
-                    $manifest = isset($manifestState['manifest']) && is_array($manifestState['manifest'])
-                        ? $manifestState['manifest']
-                        : [];
-
-                    if ((bool) ($manifestState['valid'] ?? false) !== true) {
-                        $manifestErrors = isset($manifestState['errors']) && is_array($manifestState['errors'])
-                            ? $manifestState['errors']
-                            : ['manifest_invalid'];
-                        $errors = array_merge($errors, $manifestErrors);
-                    }
-
-                    $viewsPath = $themePath . '/views';
-                    if (!is_dir($viewsPath)) {
-                        $errors[] = 'views_missing';
-                    }
-
-                    $manifestThemeId = isset($manifest['id']) ? trim((string) $manifest['id']) : '';
-                    if ($manifestThemeId !== '' && $manifestThemeId !== $themeId) {
-                        $errors[] = 'manifest_id_mismatch';
-                    }
-
-                    $isActive = ($enabled === true && $activeThemeId !== '' && $activeThemeId === $themeId);
-                    $valid = empty($errors);
-
-                    $dataset[] = [
-                        'id' => $themeId,
-                        'name' => isset($manifest['name']) ? (string) $manifest['name'] : $themeId,
-                        'version' => isset($manifest['version']) ? (string) $manifest['version'] : '-',
-                        'description' => isset($manifest['description']) ? (string) $manifest['description'] : '',
-                        'author' => isset($manifest['author']) ? (string) $manifest['author'] : '',
-                        'compat' => $this->normalizeCompatLabel($manifest['compat'] ?? null),
-                        'shell' => $this->normalizeShellLabel($manifest['shell'] ?? null),
-                        'is_active' => $isActive ? 1 : 0,
-                        'status' => $isActive ? 'active' : 'inactive',
-                        'is_valid' => $valid ? 1 : 0,
-                        'errors' => array_values(array_unique($errors)),
-                    ];
+                $themeId = trim((string) $entry);
+                if ($themeId === '' || $themeId === '.' || $themeId === '..') {
+                    continue;
                 }
+
+                $themePath = $themesRoot . '/' . $themeId;
+                if (!is_dir($themePath)) {
+                    continue;
+                }
+
+                $errors = [];
+                if (!$this->isValidThemeId($themeId)) {
+                    $errors[] = 'theme_id_invalid';
+                }
+
+                $manifestState = $this->readThemeManifest($themePath . '/theme.json');
+                $manifest = isset($manifestState['manifest']) && is_array($manifestState['manifest'])
+                    ? $manifestState['manifest']
+                    : [];
+
+                if ((bool) ($manifestState['valid'] ?? false) !== true) {
+                    $manifestErrors = isset($manifestState['errors']) && is_array($manifestState['errors'])
+                        ? $manifestState['errors']
+                        : ['manifest_invalid'];
+                    $errors = array_merge($errors, $manifestErrors);
+                }
+
+                $viewsPath = $themePath . '/views';
+                if (!is_dir($viewsPath)) {
+                    $errors[] = 'views_missing';
+                }
+
+                $manifestThemeId = isset($manifest['id']) ? trim((string) $manifest['id']) : '';
+                if ($manifestThemeId !== '' && $manifestThemeId !== $themeId) {
+                    $errors[] = 'manifest_id_mismatch';
+                }
+
+                $isActive = ($enabled === true && $activeThemeId !== '' && $activeThemeId === $themeId);
+                $valid = empty($errors);
+
+                $dataset[] = [
+                    'id' => $themeId,
+                    'name' => isset($manifest['name']) ? (string) $manifest['name'] : $themeId,
+                    'version' => isset($manifest['version']) ? (string) $manifest['version'] : '-',
+                    'description' => isset($manifest['description']) ? (string) $manifest['description'] : '',
+                    'author' => isset($manifest['author']) ? (string) $manifest['author'] : '',
+                    'compat' => $this->normalizeCompatLabel($manifest['compat'] ?? null),
+                    'shell' => $this->normalizeShellLabel($manifest['shell'] ?? null),
+                    'is_active' => $isActive ? 1 : 0,
+                    'status' => $isActive ? 'active' : 'inactive',
+                    'is_valid' => $valid ? 1 : 0,
+                    'errors' => array_values(array_unique($errors)),
+                ];
+            }
         }
 
         usort($dataset, static function ($a, $b) {
@@ -279,14 +358,20 @@ class Themes
         $config = $this->readConfigMap();
         $currentEnabled = $this->readConfigEnabled($config);
         $currentActiveThemeId = $this->readConfigActiveTheme($config);
+        $resolvedTheme = $this->resolveThemeDirectory($themeId);
+        $normalizedThemeId = $this->normalizeThemeId($themeId);
+        $themeId = (string) ($resolvedTheme['id'] ?? '');
+        $themePath = (string) ($resolvedTheme['path'] ?? '');
 
-        if ($themeId === '' || !$this->isValidThemeId($themeId)) {
-            throw AppError::validation('Tema non valido.', [], 'theme_not_found');
+        if ($themeId === '') {
+            if ($normalizedThemeId === '' || !$this->isValidThemeId($normalizedThemeId)) {
+                throw AppError::validation('Tema non valido.', [], 'theme_not_found');
+            }
+            throw AppError::validation('Tema non trovato.', [], 'theme_not_found');
         }
 
-        $themePath = $this->themesRoot() . '/' . $themeId;
-        if (!is_dir($themePath)) {
-            throw AppError::validation('Tema non trovato.', [], 'theme_not_found');
+        if (!$this->isValidThemeId($themeId)) {
+            throw AppError::validation('Tema non valido.', [], 'theme_not_found');
         }
 
         $manifestState = $this->readThemeManifest($themePath . '/theme.json');
@@ -326,6 +411,8 @@ class Themes
         $this->requireAdmin();
         $data = $this->requestDataObject();
         $themeId = InputValidator::string($data, 'theme_id', '');
+        $resolvedTheme = $this->resolveThemeDirectory($themeId);
+        $themeId = (string) ($resolvedTheme['id'] ?? $this->normalizeThemeId($themeId));
 
         $config = $this->readConfigMap();
         $activeThemeId = $this->readConfigActiveTheme($config);

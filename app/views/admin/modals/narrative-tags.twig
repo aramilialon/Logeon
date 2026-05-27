@@ -71,11 +71,11 @@
                         <div class="col-12 col-md-3">
                             <label class="form-label">Tipo entità</label>
                             <select name="entity_type" class="form-select form-select-sm">
-                                <option value="quest_definition">Quest</option>
                                 <option value="narrative_event">Attività recenti</option>
                                 <option value="system_event">Eventi</option>
                                 <option value="scene">Scene</option>
                                 <option value="faction">Fazioni</option>
+                                {{ slot('admin.narrative_tags.entity_type_options') }}
                             </select>
                         </div>
                         <div class="col-12 col-md-6">

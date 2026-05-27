@@ -33,6 +33,22 @@
  * @returns {Object} Istanza della chiamata (già inizializzata e inviata).
  */
 function Request(url, callbackName, data, extension) {
+    function beginBootOverlayRequest() {
+        if (typeof window === 'undefined' || !window.AppBootOverlay || typeof window.AppBootOverlay.beginRequest !== 'function') {
+            return null;
+        }
+
+        return window.AppBootOverlay.beginRequest();
+    }
+
+    function endBootOverlayRequest(token) {
+        if (!token || typeof window === 'undefined' || !window.AppBootOverlay || typeof window.AppBootOverlay.endRequest !== 'function') {
+            return;
+        }
+
+        window.AppBootOverlay.endRequest(token);
+    }
+
     var base = {
         url: null,
         data: {},
@@ -92,7 +108,18 @@ function Request(url, callbackName, data, extension) {
             if (!this.request || typeof window.$ === 'undefined' || typeof window.$.ajax !== 'function') {
                 return;
             }
-            window.$.ajax(this.request);
+
+            var overlayToken = beginBootOverlayRequest();
+            var xhr = window.$.ajax(this.request);
+
+            if (xhr && typeof xhr.always === 'function') {
+                xhr.always(function () {
+                    endBootOverlayRequest(overlayToken);
+                });
+                return;
+            }
+
+            endBootOverlayRequest(overlayToken);
         },
 
         _callbackSuccess: function (response) {
@@ -376,6 +403,22 @@ if (typeof window !== 'undefined') {
 }
 
 if (typeof window !== 'undefined' && typeof window.Request === 'function') {
+    function beginBootOverlayRequest() {
+        if (!window.AppBootOverlay || typeof window.AppBootOverlay.beginRequest !== 'function') {
+            return null;
+        }
+
+        return window.AppBootOverlay.beginRequest();
+    }
+
+    function endBootOverlayRequest(token) {
+        if (!token || !window.AppBootOverlay || typeof window.AppBootOverlay.endRequest !== 'function') {
+            return;
+        }
+
+        window.AppBootOverlay.endRequest(token);
+    }
+
     function getCsrfToken() {
         if (typeof document === 'undefined') {
             return '';
@@ -788,6 +831,8 @@ if (typeof window !== 'undefined' && typeof window.Request === 'function') {
                     return;
                 }
 
+                var overlayToken = beginBootOverlayRequest();
+
                 window.$.ajax(ajaxOptions).done(function (response) {
                     var parsed = parseJsonSafe(response);
                     if (parsed.parseError) {
@@ -832,6 +877,8 @@ if (typeof window !== 'undefined' && typeof window.Request === 'function') {
                         textStatus: textStatus,
                         errorThrown: errorThrown
                     });
+                }).always(function () {
+                    endBootOverlayRequest(overlayToken);
                 });
             });
         },

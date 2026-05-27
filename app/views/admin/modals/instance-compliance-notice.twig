@@ -1,0 +1,46 @@
+<div
+    class="modal fade"
+    id="admin-instance-compliance-modal"
+    tabindex="-1"
+    aria-labelledby="admin-instance-compliance-modal-title"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="admin-instance-compliance-modal-title">Responsabilita GDPR istanza Logeon</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">
+                    Logeon fornisce una base tecnica GDPR-ready, ma la conformita finale del PbC dipende dal gestore
+                    dell'istanza (titolare del trattamento).
+                </p>
+                <p class="mb-2">Prima di andare online, il gestore deve almeno:</p>
+                <ul class="mb-3">
+                    <li>validare con una figura legale i testi di privacy, termini e cookie;</li>
+                    <li>definire ruoli e responsabilita interne sul trattamento dati;</li>
+                    <li>attivare processi operativi (richieste GDPR, data breach, retention);</li>
+                    <li>mantenere policy e versioni sempre aggiornate nel tempo.</li>
+                </ul>
+                <p class="small text-muted mb-0">
+                    Versione avviso: <span data-role="admin-instance-compliance-version">-</span>
+                </p>
+            </div>
+            <div class="modal-footer d-flex justify-content-between align-items-center gap-3">
+                <div class="form-check me-auto">
+                    <input class="form-check-input" type="checkbox" value="1" id="admin-instance-compliance-ack">
+                    <label class="form-check-label" for="admin-instance-compliance-ack">
+                        Ho letto e mi rendo responsabile, non mostrare piu
+                    </label>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary" data-action="admin-instance-compliance-confirm" disabled>
+                        Conferma
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

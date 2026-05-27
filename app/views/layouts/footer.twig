@@ -5,13 +5,17 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start gap-3 mb-3">
             <div class="text-muted small">
                 <img src="{{ APP.brand_logo_icon }}" alt="{{ APP.name }}" height="36" class="d-inline-block mb-1">
-                <div>&copy; {{ "now"|date("Y") }} {{ APP.name }}. Tutti i diritti riservati.</div>
-                <div class="mt-1">Progetto creato utilizzando <strong>Logeon - Engine PbC</strong> {{ system.version|default('v0.0.1') }}</div>
+                <div>&copy; {{ "now"|date("Y") }} Logeon - Engine PbC. Tutti i diritti riservati.</div>
+                <div class="mt-1">Progetto creato utilizzando <strong><a href="https://logeon.it" target="_blank">Logeon - Engine PbC</a> v{{ system.version|default(APP_RELEASE.installed_version|default('0.0.0')) }}</strong></div>
+                <div class="mt-1">Logeon e distribuito con <a href="#" class="text-muted" data-bs-toggle="modal" data-bs-target="#license-modal">licenza MIT</a>.</div>
             </div>
             <nav class="d-flex flex-wrap justify-content-lg-end gap-3">
                 <a class="text-decoration-none text-muted" href="/rules"><span class="bi bi-ui-checks me-2"></span> Regolamento</a>
                 <a class="text-decoration-none text-muted" href="/storyboard"><span class="bi bi-globe-europe-africa me-2"></span> Ambientazione</a>
                 <a class="text-decoration-none text-muted" href="/how-to-play"><span class="bi bi-book me-2"></span> Come giocare</a>
+                <a class="text-decoration-none text-muted" href="{{ APP.legal.privacy_policy_url|default('/privacy-policy') }}"><span class="bi bi-shield-lock me-2"></span> Privacy</a>
+                <a class="text-decoration-none text-muted" href="{{ APP.legal.terms_of_service_url|default('/terms-of-service') }}"><span class="bi bi-file-text me-2"></span> Termini</a>
+                <a class="text-decoration-none text-muted" href="{{ APP.legal.cookie_policy_url|default('/cookie-policy') }}"><span class="bi bi-cookie me-2"></span> Cookie</a>
             </nav>
         </div>
         <div class="border-top pt-3 d-flex flex-column flex-sm-row flex-wrap gap-2 gap-sm-4">

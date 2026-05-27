@@ -373,5 +373,3 @@ try {
     fwrite(STDERR, '[FAIL] Social status provider runtime smoke failed: ' . $e->getMessage() . PHP_EOL);
     exit(1);
 }
-
-

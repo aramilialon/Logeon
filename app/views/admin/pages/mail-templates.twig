@@ -1,0 +1,31 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <header class="mt-3">
+        <h4 class="display-6">Template Email</h4>
+        <h6>Gestione template per le comunicazioni email</h6>
+    </header>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary" data-action="admin-mail-templates-reload">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aggiorna
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" data-action="admin-mail-templates-create">
+            <i class="bi bi-plus-lg me-1"></i>Nuovo template
+        </button>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form id="admin-mail-templates-filters" class="row g-2 align-items-end" autocomplete="off" novalidate>
+            <div class="col-auto">
+                <label for="admin-mail-templates-filter-query" class="form-label mb-1">Cerca</label>
+                <input id="admin-mail-templates-filter-query" name="query" type="text" class="form-control" maxlength="100" placeholder="Nome o descrizione...">
+            </div>
+            <div class="col-auto">
+                <a class="btn btn-sm btn-outline-secondary" href="/admin/mail-templates">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="grid-admin-mail-templates"></div>
+{% include 'admin/modals/mail-template.twig' %}

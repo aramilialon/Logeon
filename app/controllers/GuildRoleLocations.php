@@ -8,7 +8,6 @@ use App\Services\GuildRoleLocationAdminService;
 use Core\Http\InputValidator;
 use Core\Http\RequestData;
 
-
 use Core\Logging\LoggerInterface;
 
 class GuildRoleLocations extends GuildRoleLocation
@@ -100,5 +99,3 @@ class GuildRoleLocations extends GuildRoleLocation
         return parent::delete($operator);
     }
 }
-
-

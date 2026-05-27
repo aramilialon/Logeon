@@ -3,7 +3,7 @@
     {% block public_primary_navigation %}
         {% include 'layouts/navbar.twig' %}
     {% endblock %}
-    {% set pilot_bundle_version = APP.frontend.pilot_bundle_version|default('20260403') %}
+    {% set pilot_bundle_version = FRONTEND_ASSET_VERSION|default('20260403') %}
     <script type="module" src="/assets/js/dist/public-core.bundle.js?v={{ pilot_bundle_version }}"></script>
     {% block public_page_content %}
         <section class="container-fluid">
@@ -14,6 +14,7 @@
             </section>
         </section>
     {% endblock %}
+    {% include 'layouts/public_cookie_banner.twig' %}
 {% endblock %}
 {% block public_tail_assets %}
     {{ theme_assets('public_js')|raw }}

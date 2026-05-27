@@ -57,7 +57,7 @@ var AdminCharacterLifecycle = {
                 case 'admin-lifecycle-phase-save':         event.preventDefault(); self.savePhase(); break;
                 case 'admin-lifecycle-phase-edit':         event.preventDefault(); self.openPhaseModal('edit', self.findRowByTrigger(trigger)); break;
                 case 'admin-lifecycle-phase-delete':       event.preventDefault(); self.confirmPhaseDelete(self.findRowByTrigger(trigger)); break;
-                case 'admin-lifecycle-transition-lookup':  event.preventDefault(); self.lookupCharacterPhase(); break;
+                case 'admin-lifecycle-transition-lookup':  event.preventDefault(); self.handleTransitionLookupAction(); break;
                 case 'admin-lifecycle-transition-save':    event.preventDefault(); self.saveTransition(); break;
             }
         });
@@ -65,6 +65,9 @@ var AdminCharacterLifecycle = {
         if (this.transitionNameInput) {
             this.transitionNameInput.addEventListener('input', function () {
                 self.handleTransitionCharacterInput();
+            });
+            this.transitionNameInput.addEventListener('focus', function () {
+                self.handleTransitionCharacterFocus();
             });
         }
 
@@ -275,6 +278,23 @@ var AdminCharacterLifecycle = {
         });
     },
 
+    handleTransitionLookupAction: function () {
+        var query = this.transitionNameInput ? String(this.transitionNameInput.value || '').trim() : '';
+        var characterId = this.transitionIdInput ? (parseInt(this.transitionIdInput.value || '0', 10) || 0) : 0;
+
+        if (characterId > 0) {
+            this.lookupCharacterPhase();
+            return;
+        }
+
+        if (query.length < 2) {
+            Toast.show({ body: 'Digita almeno 2 caratteri per cercare un personaggio.', type: 'warning' });
+            return;
+        }
+
+        this.searchTransitionCharacters(query);
+    },
+
     saveTransition: function () {
         if (!this.transitionForm) { return; }
         var f           = this.transitionForm.elements;
@@ -305,6 +325,7 @@ var AdminCharacterLifecycle = {
         if (!this.transitionNameInput || !this.transitionIdInput) { return; }
         var query = String(this.transitionNameInput.value || '').trim();
         this.transitionIdInput.value = '';
+        this.clearTransitionCurrentPhase();
 
         if (this.transitionSearchTimer) {
             globalWindow.clearTimeout(this.transitionSearchTimer);
@@ -316,12 +337,35 @@ var AdminCharacterLifecycle = {
         }
 
         this.transitionSearchTimer = globalWindow.setTimeout(function () {
-            self.requestPost('/list/characters/search', { query: query }, function (response) {
-                self.renderTransitionSuggestions(response && response.dataset ? response.dataset : []);
-            }, function () {
-                self.hideTransitionSuggestions(true);
-            });
+            self.searchTransitionCharacters(query);
         }, 180);
+    },
+
+    handleTransitionCharacterFocus: function () {
+        if (!this.transitionNameInput) { return; }
+        var query = String(this.transitionNameInput.value || '').trim();
+        if (query.length < 2) { return; }
+        this.searchTransitionCharacters(query);
+    },
+
+    searchTransitionCharacters: function (query) {
+        var self = this;
+        var normalizedQuery = String(query || '').trim();
+        if (normalizedQuery.length < 2) {
+            this.hideTransitionSuggestions(true);
+            return;
+        }
+
+        if (this.transitionSearchTimer) {
+            globalWindow.clearTimeout(this.transitionSearchTimer);
+            this.transitionSearchTimer = null;
+        }
+
+        this.requestPost('/list/characters/search', { query: normalizedQuery, include_self: 1 }, function (response) {
+            self.renderTransitionSuggestions(response && response.dataset ? response.dataset : []);
+        }, function () {
+            self.hideTransitionSuggestions(true);
+        });
     },
 
     renderTransitionSuggestions: function (rows) {
@@ -364,6 +408,7 @@ var AdminCharacterLifecycle = {
         this.transitionIdInput.value = String(id);
         this.transitionNameInput.value = label;
         this.hideTransitionSuggestions(true);
+        this.lookupCharacterPhase();
     },
 
     hideTransitionSuggestions: function (clear) {
@@ -371,6 +416,13 @@ var AdminCharacterLifecycle = {
         this.transitionSuggestions.classList.add('d-none');
         if (clear === true) {
             this.transitionSuggestions.innerHTML = '';
+        }
+    },
+
+    clearTransitionCurrentPhase: function () {
+        var resultEl = document.getElementById('admin-lifecycle-character-current');
+        if (resultEl) {
+            resultEl.textContent = '';
         }
     },
 

@@ -722,5 +722,3 @@ class AuthGoogleService
         return $response;
     }
 }
-
-

@@ -57,15 +57,56 @@ function callSettingsModule(method, payload, onSuccess, onError) {
     return true;
 }
 
+function postSettingsJson(path, data, onSuccess, onError) {
+    var payload = (data && typeof data === 'object') ? Object.assign({}, data) : {};
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? String(csrfMeta.getAttribute('content') || '').trim() : '';
+    if (csrfToken !== '') {
+        payload._csrf = csrfToken;
+    }
+
+    $.ajax({
+        url: '/settings' + path,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(payload),
+        xhrFields: { withCredentials: true },
+        headers: csrfToken !== '' ? { 'X-CSRF-Token': csrfToken } : {},
+        success: function (res) {
+            if (res && res.error) {
+                if (typeof onError === 'function') {
+                    onError(res);
+                }
+            } else {
+                if (typeof onSuccess === 'function') {
+                    onSuccess(res);
+                }
+            }
+        },
+        error: function (xhr) {
+            var res = null;
+            try {
+                res = JSON.parse(xhr.responseText);
+            } catch (e) {}
+            if (typeof onError === 'function') {
+                onError(res || new Error('Errore di rete.'));
+            }
+        }
+    });
+}
+
 function GameSettingsPage(extension) {
         let page = {
             dataset: null,
             dmControl: null,
             inviteControl: null,
             notifyControl: null,
+            newsletterControl: null,
             deleteConfirmControl: null,
             deleteCountdownTimer: null,
             deleteCountdownSeconds: 8,
+            privacyContext: null,
+            privacyRequests: [],
             init: function () {
                 if (!$('#settings-page').length) {
                     return this;
@@ -73,6 +114,9 @@ function GameSettingsPage(extension) {
 
                 this.bindControls();
                 this.get();
+                this.loadMailPreferences();
+                this.loadPrivacyContext();
+                this.loadPrivacyRequests();
 
                 return this;
             },
@@ -85,6 +129,9 @@ function GameSettingsPage(extension) {
                 }
                 if (this.notifyControl && typeof this.notifyControl.destroy === 'function') {
                     this.notifyControl.destroy();
+                }
+                if (this.newsletterControl && typeof this.newsletterControl.destroy === 'function') {
+                    this.newsletterControl.destroy();
                 }
                 if (this.deleteConfirmControl && typeof this.deleteConfirmControl.destroy === 'function') {
                     this.deleteConfirmControl.destroy();
@@ -113,13 +160,22 @@ function GameSettingsPage(extension) {
                 }
 
                 if (typeof CheckGroup === 'function' && document.getElementById('settings-notifications')) {
+                    let notificationOptions = this.resolveNotificationOptions();
                     this.notifyControl = CheckGroup('#settings-notifications', {
                         btnClass: 'btn-sm',
-                        options: [
-                            { label: 'Messaggi', value: 'messages' },
-                            { label: 'Inviti', value: 'invites' },
-                            { label: 'News', value: 'news' }
-                        ]
+                        options: notificationOptions.map(function (option) {
+                            return { label: option.label, value: option.key };
+                        })
+                    });
+                }
+
+                if (typeof SwitchGroup === 'function' && document.getElementById('settings-newsletter-opt-in')) {
+                    this.newsletterControl = SwitchGroup('#settings-newsletter-opt-in', {
+                        trueLabel: 'Iscritto',
+                        falseLabel: 'Non iscritto',
+                        trueValue: '1',
+                        falseValue: '0',
+                        defaultValue: '0'
                     });
                 }
 
@@ -155,6 +211,18 @@ function GameSettingsPage(extension) {
                 confirmInput.off('change.settings').on('change.settings', function () {
                     self.updateDeleteState();
                 });
+                $('[data-mail-prefs-save]').off('click.settings').on('click.settings', function () {
+                    self.saveMailPreferences();
+                });
+                $('[data-privacy-request-export]').off('click.settings').on('click.settings', function () {
+                    self.createPrivacyRequest('export_data');
+                });
+                $('[data-privacy-request-delete]').off('click.settings').on('click.settings', function () {
+                    self.createPrivacyRequest('delete_account');
+                });
+                $('[data-privacy-export-now]').off('click.settings').on('click.settings', function () {
+                    self.exportPrivacyNow();
+                });
             },
             get: function () {
                 var self = this;
@@ -167,6 +235,7 @@ function GameSettingsPage(extension) {
                         return;
                     }
                     self.dataset = response.dataset;
+                    self.bindControls();
                     self.build();
                 }, function (error) {
                     Toast.show({
@@ -191,15 +260,22 @@ function GameSettingsPage(extension) {
                 }
 
                 if (this.notifyControl && this.notifyControl.input) {
+                    let options = this.resolveNotificationOptions();
+                    let values = (this.dataset && this.dataset.notification_preferences) ? this.dataset.notification_preferences : null;
                     let selected = [];
-                    if (parseInt(this.dataset.notify_messages, 10) === 1) {
-                        selected.push('messages');
-                    }
-                    if (parseInt(this.dataset.notify_invites, 10) === 1) {
-                        selected.push('invites');
-                    }
-                    if (parseInt(this.dataset.notify_news, 10) === 1) {
-                        selected.push('news');
+                    for (let i = 0; i < options.length; i++) {
+                        let key = options[i].key;
+                        if (!key) {
+                            continue;
+                        }
+                        if (values && parseInt(values[key], 10) === 1) {
+                            selected.push(key);
+                            continue;
+                        }
+                        let legacyField = 'notify_' + key;
+                        if (parseInt(this.dataset[legacyField], 10) === 1) {
+                            selected.push(key);
+                        }
                     }
                     this.notifyControl.input.val(selected).change();
                 }
@@ -412,10 +488,18 @@ function GameSettingsPage(extension) {
                 let payload = {
                     dm_policy: dmVal !== undefined && dmVal !== null && dmVal !== '' ? parseInt(dmVal, 10) : 0,
                     invite_policy: inviteVal !== undefined && inviteVal !== null && inviteVal !== '' ? parseInt(inviteVal, 10) : 0,
-                    notify_messages: notifyVals.indexOf('messages') !== -1 ? 1 : 0,
-                    notify_invites: notifyVals.indexOf('invites') !== -1 ? 1 : 0,
-                    notify_news: notifyVals.indexOf('news') !== -1 ? 1 : 0
+                    notification_preferences: {}
                 };
+                let options = this.resolveNotificationOptions();
+                for (let i = 0; i < options.length; i++) {
+                    let key = options[i].key;
+                    if (!key) {
+                        continue;
+                    }
+                    let enabled = notifyVals.indexOf(key) !== -1 ? 1 : 0;
+                    payload.notification_preferences[key] = enabled;
+                    payload['notify_' + key] = enabled;
+                }
                 callSettingsModule('updateSettings', payload, function () {
                     Toast.show({
                         body: 'Preferenze salvate.',
@@ -427,6 +511,35 @@ function GameSettingsPage(extension) {
                         type: 'error'
                     });
                 });
+            },
+            resolveNotificationOptions: function () {
+                let defaults = [
+                    { key: 'messages', label: 'Messaggi' },
+                    { key: 'invites', label: 'Inviti' }
+                ];
+
+                if (!this.dataset || !Array.isArray(this.dataset.notification_preference_options)) {
+                    return defaults;
+                }
+
+                let options = [];
+                for (let i = 0; i < this.dataset.notification_preference_options.length; i++) {
+                    let raw = this.dataset.notification_preference_options[i];
+                    if (!raw) {
+                        continue;
+                    }
+                    let key = (raw.key !== undefined && raw.key !== null) ? String(raw.key).trim().toLowerCase() : '';
+                    let label = (raw.label !== undefined && raw.label !== null) ? String(raw.label).trim() : '';
+                    if (!key || !/^[a-z0-9_-]+$/.test(key)) {
+                        continue;
+                    }
+                    if (!label) {
+                        label = key;
+                    }
+                    options.push({ key: key, label: label });
+                }
+
+                return options.length ? options : defaults;
             },
             changePassword: function () {
                 let oldPassword = $('#settings-old-password').val();
@@ -580,6 +693,167 @@ function GameSettingsPage(extension) {
                         type: 'error'
                     });
                 });
+            },
+            loadMailPreferences: function () {
+                var self = this;
+                postSettingsJson('/mail-preferences/get', {}, function (res) {
+                    if (!res || !res.preferences) {
+                        return;
+                    }
+                    var value = parseInt(res.preferences.newsletter_opt_in, 10) === 1 ? '1' : '0';
+                    if (self.newsletterControl && typeof self.newsletterControl.setValue === 'function') {
+                        self.newsletterControl.setValue(value);
+                        return;
+                    }
+                    var input = $('[data-newsletter-opt-in]');
+                    if (input.length) {
+                        input.val(value).change();
+                    }
+                }, function () {});
+            },
+            saveMailPreferences: function () {
+                var rawValue = '0';
+                if (this.newsletterControl && typeof this.newsletterControl.getValue === 'function') {
+                    rawValue = this.newsletterControl.getValue();
+                } else {
+                    var input = $('[data-newsletter-opt-in]');
+                    if (input.length) {
+                        rawValue = String(input.val() || '0');
+                    }
+                }
+                var optIn = rawValue === '1' ? 1 : 0;
+                postSettingsJson('/mail-preferences/update', { newsletter_opt_in: optIn }, function () {
+                    Toast.show({
+                        body: 'Preferenze email salvate.',
+                        type: 'success'
+                    });
+                }, function (error) {
+                    Toast.show({
+                        body: normalizeSettingsError(error, 'Errore durante il salvataggio.'),
+                        type: 'error'
+                    });
+                });
+            },
+            loadPrivacyContext: function () {
+                var self = this;
+                callSettingsModule('getPrivacyContext', {}, function (res) {
+                    if (!res || !res.context) {
+                        return;
+                    }
+                    self.privacyContext = res.context;
+                }, function () {});
+            },
+            loadPrivacyRequests: function () {
+                var self = this;
+                callSettingsModule('listPrivacyRequests', {}, function (res) {
+                    self.privacyRequests = (res && Array.isArray(res.dataset)) ? res.dataset : [];
+                    self.renderPrivacyRequests();
+                }, function () {
+                    self.privacyRequests = [];
+                    self.renderPrivacyRequests();
+                });
+            },
+            renderPrivacyRequests: function () {
+                var body = $('[data-privacy-requests-body]');
+                if (!body.length) {
+                    return;
+                }
+                var rows = this.privacyRequests || [];
+                if (!rows.length) {
+                    body.html('<tr><td colspan="3" class="text-muted">Nessuna richiesta presente.</td></tr>');
+                    return;
+                }
+
+                var html = '';
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var type = String(row.request_type || '').trim();
+                    var status = String(row.status || '').trim();
+                    var created = row.created_at || '';
+                    if (typeof Dates === 'function' && created) {
+                        created = Dates().formatHumanDateTime(created);
+                    }
+                    if (type === 'export_data') {
+                        type = 'Esportazione dati';
+                    } else if (type === 'delete_account') {
+                        type = 'Cancellazione account';
+                    }
+                    html += '<tr>'
+                        + '<td>' + (type || '-') + '</td>'
+                        + '<td><span class="badge text-bg-secondary">' + (status || '-') + '</span></td>'
+                        + '<td>' + (created || '-') + '</td>'
+                        + '</tr>';
+                }
+
+                body.html(html);
+            },
+            createPrivacyRequest: function (requestType) {
+                var self = this;
+                var note = $('[data-privacy-request-note]').val();
+                var label = requestType === 'delete_account' ? 'cancellazione account' : 'esportazione dati';
+                Dialog('warning', {
+                    title: 'Richiesta privacy',
+                    body: '<p>Confermi l\'apertura della richiesta di ' + label + '?</p>'
+                }, function () {
+                    callSettingsModule('createPrivacyRequest', {
+                        request_type: requestType,
+                        note: note
+                    }, function () {
+                        if (typeof hideGeneralConfirmDialog === 'function') {
+                            hideGeneralConfirmDialog();
+                        }
+                        Toast.show({
+                            body: 'Richiesta registrata con successo.',
+                            type: 'success'
+                        });
+                        $('[data-privacy-request-note]').val('');
+                        self.loadPrivacyRequests();
+                    }, function (error) {
+                        Toast.show({
+                            body: normalizeSettingsError(error, 'Errore durante la creazione della richiesta privacy.'),
+                            type: 'error'
+                        });
+                    });
+                }).show();
+            },
+            exportPrivacyNow: function () {
+                callSettingsModule('exportPrivacyData', {}, function (res) {
+                    if (!res || !res.dataset) {
+                        Toast.show({
+                            body: 'Nessun dato disponibile per l\'esportazione.',
+                            type: 'warning'
+                        });
+                        return;
+                    }
+
+                    var payload = JSON.stringify(res.dataset, null, 2);
+                    var stamp = new Date();
+                    var filename = 'logeon-export-' + stamp.getFullYear()
+                        + String(stamp.getMonth() + 1).padStart(2, '0')
+                        + String(stamp.getDate()).padStart(2, '0')
+                        + '-' + String(stamp.getHours()).padStart(2, '0')
+                        + String(stamp.getMinutes()).padStart(2, '0')
+                        + String(stamp.getSeconds()).padStart(2, '0') + '.json';
+                    var blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
+                    var url = URL.createObjectURL(blob);
+                    var link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+
+                    Toast.show({
+                        body: 'Export JSON pronto.',
+                        type: 'success'
+                    });
+                }, function (error) {
+                    Toast.show({
+                        body: normalizeSettingsError(error, 'Errore durante l\'esportazione dati.'),
+                        type: 'error'
+                    });
+                });
             }
         };
 
@@ -590,4 +864,3 @@ function GameSettingsPage(extension) {
 globalWindow.GameSettingsPage = GameSettingsPage;
 export { GameSettingsPage as GameSettingsPage };
 export default GameSettingsPage;
-

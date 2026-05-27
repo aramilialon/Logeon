@@ -50,12 +50,12 @@ var AdminThemes = {
 
         if (this.searchInput) {
             this.searchInput.addEventListener('input', function () {
-                self.refreshGridData();
+                self.refreshGridData({ resetPage: true });
             });
         }
         if (this.statusFilter) {
             this.statusFilter.addEventListener('change', function () {
-                self.refreshGridData();
+                self.refreshGridData({ resetPage: true });
             });
         }
 
@@ -79,7 +79,7 @@ var AdminThemes = {
                 if (self.statusFilter) {
                     self.statusFilter.value = 'all';
                 }
-                self.refreshGridData();
+                self.refreshGridData({ resetPage: true });
             }
         });
     },
@@ -261,17 +261,55 @@ var AdminThemes = {
         }
     },
 
-    refreshGridData: function () {
+    refreshGridData: function (options) {
         if (!this.grid) {
             return this;
         }
+        options = options || {};
 
         var filtered = this.filterDataset(this.rawDataset.slice());
-        this.grid.dataset = filtered;
+        var pagedDataset = this.paginateDataset(filtered, options.resetPage === true);
+        this.grid.dataset = pagedDataset;
         this.grid.rebuildIndex();
         this.grid.updateTable();
         this.mountStatusSwitches();
         return this;
+    },
+
+    paginateDataset: function (dataset, resetPage) {
+        var rows = Array.isArray(dataset) ? dataset : [];
+        var paginator = this.grid && this.grid.paginator ? this.grid.paginator : null;
+        if (!paginator || !paginator.nav) {
+            return rows;
+        }
+
+        var nav = paginator.nav;
+        var results = paginator.toPositiveInt(nav.results, 20);
+        var page = resetPage === true ? 1 : paginator.toPositiveInt(nav.page, 1);
+        var total = rows.length;
+        var totalPages = total > 0 ? Math.ceil(total / results) : 0;
+
+        if (totalPages > 0 && page > totalPages) {
+            page = totalPages;
+        }
+        if (page < 1) {
+            page = 1;
+        }
+
+        paginator.setNav({
+            query: (nav.query && typeof nav.query === 'object') ? nav.query : {},
+            orderBy: String(nav.orderBy || '__default__|ASC'),
+            page: page,
+            results: results,
+            tot: { count: total }
+        });
+
+        if (total === 0) {
+            return [];
+        }
+
+        var start = (page - 1) * results;
+        return rows.slice(start, start + results);
     },
 
     filterDataset: function (dataset) {
@@ -504,25 +542,50 @@ var AdminThemes = {
     requestPost: function (url, payload, onSuccess, onFail) {
         var self = this;
         var csrfToken = this.getCsrfToken();
-        var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        var headers = {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        };
         if (csrfToken !== '') {
             headers['X-CSRF-Token'] = csrfToken;
         }
 
-        $.ajax({
-            method: 'POST',
-            url: url,
-            headers: headers,
-            data: {
-                action: 'list',
-                _csrf: csrfToken,
-                data: JSON.stringify(payload || {})
+        if (typeof window.fetch !== 'function') {
+            if (typeof onFail === 'function') {
+                onFail({ statusText: 'HTTP client non disponibile.' });
             }
-        }).done(function (response) {
+            Toast.show({ body: 'HTTP client non disponibile.', type: 'danger' });
+            self.loadGrid();
+            return;
+        }
+
+        var body = new URLSearchParams();
+        body.set('action', 'list');
+        body.set('_csrf', csrfToken);
+        body.set('data', JSON.stringify(payload || {}));
+
+        window.fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: body.toString()
+        }).then(function (response) {
+            return response.text().then(function (text) {
+                var parsed = {};
+                try { parsed = text ? JSON.parse(text) : {}; } catch (error) { parsed = {}; }
+                if (!response.ok) {
+                    throw {
+                        responseJSON: parsed,
+                        responseText: text,
+                        statusText: response.statusText
+                    };
+                }
+                return parsed;
+            });
+        }).then(function (response) {
             if (typeof onSuccess === 'function') {
                 onSuccess(response || {});
             }
-        }).fail(function (xhr) {
+        }).catch(function (xhr) {
             if (typeof onFail === 'function') {
                 var handled = onFail(xhr);
                 if (handled === true) {

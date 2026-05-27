@@ -7,7 +7,6 @@ use App\Models\Nationality;
 use Core\Http\InputValidator;
 use Core\Http\RequestData;
 
-
 use Core\Logging\LoggerInterface;
 
 class Nationalities extends Nationality
@@ -66,5 +65,3 @@ class Nationalities extends Nationality
     {
     }
 }
-
-

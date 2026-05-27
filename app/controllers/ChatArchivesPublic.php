@@ -29,7 +29,7 @@ class ChatArchivesPublic
 
     public function show($echo = true)
     {
-        $data  = $this->requestDataObject();
+        $data = $this->requestDataObject();
         $token = trim(InputValidator::string($data, 'token', ''));
 
         if ($token === '') {

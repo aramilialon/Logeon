@@ -88,4 +88,3 @@ class SocialStatusProviderRegistry
         return $fallback;
     }
 }
-

@@ -458,5 +458,3 @@ class Models
     }
 
 }
-
-

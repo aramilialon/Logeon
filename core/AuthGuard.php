@@ -15,11 +15,22 @@ class AuthGuard
         'forum.admin',
         'settings.manage',
         'user.manage',
+        // Media Manager
+        'media.view',
+        'media.upload',
+        'media.manage_all',
+        'media.manage_folders',
     ];
 
     private const STAFF_ABILITIES = [
         'location.invisible',
         'location.moderation',
+        // Media Manager (staff)
+        'media.view',
+        'media.upload',
+        'media.rename_own',
+        'media.delete_own',
+        'media.manage_folders',
     ];
 
     private const AUTHENTICATED_ABILITIES = [
@@ -133,6 +144,14 @@ class AuthGuard
     }
 
     /**
+     * Get current user ID.
+     */
+    public static function userId(): int
+    {
+        return (int) self::session()->get('user_id');
+    }
+
+    /**
      * Release the PHP session lock after reading all needed session data.
      * Call this in read-only API endpoints after pulling session values,
      * so that concurrent AJAX requests on the same session (common on
@@ -178,6 +197,11 @@ class AuthGuard
             return false;
         }
 
+        // Forum moderation: moderators, admins and superusers can intervene.
+        if ($ability === 'forum.admin' || $ability === 'forum.moderate') {
+            return static::isAdmin() || static::isModerator() || static::isSuperuser();
+        }
+
         $adminAbilities = self::resolveAbilityList('auth.abilities.admin', self::ADMIN_ABILITIES);
         if (in_array($ability, $adminAbilities, true)) {
             return static::isAdmin();
@@ -204,6 +228,14 @@ class AuthGuard
         }
 
         return false;
+    }
+
+    /**
+     * Alias for can() method for better readability.
+     */
+    public static function hasCapability($ability, array $context = []): bool
+    {
+        return self::can($ability, $context);
     }
 
     public static function enforceAbility($ability, array $context = [], string $message = 'Accesso non autorizzato'): void

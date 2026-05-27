@@ -1,19 +1,34 @@
 {
   "id": "logeon.factions",
-  "name": "Logeon Factions",
+  "name": "Fazioni",
   "version": "0.1.0",
   "vendor": "Logeon",
   "description": "Modulo Fazioni: provider runtime agganciato via hook faction.provider.",
+  "privacy": {
+    "personal_data": false,
+    "data_categories": [],
+    "purposes": [],
+    "retention": "inherits_instance_policy",
+    "requires_consent": false,
+    "exports_user_data": false,
+    "supports_purge": true
+  },
   "category": "gameplay",
   "class": "bundled",
   "compat": {
-    "min": "0.8.0",
+    "min": "1.0.0",
     "max": ""
   },
   "requires": [],
   "entrypoints": {
     "bootstrap": "bootstrap.php",
     "routes": "routes.php"
+  },
+  "migrations": {
+    "path": "migrations"
+  },
+  "uninstall": {
+    "path": "migrations/uninstall"
   },
   "assets": {
     "admin": {
@@ -29,7 +44,7 @@
         {
           "label": "Fazioni",
           "href": "/game/factions",
-          "icon": "bi bi-shield-shaded",
+          "icon": "",
           "order": 120
         }
       ],
@@ -37,7 +52,7 @@
         {
           "label": "Fazioni",
           "href": "/game/factions",
-          "icon": "bi bi-shield-shaded",
+          "icon": "",
           "order": 120
         }
       ]
@@ -47,7 +62,7 @@
         {
           "label": "Fazioni",
           "href": "/admin/factions",
-          "icon": "bi bi-shield-shaded",
+          "icon": "",
           "page": "factions",
           "section": "Gruppi e fazioni",
           "section_order": 90,

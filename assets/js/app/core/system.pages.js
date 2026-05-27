@@ -196,6 +196,8 @@ function initInstallPage() {
     var dbTested = false;
     var configWritten = false;
     var dbInitialized = false;
+    var isBusy = false;
+    var busyTimers = [];
 
     function setAlert(type, message) {
         var alert = window.$('#install-alert');
@@ -205,6 +207,53 @@ function initInstallPage() {
 
     function clearAlert() {
         window.$('#install-alert').addClass('d-none').text('');
+    }
+
+    function normalizeBaseUrl(value) {
+        var out = String(value || '').trim();
+        out = out.replace(/^https?:\/\//i, '');
+        out = out.replace(/\/+$/g, '');
+        return out;
+    }
+
+    function clearBusyTimers() {
+        while (busyTimers.length > 0) {
+            var timer = busyTimers.pop();
+            window.clearTimeout(timer);
+        }
+    }
+
+    function setBusyMessage(message) {
+        window.$('#install-runtime-message').text(String(message || ''));
+    }
+
+    function setBusyState(active, title, message) {
+        isBusy = active === true;
+        if (!isBusy) {
+            clearBusyTimers();
+        }
+
+        var box = window.$('#install-runtime-status');
+        var titleText = String(title || 'Operazione in corso...');
+        var messageText = String(message || 'Attendere il completamento del passaggio corrente.');
+        window.$('#install-runtime-title').text(titleText);
+        setBusyMessage(messageText);
+
+        if (isBusy) {
+            box.removeClass('d-none');
+        } else {
+            box.addClass('d-none');
+        }
+
+        var lock = isBusy;
+        window.$('#installer-page button').prop('disabled', lock);
+        window.$('#installer-page input, #installer-page select').prop('readonly', lock).prop('disabled', lock);
+        window.$('#btn-prev').prop('disabled', lock || currentStep === 1);
+        window.$('#btn-next').toggle(currentStep < maxStep).prop('disabled', lock);
+        if (!isBusy) {
+            window.$('#db-crypt-key').prop('readonly', true);
+            updateStepper();
+        }
     }
 
     function updateStepper() {
@@ -219,8 +268,10 @@ function initInstallPage() {
     }
 
     function readAppData() {
+        var normalizedBaseUrl = normalizeBaseUrl(window.$('#app-baseurl').val());
+        window.$('#app-baseurl').val(normalizedBaseUrl);
         return {
-            baseurl: window.$('#app-baseurl').val(),
+            baseurl: normalizedBaseUrl,
             lang: window.$('#app-lang').val(),
             name: window.$('#app-name').val(),
             title: window.$('#app-title').val(),
@@ -256,6 +307,36 @@ function initInstallPage() {
         window.$('#db-crypt-key').val(generateCryptKey());
     });
 
+    window.$('#app-baseurl').off('blur.system-install').on('blur.system-install', function () {
+        window.$(this).val(normalizeBaseUrl(window.$(this).val()));
+    });
+
+    function validateLocalStepOne() {
+        var appData = readAppData();
+        if (!appData.baseurl) {
+            setAlert('warning', 'Inserisci il Base URL.');
+            return false;
+        }
+        if (!appData.name || !appData.title || !appData.description) {
+            setAlert('warning', 'Compila nome, titolo e descrizione prima di procedere.');
+            return false;
+        }
+        return true;
+    }
+
+    function validateLocalDbData() {
+        var dbData = readDbData();
+        if (!String(dbData.host || '').trim() || !String(dbData.db_name || '').trim() || !String(dbData.user || '').trim()) {
+            setAlert('warning', 'Compila host, database e utente DB.');
+            return false;
+        }
+        if (!String(dbData.crypt_key || '').trim()) {
+            setAlert('warning', 'Genera o inserisci una chiave di cifratura.');
+            return false;
+        }
+        return true;
+    }
+
     function canGoNext() {
         if (currentStep === 2 && !dbTested) {
             setAlert('warning', 'Esegui prima il test connessione DB.');
@@ -273,12 +354,22 @@ function initInstallPage() {
     }
 
     function goNext() {
+        if (isBusy) {
+            return;
+        }
         clearAlert();
         if (currentStep === 1) {
+            if (!validateLocalStepOne()) {
+                return;
+            }
+            setBusyState(true, 'Validazione dati applicazione', 'Sto verificando i dati inseriti...');
             requestPost('/install/validate-app', { app: readAppData() }, 'installValidateApp', function () {
+                    setBusyState(false);
                     currentStep = 2;
                     updateStepper();
+                    setAlert('success', 'Dati applicazione validati. Puoi configurare il database.');
             }, function (error) {
+                setBusyState(false);
                 setAlertFromError(setAlert, error, 'Dati applicazione non validi.');
             });
             return;
@@ -295,6 +386,9 @@ function initInstallPage() {
     }
 
     function goPrev() {
+        if (isBusy) {
+            return;
+        }
         clearAlert();
         if (currentStep > 1) {
             currentStep -= 1;
@@ -306,36 +400,72 @@ function initInstallPage() {
     window.$('#btn-prev').off('click.system-install').on('click.system-install', goPrev);
 
     window.$('#btn-test-db').off('click.system-install').on('click.system-install', function () {
+        if (isBusy) {
+            return;
+        }
         clearAlert();
+        if (!validateLocalDbData()) {
+            return;
+        }
+        setBusyState(true, 'Test connessione database', 'Sto verificando connessione e credenziali...');
         requestPost('/install/test-db', { db: readDbData() }, 'installTestDb', function () {
+                setBusyState(false);
                 dbTested = true;
                 setAlert('success', 'Connessione DB verificata correttamente.');
         }, function (error) {
+            setBusyState(false);
             dbTested = false;
             setAlertFromError(setAlert, error, 'Test connessione DB fallito.');
         });
     });
 
     window.$('#btn-write-config').off('click.system-install').on('click.system-install', function () {
+        if (isBusy) {
+            return;
+        }
         clearAlert();
+        if (!validateLocalStepOne() || !validateLocalDbData()) {
+            return;
+        }
+        setBusyState(true, 'Scrittura configurazione', 'Sto aggiornando i file di configurazione...');
         requestPost('/install/write-config', {
             app: readAppData(),
             db: readDbData()
-        }, 'installWriteConfig', function () {
+        }, 'installWriteConfig', function (response) {
+                setBusyState(false);
                 configWritten = true;
-                setAlert('success', 'File di configurazione scritti con successo.');
+                var appInfo = response && response.app ? response.app : {};
+                var savedBaseurl = normalizeBaseUrl(appInfo.baseurl || readAppData().baseurl);
+                window.$('#app-baseurl').val(savedBaseurl);
+                setAlert('success', 'Configurazione salvata. Base URL registrato: ' + (savedBaseurl || '-'));
         }, function (error) {
+            setBusyState(false);
             configWritten = false;
             setAlertFromError(setAlert, error, 'Scrittura configurazione fallita.');
         });
     });
 
     window.$('#btn-init-db').off('click.system-install').on('click.system-install', function () {
+        if (isBusy) {
+            return;
+        }
         clearAlert();
+        if (!validateLocalDbData()) {
+            return;
+        }
+        setBusyState(true, 'Inizializzazione database', 'Avvio creazione/verifica database...');
+        busyTimers.push(window.setTimeout(function () {
+            setBusyMessage('Importazione schema SQL in corso...');
+        }, 900));
+        busyTimers.push(window.setTimeout(function () {
+            setBusyMessage('Applicazione patch e ottimizzazioni in corso...');
+        }, 2000));
         requestPost('/install/init-db', { db: readDbData() }, 'installInitDb', function () {
+                setBusyState(false);
                 dbInitialized = true;
                 setAlert('success', 'Database inizializzato con successo.');
         }, function (error) {
+            setBusyState(false);
             dbInitialized = false;
             setAlertFromError(setAlert, error, 'Inizializzazione database fallita.');
         });
@@ -366,6 +496,9 @@ function initInstallPage() {
     window.$('#admin-password, #admin-password-confirm').off('input.system-install').on('input.system-install', checkPasswordMatch);
 
     window.$('#btn-create-admin').off('click.system-install').on('click.system-install', function () {
+        if (isBusy) {
+            return;
+        }
         clearAlert();
         if (!checkPasswordMatch()) {
             setAlert('warning', 'Le password non coincidono. Correggile prima di procedere.');
@@ -378,12 +511,19 @@ function initInstallPage() {
             character_name:   window.$('#admin-character-name').val().trim(),
             gender:           parseInt(window.$('#admin-gender').val(), 10) || 1
         };
+        if (!payload.email || !payload.character_name) {
+            setAlert('warning', 'Compila email e nome personaggio.');
+            return;
+        }
+        setBusyState(true, 'Creazione account creatore', 'Sto creando account e personaggio iniziale...');
         requestPost('/install/create-admin', payload, 'installCreateAdmin', function () {
+            setBusyState(false);
             setAlert('success', 'Account creato. Installazione completata. Reindirizzamento in corso...');
             setTimeout(function () {
                 location.href = '/';
             }, 1200);
         }, function (error) {
+            setBusyState(false);
             setAlertFromError(setAlert, error, 'Creazione account fallita.');
         });
     });
@@ -393,7 +533,7 @@ function initInstallPage() {
             var app = defaults.app || {};
             var db = defaults.db || {};
 
-            window.$('#app-baseurl').val(app.baseurl || '');
+            window.$('#app-baseurl').val(normalizeBaseUrl(app.baseurl || ''));
             window.$('#app-lang').val(app.lang || 'it');
             window.$('#app-name').val(app.name || '');
             window.$('#app-title').val(app.title || '');

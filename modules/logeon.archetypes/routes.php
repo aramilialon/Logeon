@@ -6,19 +6,35 @@ declare(strict_types=1);
 
 $ctrl = \Modules\Logeon\Archetypes\Controllers\Archetypes::class;
 
+// Public docs page
+$route->get('/archetypes', function () {
+    $viewModes = (new \App\Services\SettingsService())->getDocsViewModes();
+
+    return \Core\AppContext::templateRenderer()->render('public/archetypes.twig', [
+        'google_auth' => [
+            'enabled' => \App\Services\AuthGoogleService::isEnabled(),
+        ],
+        'view_mode' => (string) ($viewModes['archetypes_view_mode'] ?? 'navigation'),
+    ]);
+});
+
 // Game HTML page
 $route->get('/game/archetypes/', function () {
     $guard = \Core\AuthGuard::html();
     $characterId = (int) $guard->requireCharacter();
     (new \App\Services\PresenceService())->touchCharacter($characterId);
 
-    $provider = \Modules\Logeon\Archetypes\Services\ArchetypeProviderRegistry::provider();
-    $payload = $provider->publicList();
-    $config = is_array($payload['config'] ?? null) ? $payload['config'] : [];
-    $rows = is_array($payload['dataset'] ?? null) ? $payload['dataset'] : [];
-    $enabled = \Modules\Logeon\Archetypes\Services\ArchetypeConfigAccessor::isEnabled($config);
+    $enabled = \App\Services\CapabilityRegistry::has('character.archetypes');
+    $config = [];
+    $rows = [];
+    if ($enabled) {
+        $provider = \Modules\Logeon\Archetypes\Services\ArchetypeProviderRegistry::provider();
+        $payload = $provider->publicList();
+        $config = is_array($payload['config'] ?? null) ? $payload['config'] : [];
+        $rows = is_array($payload['dataset'] ?? null) ? $payload['dataset'] : [];
+    }
 
-    return \Core\AppContext::templateRenderer()->render('app/archetypes.twig', [
+    return \Core\AppContext::templateRenderer()->render('archetypes/app/archetypes.twig', [
         'archetypes_enabled' => $enabled,
         'archetypes_config' => $config,
         'archetypes_rows' => $rows,

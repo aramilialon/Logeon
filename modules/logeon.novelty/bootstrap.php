@@ -36,7 +36,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'novelty-admin-dashboard-page',
-            'template' => 'admin/pages/news.twig',
+            'template' => 'novelty/admin/pages/news.twig',
             'after' => '',
             'before' => '',
             'data' => [],
@@ -50,7 +50,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'novelty-game-modal-news',
-            'template' => 'app/modals/news/news.twig',
+            'template' => 'novelty/app/modals/news/news.twig',
             'after' => '',
             'before' => '',
             'data' => [],
@@ -92,6 +92,56 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $endpoints['newsList'] = '/list/news';
         return $endpoints;
+    });
+
+    \Core\Hooks::add('landing.module_feed', static function ($feed, $limit = 6) {
+        if (!is_array($feed)) {
+            $feed = [];
+        }
+        $entries = [];
+        try {
+            $entries = (new \Modules\Logeon\Novelty\Services\NoveltyService())
+                ->listForHomepageFeed((int) $limit);
+        } catch (\Throwable $e) {
+            $entries = [];
+        }
+
+        foreach ($entries as $entry) {
+            $row = is_array($entry) ? $entry : (is_object($entry) ? (array) $entry : []);
+            $feed[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'type' => 'news',
+                'title' => (string) ($row['title'] ?? ''),
+                'excerpt' => (string) ($row['excerpt'] ?? ''),
+                'body' => (string) ($row['body'] ?? ''),
+                'image' => (string) ($row['image'] ?? ''),
+                'published_at' => (string) ($row['date_publish'] ?? ''),
+                'detail_label' => 'News',
+            ];
+        }
+
+        return $feed;
+    });
+
+    \Core\Hooks::add('character.settings.notification_preferences', static function ($preferences) {
+        if (!is_array($preferences)) {
+            $preferences = [];
+        }
+        $preferences[] = [
+            'key' => 'news',
+            'label' => 'News',
+            'column' => 'notify_news',
+        ];
+        return $preferences;
+    });
+
+    \Core\Hooks::add('notifications.preference_column', static function ($column, $topic, $sourceType = null) {
+        $topic = strtolower(trim((string) $topic));
+        $sourceType = strtolower(trim((string) $sourceType));
+        if ($topic === 'news_publish' || $sourceType === 'news') {
+            return 'notify_news';
+        }
+        return $column;
     });
 
     \Core\Hooks::add('novelty.homepage_feed', static function ($feed, $limit = 6) {

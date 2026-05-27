@@ -21,57 +21,51 @@
     <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="app-config-availability-idle-minutes" content="{{ (session('config_availability_idle_minutes') is not empty) ? session('config_availability_idle_minutes') : 20 }}">
     <meta name="app-config-onlines-auto-toast" content="{{ (session('config_onlines_auto_toast') is not empty) ? session('config_onlines_auto_toast') : 0 }}">
+    <meta name="app-config-location-chat-max-chars" content="{{ (session('config_location_chat_max_chars') is not empty) ? session('config_location_chat_max_chars') : 0 }}">
+    <meta name="app-config-default-dice-faces" content="{{ (session('config_default_dice_faces') is not empty) ? session('config_default_dice_faces') : 20 }}">
     <script id="app-config-chat-commands" type="application/json">{{ CONFIG['chat_commands']|json_encode|raw }}</script>
-    <script id="app-module-endpoints" type="application/json">{{ hook_map('app.module_endpoints', {})|json_encode|raw }}</script>
-    {% set pilot_bundle_version = APP.frontend.pilot_bundle_version|default('20260403') %}
+    {% set core_module_endpoints = {
+        equipmentSlotsList: '/admin/equipment-slots/list',
+        equipmentSlotsCreate: '/admin/equipment-slots/create',
+        equipmentSlotsUpdate: '/admin/equipment-slots/update',
+        equipmentSlotsDelete: '/admin/equipment-slots/delete',
+        itemEquipmentRulesList: '/admin/item-equipment-rules/list',
+        itemEquipmentRulesCreate: '/admin/item-equipment-rules/create',
+        itemEquipmentRulesUpdate: '/admin/item-equipment-rules/update',
+        itemEquipmentRulesDelete: '/admin/item-equipment-rules/delete'
+    } %}
+    <script id="app-module-endpoints" type="application/json">{{ core_module_endpoints|merge(hook_map('app.module_endpoints', {}))|json_encode|raw }}</script>
+    <script id="app-pwa-config" type="application/json">{{ PWA|json_encode|raw }}</script>
+    {% set pilot_bundle_version = FRONTEND_ASSET_VERSION|default('20260403') %}
+    <meta name="app-bundle-version" content="{{ pilot_bundle_version }}">
 
     <title>{{ APP.name }}</title>
 
-    <link rel="stylesheet" href="/assets/vendor/bootstrap-5.3.8/dist/css/bootstrap.css">
-    <link rel="stylesheet" href="/assets/vendor/bootstrap-icons-1.13.1/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/css/framework.css"></link>
-    <link rel="stylesheet" href="/assets/css/style.css"></link>
+    <link rel="stylesheet" href="/assets/vendor/bootstrap-5.3.8/dist/css/bootstrap.css?v={{ pilot_bundle_version }}">
+    <link rel="stylesheet" href="/assets/vendor/bootstrap-icons-1.13.1/bootstrap-icons.css?v={{ pilot_bundle_version }}">
+    <link rel="stylesheet" href="/assets/css/framework.css?v={{ pilot_bundle_version }}"></link>
+    <link rel="stylesheet" href="/assets/css/style.css?v={{ pilot_bundle_version }}"></link>
     {% if THEME_CONTEXT == 'public' %}
     {{ theme_assets('public_css')|raw }}
     {% elseif THEME_CONTEXT == 'game' %}
     {{ theme_assets('game_css')|raw }}
     {% endif %}
-    <link rel="stylesheet" href="/assets/css/custom.css"></link>
+    <link rel="stylesheet" href="/assets/css/custom.css?v={{ pilot_bundle_version }}"></link>
 
     <script type="text/javascript" src="/assets/js/jquery/jquery.min.js"></script>
-
-    <script type="text/javascript" src="/assets/js/plugins/popperjs-2.11.7/popperjs.min.js"></script>
-    <script type="text/javascript" src="/assets/vendor/bootstrap-5.3.8/dist/js/bootstrap.min.js"></script>
-
+    <script type="text/javascript" src="/assets/vendor/bootstrap-5.3.8/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="/assets/js/dist/runtime-core.bundle.js?v={{ pilot_bundle_version }}"></script>
-    {% if PWA.enabled %}
-    <script type="text/javascript">
-        (function () {
-            var pwa = {{ PWA|json_encode|raw }};
-            if (!pwa || pwa.enabled !== true || !('serviceWorker' in navigator)) {
-                return;
-            }
-
-            var isSecure =
-                window.location.protocol === 'https:'
-                || window.location.hostname === 'localhost'
-                || window.location.hostname === '127.0.0.1';
-            if (!isSecure) {
-                return;
-            }
-
-            window.addEventListener('load', function () {
-                navigator.serviceWorker.register(pwa.service_worker_url, {
-                    scope: pwa.scope
-                }).catch(function (error) {
-                    console.warn('[Logeon][PWA] Service worker registration failed.', error);
-                });
-            });
-        })();
-    </script>
-    {% endif %}
 </head>
 
-<body>
-
-
+<body class="{{ theme_body_classes() }}" data-theme-active="{{ theme_active() ? '1' : '0' }}" data-theme-context="{{ THEME_CONTEXT }}"{% if theme_active() %} data-theme-id="{{ theme_id() }}"{% endif %}>
+    <div id="app-boot-overlay" class="app-boot-overlay" aria-hidden="true">
+        <div class="app-boot-overlay__panel" role="status" aria-live="polite">
+            <div class="app-boot-overlay__pulse" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="app-boot-overlay__title">Sto preparando l'interfaccia...</div>
+            <div class="app-boot-overlay__subtitle">Caricamento in corso</div>
+        </div>
+    </div>

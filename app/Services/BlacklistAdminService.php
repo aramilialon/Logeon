@@ -81,21 +81,21 @@ class BlacklistAdminService
         return $status;
     }
 
-    private function normalizeOrderBy($raw): array
+    private function normalizeOrderBy($raw, bool $includeEmail = false): array
     {
         $dateCreatedExpr = $this->hasDateCreatedColumn() ? 'blacklist.date_created' : 'blacklist.date_start';
-        $quotedCryptKey = $this->quotedCryptKey();
-        $bannedEmailExpr = 'LOWER(CAST(AES_DECRYPT(users_banned.email, ' . $quotedCryptKey . ') AS CHAR(255)))';
-        $authorEmailExpr = 'LOWER(CAST(AES_DECRYPT(users_author.email, ' . $quotedCryptKey . ') AS CHAR(255)))';
 
         $map = [
             'id' => 'blacklist.id',
             'date_created' => $dateCreatedExpr,
             'date_start' => 'blacklist.date_start',
             'date_end' => 'blacklist.date_end',
-            'banned_email' => $bannedEmailExpr,
-            'author_email' => $authorEmailExpr,
         ];
+        if ($includeEmail) {
+            $quotedCryptKey = $this->quotedCryptKey();
+            $map['banned_email'] = 'LOWER(CAST(AES_DECRYPT(users_banned.email, ' . $quotedCryptKey . ') AS CHAR(255)))';
+            $map['author_email'] = 'LOWER(CAST(AES_DECRYPT(users_author.email, ' . $quotedCryptKey . ') AS CHAR(255)))';
+        }
 
         $defaultField = 'date_start';
         $defaultDir = 'DESC';
@@ -166,7 +166,7 @@ class BlacklistAdminService
         return '1 = 1';
     }
 
-    public function listEntries(string $emailRaw, string $statusRaw, int $pageRaw, int $resultsRaw, string $orderByRaw): array
+    public function listEntries(string $emailRaw, string $statusRaw, int $pageRaw, int $resultsRaw, string $orderByRaw, bool $includeEmail = false): array
     {
         $email = strtolower(trim($emailRaw));
         $status = $this->normalizeStatusFilter($statusRaw);
@@ -180,14 +180,22 @@ class BlacklistAdminService
             $results = 100;
         }
         $offset = ($page - 1) * $results;
-        $order = $this->normalizeOrderBy($orderByRaw);
+        $order = $this->normalizeOrderBy($orderByRaw, $includeEmail);
 
         $whereParts = [];
         $whereParams = [];
         if ($email !== '') {
-            $whereParts[] = 'LOWER(CAST(AES_DECRYPT(users_banned.email, ?) AS CHAR(255))) LIKE ?';
-            $whereParams[] = $this->cryptKey();
-            $whereParams[] = '%' . $email . '%';
+            if ($includeEmail) {
+                $whereParts[] = 'LOWER(CAST(AES_DECRYPT(users_banned.email, ?) AS CHAR(255))) LIKE ?';
+                $whereParams[] = $this->cryptKey();
+                $whereParams[] = '%' . $email . '%';
+            } else {
+                $idFilter = (int) $email;
+                if ($idFilter > 0) {
+                    $whereParts[] = 'blacklist.banned_id = ?';
+                    $whereParams[] = $idFilter;
+                }
+            }
         }
         if ($status !== 'all') {
             $whereParts[] = $this->statusWhereClause($status);
@@ -198,7 +206,16 @@ class BlacklistAdminService
             $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
         }
 
-        $datasetParams = array_merge([$this->cryptKey(), $this->cryptKey()], $whereParams, [$offset, $results]);
+        $bannedEmailSelect = 'NULL AS banned_email';
+        $authorEmailSelect = 'NULL AS author_email';
+        $datasetParams = [];
+        if ($includeEmail) {
+            $bannedEmailSelect = 'CAST(AES_DECRYPT(users_banned.email, ?) AS CHAR(255)) AS banned_email';
+            $authorEmailSelect = 'CAST(AES_DECRYPT(users_author.email, ?) AS CHAR(255)) AS author_email';
+            $datasetParams[] = $this->cryptKey();
+            $datasetParams[] = $this->cryptKey();
+        }
+        $datasetParams = array_merge($datasetParams, $whereParams, [$offset, $results]);
         $dataset = $this->fetchPrepared(
             'SELECT blacklist.id,
                     blacklist.banned_id,
@@ -207,8 +224,8 @@ class BlacklistAdminService
                     ' . $dateCreatedExpr . ' AS date_created,
                     blacklist.date_start,
                     blacklist.date_end,
-                    CAST(AES_DECRYPT(users_banned.email, ?) AS CHAR(255)) AS banned_email,
-                    CAST(AES_DECRYPT(users_author.email, ?) AS CHAR(255)) AS author_email,
+                    ' . $bannedEmailSelect . ',
+                    ' . $authorEmailSelect . ',
                     CASE
                         WHEN blacklist.date_end IS NULL THEN "permanent"
                         WHEN blacklist.date_end <= NOW() THEN "expired"
@@ -237,7 +254,7 @@ class BlacklistAdminService
 
         return [
             'query' => [
-                'email' => $email,
+                'email' => $includeEmail ? $email : '',
                 'status' => $status,
             ],
             'page' => $page,

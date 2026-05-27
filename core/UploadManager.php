@@ -20,6 +20,7 @@ class UploadManager
         'avatar' => 2,
         'richtext_image' => 5,
         'background_music_url' => 10,
+        'sound_chat' => 10,
         'sound_dm' => 10,
         'sound_notifications' => 10,
         'sound_whispers' => 10,
@@ -43,6 +44,7 @@ class UploadManager
         'avatar' => ['image/jpeg', 'image/png', 'image/gif'],
         'richtext_image' => ['image/jpeg', 'image/png', 'image/gif'],
         'background_music_url' => ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/webm'],
+        'sound_chat' => ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/webm'],
         'sound_dm' => ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/webm'],
         'sound_notifications' => ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/webm'],
         'sound_whispers' => ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/webm'],
@@ -364,7 +366,7 @@ class UploadManager
         }
         $data = $request->postJson('data', [], true);
         $target = isset($data['target']) ? trim($data['target']) : '';
-        $allowed_targets = ['avatar', 'richtext_image', 'background_music_url', 'sound_dm', 'sound_notifications', 'sound_whispers', 'sound_global'];
+        $allowed_targets = ['avatar', 'richtext_image', 'background_music_url', 'sound_chat', 'sound_dm', 'sound_notifications', 'sound_whispers', 'sound_global'];
         if (!in_array($target, $allowed_targets)) {
             static::failValidation('Target non valido');
         }

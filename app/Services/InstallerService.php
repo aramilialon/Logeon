@@ -362,7 +362,15 @@ class InstallerService
         }
 
         $content = "<?php\n\nconst APP = " . var_export($config, true) . ";\n";
-        return $this->writeFile($this->getAppConfigPath(), $content);
+        $written = $this->writeFile($this->getAppConfigPath(), $content);
+        if (!$written['ok']) {
+            return $written;
+        }
+
+        return [
+            'ok' => true,
+            'data' => $normalized,
+        ];
     }
 
     public function writeDbConfig(array $dbInput)
@@ -385,7 +393,22 @@ class InstallerService
         ];
 
         $content = "<?php\n\nconst DB = " . var_export($config, true) . ";\n";
-        return $this->writeFile($this->getDbConfigPath(), $content);
+        $written = $this->writeFile($this->getDbConfigPath(), $content);
+        if (!$written['ok']) {
+            return $written;
+        }
+
+        return [
+            'ok' => true,
+            'data' => [
+                'host' => $normalized['host'],
+                'db_name' => $normalized['db_name'],
+                'user' => $normalized['user'],
+                'charset' => $normalized['charset'],
+                'collation' => $normalized['collation'],
+                'crypt_key' => $cryptKey,
+            ],
+        ];
     }
 
     public function initDatabase(array $dbInput)
@@ -450,9 +473,21 @@ class InstallerService
             return ['ok' => false, 'error' => 'Errore import SQL: ' . $error];
         }
 
+        $patches = $this->loadAndSortPatches();
+        $patchCount = 0;
+        foreach ($patches as $patch) {
+            $patchName = basename($patch['path']);
+            $patchResult = $this->applyPatchToMysqli($mysqli, $patch['sql'], $patchName);
+            if (!$patchResult['ok']) {
+                $mysqli->close();
+                return $patchResult;
+            }
+            $patchCount++;
+        }
+
         $mysqli->close();
 
-        return ['ok' => true];
+        return ['ok' => true, 'patches_applied' => $patchCount];
     }
 
     public function createAdmin(array $input)
@@ -529,7 +564,7 @@ class InstallerService
 
         if ($existingSuperusers > 0) {
             $mysqli->close();
-            return ['ok' => false, 'error' => 'Esiste gia un account superuser. Impossibile crearne un secondo.'];
+            return ['ok' => false, 'error' => 'Esiste gia un account superuser. L\'account creatore puo essere inizializzato una sola volta.'];
         }
 
         if (!$this->beginTransaction($mysqli)) {
@@ -542,15 +577,16 @@ class InstallerService
         $userGender = 1;
         $isAdministrator = 1;
         $isSuperuser = 1;
+        $superuserRole = 'creatore';
         $isModerator = 1;
         $isMaster = 1;
         $sessionVersion = 1;
 
         $insertUserStmt = $mysqli->prepare(
             'INSERT INTO `users`
-                (`email`, `password`, `gender`, `is_administrator`, `is_superuser`, `is_moderator`, `is_master`, `date_actived`, `date_created`, `session_version`)
+                (`email`, `password`, `gender`, `is_administrator`, `is_superuser`, `superuser_role`, `is_moderator`, `is_master`, `date_actived`, `date_created`, `session_version`)
              VALUES
-                (AES_ENCRYPT(?, ?), ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)',
+                (AES_ENCRYPT(?, ?), ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)',
         );
         if ($insertUserStmt === false) {
             $error = $mysqli->error;
@@ -560,13 +596,14 @@ class InstallerService
         }
 
         $insertUserStmt->bind_param(
-            'sssiiiiii',
+            'sssiiisiii',
             $email,
             $cryptKey,
             $passwordHash,
             $userGender,
             $isAdministrator,
             $isSuperuser,
+            $superuserRole,
             $isModerator,
             $isMaster,
             $sessionVersion,
@@ -725,12 +762,12 @@ class InstallerService
         // MySQL 8.x rifiuta valori espliciti per colonne GENERATED VIRTUAL.
         // Il dump esportato senza --skip-generated include quei valori in INSERT ... VALUES.
         //
-        // Tabella: users - colonna generata: superuser_unique_guard (posizione 19, ultima)
-        // Fix: aggiungiamo la lista esplicita delle 18 colonne reali e rimuoviamo
-        // il 19 valore (1 o NULL) dall'INSERT.
+        // Tabella: users - colonna generata legacy: superuser_unique_guard (posizione 19, ultima)
+        // Fix: aggiungiamo la lista esplicita delle colonne reali e rimuoviamo
+        // l'eventuale ultimo valore generato se presente nel dump legacy.
 
         $userCols = '`id`,`email`,`google_sub`,`google_avatar`,`password`,`gender`,'
-            . '`is_administrator`,`is_superuser`,`is_moderator`,`is_master`,'
+            . '`is_administrator`,`is_superuser`,`superuser_role`,`is_moderator`,`is_master`,'
             . '`date_last_pass`,`session_version`,`date_sessions_revoked`,`date_actived`,'
             . '`date_created`,`date_last_signin`,`date_last_signout`,`date_last_seed`';
 
@@ -751,6 +788,68 @@ class InstallerService
         );
 
         return $sql;
+    }
+
+    /**
+     * Legge i file SQL in database/patches/ e li ordina in due gruppi:
+     * 1. file che contengono CREATE TABLE (eseguiti per primi)
+     * 2. file con solo ALTER TABLE o altri DDL (eseguiti dopo)
+     * Dentro ogni gruppo l'ordine è alfabetico per nome file (deterministico).
+     *
+     * @return array<int,array{path:string,sql:string}>
+     */
+    private function loadAndSortPatches(): array
+    {
+        $dir = __DIR__ . '/../../database/patches';
+        if (!is_dir($dir)) {
+            return [];
+        }
+
+        $files = glob($dir . '/*.sql');
+        if ($files === false || $files === []) {
+            return [];
+        }
+
+        $withCreate = [];
+        $alterOnly = [];
+
+        foreach ($files as $file) {
+            $sql = @file_get_contents($file);
+            if ($sql === false || trim($sql) === '') {
+                continue;
+            }
+            $entry = ['path' => $file, 'sql' => $sql];
+            if (preg_match('/^\s*CREATE\s+TABLE\b/im', $sql)) {
+                $withCreate[] = $entry;
+            } else {
+                $alterOnly[] = $entry;
+            }
+        }
+
+        $byName = static fn ($a, $b) => strcmp(basename($a['path']), basename($b['path']));
+        usort($withCreate, $byName);
+        usort($alterOnly, $byName);
+
+        return array_merge($withCreate, $alterOnly);
+    }
+
+    private function applyPatchToMysqli(\mysqli $mysqli, string $sql, string $patchName): array
+    {
+        if (!$mysqli->multi_query($sql)) {
+            return ['ok' => false, 'error' => "Errore patch {$patchName}: " . $mysqli->error];
+        }
+
+        do {
+            if ($result = $mysqli->store_result()) {
+                $result->free();
+            }
+        } while ($mysqli->more_results() && $mysqli->next_result());
+
+        if ($mysqli->errno) {
+            return ['ok' => false, 'error' => "Errore patch {$patchName}: " . $mysqli->error];
+        }
+
+        return ['ok' => true];
     }
 
     private function quoteIdentifier($value)

@@ -170,6 +170,20 @@ function buildCommandParserConfigFromAppConfig(baseConfig) {
 function configureRuntimeDomainHelpers(eventBus) {
     var runtimeDebug = isRuntimeDebugEnabled();
 
+    if (typeof window.DiceEngine === 'function') {
+        try {
+            var appConfig = (window.APP_CONFIG && typeof window.APP_CONFIG === 'object') ? window.APP_CONFIG : {};
+            var diceFaces = parseInt(appConfig.default_dice_faces, 10) || 20;
+            if (diceFaces < 2 || diceFaces > 1000) { diceFaces = 20; }
+            window.DiceEngine({
+                config: {
+                    defaultSides: diceFaces,
+                    defaultExpression: '1d' + diceFaces
+                }
+            });
+        } catch (error) {}
+    }
+
     if (typeof window.CommandParser === 'function') {
         try {
             window.CommandParser(buildCommandParserConfigFromAppConfig({

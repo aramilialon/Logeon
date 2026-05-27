@@ -1284,5 +1284,3 @@ class Guilds extends Guild
         ResponseEmitter::emit(ApiResponse::json(['status' => 'ok']));
     }
 }
-
-

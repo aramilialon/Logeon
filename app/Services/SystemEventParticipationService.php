@@ -131,11 +131,9 @@ class SystemEventParticipationService
         $rows = $this->fetchPrepared(
             'SELECT p.*,
                     c.name AS character_name,
-                    c.surname AS character_surname,
-                    f.name AS faction_name
+                    c.surname AS character_surname
              FROM system_event_participations p
              LEFT JOIN characters c ON c.id = p.character_id
-             LEFT JOIN factions f ON f.id = p.faction_id
              WHERE p.system_event_id = ?
              ORDER BY p.date_joined DESC, p.id DESC',
             [$eventId],
@@ -146,12 +144,17 @@ class SystemEventParticipationService
             if (!empty($record['character_name'])) {
                 $name = trim((string) $record['character_name'] . ' ' . (string) ($record['character_surname'] ?? ''));
                 $record['participant_label'] = $name !== '' ? $name : ('Personaggio #' . (int) ($record['character_id'] ?? 0));
-            } elseif (!empty($record['faction_name'])) {
-                $record['participant_label'] = (string) $record['faction_name'];
             } else {
-                $record['participant_label'] = ((string) ($record['participant_mode'] ?? 'character') === 'faction')
-                    ? ('Fazione #' . (int) ($record['faction_id'] ?? 0))
-                    : ('Personaggio #' . (int) ($record['character_id'] ?? 0));
+                $isFaction = ((string) ($record['participant_mode'] ?? 'character') === 'faction');
+                if ($isFaction) {
+                    $factionId = (int) ($record['faction_id'] ?? 0);
+                    $factionName = $factionId > 0 ? FactionProviderRegistry::getNameById($factionId) : null;
+                    $record['participant_label'] = is_string($factionName) && trim($factionName) !== ''
+                        ? trim($factionName)
+                        : ('Fazione #' . $factionId);
+                } else {
+                    $record['participant_label'] = 'Personaggio #' . (int) ($record['character_id'] ?? 0);
+                }
             }
             $out[] = $record;
         }

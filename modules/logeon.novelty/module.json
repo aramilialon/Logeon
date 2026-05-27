@@ -1,13 +1,22 @@
 {
   "id": "logeon.novelty",
-  "name": "Logeon Novelty",
+  "name": "Novità",
   "version": "0.1.0",
   "vendor": "Logeon",
-  "description": "Modulo novelty/news: feed homepage e API news agganciati via runtime moduli.",
+  "description": "Modulo news: feed homepage e API news agganciati via runtime moduli.",
+  "privacy": {
+    "personal_data": false,
+    "data_categories": [],
+    "purposes": [],
+    "retention": "inherits_instance_policy",
+    "requires_consent": false,
+    "exports_user_data": false,
+    "supports_purge": true
+  },
   "category": "gameplay",
   "class": "bundled",
   "compat": {
-    "min": "0.8.0",
+    "min": "1.0.0",
     "max": ""
   },
   "requires": [],
@@ -15,13 +24,19 @@
     "bootstrap": "bootstrap.php",
     "routes": "routes.php"
   },
+  "migrations": {
+    "path": "migrations"
+  },
+  "uninstall": {
+    "path": "migrations/uninstall"
+  },
   "menus": {
     "admin": {
       "aside": [
         {
           "label": "News",
           "href": "/admin/news",
-          "icon": "bi bi-megaphone",
+          "icon": "",
           "page": "news",
           "section": "Comunicazione",
           "section_order": 45,
@@ -31,7 +46,9 @@
     }
   },
   "features": [
-    "novelty.homepage_feed",
-    "novelty.routes"
+    "landing.module_feed",
+    "novelty.routes",
+    "notifications.preference_mapping",
+    "character.settings.notification_preferences"
   ]
 }

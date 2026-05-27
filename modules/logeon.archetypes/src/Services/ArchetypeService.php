@@ -8,6 +8,7 @@ use Core\AuditLogService;
 use Core\Database\DbAdapterFactory;
 use Core\Database\DbAdapterInterface;
 use Core\Http\AppError;
+use Core\Hooks;
 
 class ArchetypeService
 {
@@ -161,7 +162,7 @@ class ArchetypeService
         }
 
         $rows = $this->fetchPrepared(
-            'SELECT `id`, `name`, `slug`, `icon`, `description`, `lore_text`, `sort_order`
+            'SELECT `id`, `name`, `slug`, `icon`, `image`, `description`, `lore_text`, `sort_order`
              FROM `archetypes`
              WHERE `is_active` = 1 AND `is_selectable` = 1
              ORDER BY `sort_order` ASC, `name` ASC',
@@ -184,7 +185,7 @@ class ArchetypeService
     public function getCharacterArchetypes(int $characterId): array
     {
         $rows = $this->fetchPrepared(
-            'SELECT a.id, a.name, a.slug, a.icon, a.description, a.lore_text, ca.assigned_at
+            'SELECT a.id, a.name, a.slug, a.icon, a.image, a.description, a.lore_text, ca.assigned_at
              FROM `character_archetypes` ca
              INNER JOIN `archetypes` a ON a.id = ca.archetype_id
              WHERE ca.character_id = ?
@@ -195,6 +196,45 @@ class ArchetypeService
         return array_map(function ($r) {
             return $this->rowToArray($r);
         }, $rows);
+    }
+
+    /**
+     * @return array<int>
+     */
+    private function characterArchetypeIds(int $characterId): array
+    {
+        $rows = $this->getCharacterArchetypes($characterId);
+        $ids = [];
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id > 0 && !in_array($id, $ids, true)) {
+                $ids[] = $id;
+            }
+        }
+
+        sort($ids);
+        return $ids;
+    }
+
+    /**
+     * @param array<int> $oldIds
+     * @param array<int> $newIds
+     */
+    private function emitCharacterArchetypesChanged(int $characterId, array $oldIds, array $newIds, string $reason): void
+    {
+        if ($oldIds === $newIds) {
+            return;
+        }
+
+        Hooks::fire('character.archetypes.changed', [
+            'character_id' => $characterId,
+            'old_archetype_ids' => array_values($oldIds),
+            'new_archetype_ids' => array_values($newIds),
+            'changed_by_user_id' => null,
+            'reason' => $reason,
+            'occurred_at' => (new \DateTimeImmutable())->format(DATE_ATOM),
+            'metadata' => [],
+        ]);
     }
 
     public function assignArchetype(int $characterId, int $archetypeId, bool $multipleAllowed = false): void
@@ -211,6 +251,8 @@ class ArchetypeService
             throw AppError::notFound('Archetipo non trovato', [], 'archetype_not_found');
         }
 
+        $oldIds = $this->characterArchetypeIds($characterId);
+
         if (!$multipleAllowed) {
             $this->execPrepared('DELETE FROM `character_archetypes` WHERE `character_id` = ?', [(int) $characterId]);
         }
@@ -220,21 +262,46 @@ class ArchetypeService
              VALUES (?, ?)',
             [(int) $characterId, (int) $archetypeId],
         );
+
+        $this->emitCharacterArchetypesChanged(
+            $characterId,
+            $oldIds,
+            $this->characterArchetypeIds($characterId),
+            'assignment'
+        );
     }
 
     public function removeArchetype(int $characterId, int $archetypeId): void
     {
+        $oldIds = $this->characterArchetypeIds($characterId);
+
         $this->execPrepared(
             'DELETE FROM `character_archetypes`
              WHERE `character_id` = ?
                AND `archetype_id` = ?',
             [(int) $characterId, (int) $archetypeId],
         );
+
+        $this->emitCharacterArchetypesChanged(
+            $characterId,
+            $oldIds,
+            $this->characterArchetypeIds($characterId),
+            'removal'
+        );
     }
 
     public function clearCharacterArchetypes(int $characterId): void
     {
+        $oldIds = $this->characterArchetypeIds($characterId);
+
         $this->execPrepared('DELETE FROM `character_archetypes` WHERE `character_id` = ?', [(int) $characterId]);
+
+        $this->emitCharacterArchetypesChanged(
+            $characterId,
+            $oldIds,
+            [],
+            'clear'
+        );
     }
 
     /**
@@ -342,6 +409,7 @@ class ArchetypeService
         $isSelectable = isset($data->is_selectable) ? ((int) $data->is_selectable === 1 ? 1 : 0) : 1;
         $sortOrder = max(0, (int) ($data->sort_order ?? 0));
         $icon = trim((string) ($data->icon ?? ''));
+        $image = trim((string) ($data->image ?? ''));
 
         if ($name === '') {
             throw AppError::validation('Il nome e obbligatorio', [], 'archetype_name_required');
@@ -351,14 +419,15 @@ class ArchetypeService
         $slug = $this->uniqueSlug($slugBase);
 
         $this->execPrepared(
-            'INSERT INTO `archetypes` (`name`, `slug`, `description`, `lore_text`, `icon`, `is_active`, `is_selectable`, `sort_order`)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO `archetypes` (`name`, `slug`, `description`, `lore_text`, `icon`, `image`, `is_active`, `is_selectable`, `sort_order`)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $name,
                 $slug,
                 $description !== '' ? $description : null,
                 $loreText !== '' ? $loreText : null,
                 $icon !== '' ? $icon : null,
+                $image !== '' ? $image : null,
                 $isActive,
                 $isSelectable,
                 $sortOrder,
@@ -418,6 +487,11 @@ class ArchetypeService
             $ic = trim((string) $data->icon);
             $fields[] = '`icon` = ?';
             $params[] = ($ic !== '' ? $ic : null);
+        }
+        if (isset($data->image)) {
+            $image = trim((string) $data->image);
+            $fields[] = '`image` = ?';
+            $params[] = ($image !== '' ? $image : null);
         }
 
         if (!empty($fields)) {

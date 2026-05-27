@@ -43,13 +43,13 @@ var NotificationsPage = {
             .on('click.notifications-row', '#notifications-list [data-action]', function (e) {
                 var el = $(this);
                 var action = el.data('action');
-                var notifId = parseInt(el.data('notification-id'), 10) || 0;
+                var notifId = self.resolveNotificationId(el);
                 if (action === 'notification-read') {
-                    self.markRead(notifId);
+                    self.markRead(notifId, el);
                 } else if (action === 'notification-read-delete') {
-                    self.readAndDelete(notifId);
+                    self.readAndDelete(notifId, el);
                 } else if (action === 'notification-delete') {
-                    self.deleteNotification(notifId);
+                    self.deleteNotification(notifId, el);
                 } else if (action === 'notification-open') {
                     self.openNotification(el);
                 } else if (action === 'notification-accept') {
@@ -58,6 +58,24 @@ var NotificationsPage = {
                     self.respond(notifId, 'rejected');
                 }
             });
+    },
+
+    resolveNotificationId: function (trigger) {
+        if (!trigger || !trigger.length) {
+            return 0;
+        }
+
+        var rawId = String(trigger.attr('data-notification-id') || '').trim();
+        if (rawId !== '') {
+            return parseInt(rawId, 10) || 0;
+        }
+
+        var row = trigger.closest('.notification-item');
+        if (!row.length) {
+            return 0;
+        }
+
+        return parseInt(String(row.attr('data-notification-id') || '').trim(), 10) || 0;
     },
 
     initTabControl: function () {
@@ -170,22 +188,29 @@ var NotificationsPage = {
             facade.post(url, payload).then(successFn).catch(errorFn || function () {});
             return;
         }
-        if (typeof $ !== 'undefined' && $.ajax) {
-            var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        if (typeof globalWindow.fetch === 'function') {
+            var headers = {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            };
             if (csrfToken) {
                 headers['X-CSRF-Token'] = csrfToken;
             }
-            $.ajax({
-                url: url,
+            globalWindow.fetch(url, {
                 method: 'POST',
-                dataType: 'json',
                 headers: headers,
-                processData: true,
-                contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
-                data: 'data=' + encodeURIComponent(JSON.stringify(payload)),
-                success: successFn,
-                error: errorFn || function () {}
-            });
+                credentials: 'same-origin',
+                body: 'data=' + encodeURIComponent(JSON.stringify(payload))
+            }).then(function (response) {
+                return response.text().then(function (text) {
+                    var parsed = {};
+                    try { parsed = text ? JSON.parse(text) : {}; } catch (error) { parsed = {}; }
+                    if (!response.ok) {
+                        throw parsed;
+                    }
+                    return parsed;
+                });
+            }).then(successFn).catch(errorFn || function () {});
         }
     },
 
@@ -232,6 +257,8 @@ var NotificationsPage = {
         var filters = { page: 1, results: 50 };
         if (this.currentTab === 'pending') {
             filters.pending_only = 1;
+        } else {
+            filters.unread_only = 1;
         }
 
         this.apiPost('/notifications/list', filters, function (res) {
@@ -274,6 +301,7 @@ var NotificationsPage = {
         var message = row.message ? this.escapeHtml(String(row.message)) : '';
         var date = this.formatDate(String(row.date_created || ''));
         var actionUrl = String(row.action_url || '');
+        var threadId = this.resolveDirectMessageThreadId(row);
         var bgClass = isRead ? '' : 'bg-light';
 
         var kindIcon = kind === 'action_required' ? '<i class="bi bi-question-circle-fill text-warning me-2"></i>'
@@ -296,6 +324,7 @@ var NotificationsPage = {
                     + ' data-notification-id="' + id + '"'
                     + ' data-notification-topic="' + this.escapeHtml(topic) + '"'
                     + ' data-notification-url="' + this.escapeHtml(actionUrl) + '"'
+                    + ' data-notification-thread-id="' + String(threadId > 0 ? threadId : 0) + '"'
                     + ' title="Apri"><i class="bi bi-box-arrow-up-right"></i></button>';
             }
             if (!isRead) {
@@ -319,6 +348,96 @@ var NotificationsPage = {
             + '</div>';
     },
 
+    parseSourceMeta: function (value) {
+        if (!value) {
+            return {};
+        }
+
+        if (typeof value === 'object') {
+            return value;
+        }
+
+        try {
+            return JSON.parse(String(value));
+        } catch (error) {
+            return {};
+        }
+    },
+
+    extractThreadIdFromDedupKey: function (value) {
+        var match = String(value || '').match(/^direct_message:(\d+)$/);
+        if (!match) {
+            return 0;
+        }
+
+        return parseInt(match[1], 10) || 0;
+    },
+
+    resolveDirectMessageThreadId: function (row) {
+        if (!row || String(row.topic || '') !== 'direct_message') {
+            return 0;
+        }
+
+        var meta = this.parseSourceMeta(row.source_meta_json);
+        var threadId = parseInt(meta.thread_id || 0, 10) || 0;
+        if (threadId > 0) {
+            return threadId;
+        }
+
+        return this.extractThreadIdFromDedupKey(row.dedup_key);
+    },
+
+    resolveMessagesWidget: function () {
+        var module = null;
+        if (globalWindow.RuntimeBootstrap && typeof globalWindow.RuntimeBootstrap.resolveAppModule === 'function') {
+            try {
+                module = globalWindow.RuntimeBootstrap.resolveAppModule('game.messages');
+            } catch (error) {
+                module = null;
+            }
+        }
+
+        if (module && typeof module.widget === 'function') {
+            try {
+                return module.widget({ key: 'modal', root: '#inbox-modal' });
+            } catch (error) {}
+        }
+
+        if (typeof globalWindow.GameMessagesPage === 'function') {
+            try {
+                return globalWindow.GameMessagesPage({ key: 'modal', root: '#inbox-modal' });
+            } catch (error) {}
+        }
+
+        return null;
+    },
+
+    openDirectMessageNotification: function (threadId) {
+        var self = this;
+        if (!globalWindow.inboxModal || typeof globalWindow.inboxModal.show !== 'function') {
+            return false;
+        }
+
+        globalWindow.inboxModal.show();
+        globalWindow.setTimeout(function () {
+            var messages = self.resolveMessagesWidget();
+            if (!messages) {
+                return;
+            }
+
+            if (threadId > 0 && typeof messages.openThread === 'function') {
+                messages.openThread(threadId);
+                return;
+            }
+
+            if (typeof messages.loadThreads === 'function') {
+                messages.loadThreads();
+            }
+        }, 0);
+
+        return true;
+    },
+
     openNotification: function (trigger) {
         if (!trigger || !trigger.length) {
             return;
@@ -326,6 +445,13 @@ var NotificationsPage = {
 
         var topic = String(trigger.data('notification-topic') || '');
         var actionUrl = String(trigger.data('notification-url') || '');
+        var threadId = parseInt(trigger.data('notification-thread-id'), 10) || 0;
+
+        if (topic === 'direct_message') {
+            if (this.openDirectMessageNotification(threadId)) {
+                return;
+            }
+        }
 
         if (topic === 'news_publish') {
             var newsLauncher = document.querySelector('[data-action="open-news"]');
@@ -366,40 +492,48 @@ var NotificationsPage = {
         this.refreshTabControlOptions(unread, pending);
     },
 
-    markRead: function (notificationId) {
-        var self = this;
+    resolveNotificationRow: function (trigger, notificationId) {
+        var row = trigger && trigger.length ? trigger.closest('.notification-item') : $();
+        if (row.length) {
+            return row;
+        }
+
+        return $('#notifications-list .notification-item[data-notification-id="' + notificationId + '"]');
+    },
+
+    markRead: function (notificationId, trigger) {
         if (!notificationId) return;
+        var self = this;
+        var item = this.resolveNotificationRow(trigger, notificationId);
         this.apiPost('/notifications/read', { notification_id: notificationId }, function () {
-            var item = $('#notifications-list [data-notification-id="' + notificationId + '"]');
-            item.removeClass('bg-light');
-            item.find('[data-action="notification-read"]').remove();
-            self.unreadCount = Math.max(0, self.unreadCount - 1);
-            self.updateNavBadge(self.unreadCount);
+            self.removeNotificationRow(notificationId, { was_unread: 1 }, item);
         });
     },
 
-    readAndDelete: function (notificationId) {
+    readAndDelete: function (notificationId, trigger) {
         var self = this;
         if (!notificationId) return;
+        var item = this.resolveNotificationRow(trigger, notificationId);
         this.apiPost('/notifications/read-delete', { notification_id: notificationId }, function (res) {
-            self.removeNotificationRow(notificationId, res && res.dataset ? res.dataset : null);
+            self.removeNotificationRow(notificationId, res && res.dataset ? res.dataset : null, item);
         }, function (err) {
             self.handleActionError(err, 'Impossibile leggere e rimuovere la notifica.');
         });
     },
 
-    deleteNotification: function (notificationId) {
+    deleteNotification: function (notificationId, trigger) {
         var self = this;
         if (!notificationId) return;
-        this.apiPost('/notifications/delete', { notification_id: notificationId }, function (res) {
-            self.removeNotificationRow(notificationId, res && res.dataset ? res.dataset : null);
+        var item = this.resolveNotificationRow(trigger, notificationId);
+        this.apiPost('/notifications/read-delete', { notification_id: notificationId }, function (res) {
+            self.removeNotificationRow(notificationId, res && res.dataset ? res.dataset : null, item);
         }, function (err) {
             self.handleActionError(err, 'Impossibile eliminare la notifica.');
         });
     },
 
-    removeNotificationRow: function (notificationId, payload) {
-        var item = $('#notifications-list [data-notification-id="' + notificationId + '"]');
+    removeNotificationRow: function (notificationId, payload, item) {
+        item = item && item.length ? item : $('#notifications-list .notification-item[data-notification-id="' + notificationId + '"]');
         var wasUnread = parseInt((payload && payload.was_unread) || 0, 10) === 1;
 
         if (wasUnread) {
@@ -417,9 +551,12 @@ var NotificationsPage = {
     },
 
     handleActionError: function (err, fallbackMessage) {
-        var msg = (err && err.responseJSON && (err.responseJSON.error || err.responseJSON.message))
-            || fallbackMessage
-            || 'Operazione non riuscita.';
+        var msg = fallbackMessage || 'Operazione non riuscita.';
+        if (globalWindow.Request && typeof globalWindow.Request.getErrorMessage === 'function') {
+            msg = globalWindow.Request.getErrorMessage(err, msg);
+        } else if (err && err.responseJSON && (err.responseJSON.error || err.responseJSON.message)) {
+            msg = err.responseJSON.error || err.responseJSON.message;
+        }
         if (globalWindow.AppFacade && typeof globalWindow.AppFacade.toast === 'function') {
             globalWindow.AppFacade.toast(msg, 'error');
         }
@@ -432,6 +569,10 @@ var NotificationsPage = {
             self.updateNavBadge(0);
             $('#notifications-unread-badge').addClass('d-none').removeClass('feed-badge-pulse').text('0');
             self.load();
+            if (self.currentTab !== 'pending') {
+                $('#notifications-list .notification-item').remove();
+                $('#notifications-empty').removeClass('d-none').text('Nessuna notifica.');
+            }
         });
     },
 

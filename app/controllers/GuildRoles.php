@@ -8,7 +8,6 @@ use App\Services\GuildRoleAdminService;
 use Core\Http\InputValidator;
 use Core\Http\RequestData;
 
-
 use Core\Logging\LoggerInterface;
 
 class GuildRoles extends GuildRole
@@ -100,5 +99,3 @@ class GuildRoles extends GuildRole
         return parent::delete($operator);
     }
 }
-
-

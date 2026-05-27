@@ -130,7 +130,7 @@ class MapsAdminService
         string $mobile = '',
         int $results = 20,
         int $page = 1,
-        string $sort = 'position|ASC'
+        string $sort = 'position|ASC',
     ): array {
         $where = [];
         $params = [];

@@ -1,3 +1,5 @@
+{% set is_narrative_staff = (session('user_is_administrator') == 1 or session('user_is_master') == 1 or session('user_is_superuser') == 1) %}
+{% set is_admin_or_superuser = (session('user_is_administrator') == 1 or session('user_is_superuser') == 1) %}
 <div class="modal fade" id="location-utils-modal" tabindex="-1" aria-labelledby="location-utils-modal-label" aria-hidden="true">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
@@ -24,12 +26,18 @@
                             <i class="bi bi-shield-shaded" data-bs-toggle="tooltip" data-bs-title="Equipaggiamento"></i> Equipaggiamento
                         </a>
                     </li>
+                    {% if is_narrative_staff %}
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="staff-tools-tab" data-bs-toggle="tab" data-bs-target="#staff-tools-tab-pane" type="button" role="tab" aria-controls="staff-tools-tab-pane" aria-selected="false">
+                            <i class="bi bi-wrench-adjustable-circle" data-bs-toggle="tooltip" data-bs-title="Gestione staff"></i> Gestione staff
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
                 <div class="tab-content" id="utilsLocationTabContent">
                     <div class="tab-pane fade show active" id="profile-tab-pane" role="tabpanel" aria-labelledby="profile-tab" tabindex="0">
                         <div id="location-profile-loading" class="text-muted small py-2 text-start">Caricamento profilo...</div>
                         <div id="location-profile-content" class="d-none">
-
                             <div class="card card-body mb-3">
                                 <ul id="location-profile-facts" class="list-group list-group-flush"></ul>
                             </div>
@@ -75,11 +83,304 @@
                             </div>
                         </div>
                     </div>
+
+                    {% if is_narrative_staff %}
+                    <div class="tab-pane fade" id="staff-tools-tab-pane" role="tabpanel" aria-labelledby="staff-tools-tab" tabindex="4" data-location-staff-tools>
+                        <div class="card card-body mb-3">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-info-circle mt-1"></i>
+                                <div>
+                                    <h6 class="mb-1">Guida rapida pannello staff</h6>
+                                    <p class="small text-muted mb-1">Questo pannello serve per gestire la scena senza uscire dalla location. Prima scegli il target, poi applica gli strumenti necessari.</p>
+                                    <p class="small text-muted mb-0">Flusso consigliato: `1)` seleziona personaggio o target multipli, `2)` applica azione (stato/oggetto/teletrasporto), `3)` controlla la cronologia rapida per conferma.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12 col-xl-4">
+                                <div class="card card-body mb-3">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <h6 class="mb-0">Personaggio target</h6>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-action="location-staff-refresh-characters">Aggiorna</button>
+                                    </div>
+                                    <label class="form-label small mb-1">Seleziona personaggio</label>
+                                    <select class="form-select mb-2" data-staff-character-select>
+                                        <option value="">Seleziona un personaggio nella location...</option>
+                                    </select>
+                                    <div class="small text-muted mb-2">Solo personaggi presenti nella location corrente.</div>
+                                    <div class="small text-muted mb-2">Suggerimento: scegli qui il target principale. Se non selezioni nessuno, le azioni non partono.</div>
+                                    <div class="small text-muted mb-0" data-staff-target-summary>Nessun personaggio selezionato.</div>
+                                </div>
+
+                                <div class="card card-body mb-3">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <h6 class="mb-0">Target multipli</h6>
+                                        <span class="badge text-bg-secondary" data-staff-bulk-count>0 selezionati</span>
+                                    </div>
+                                    <div class="btn-group btn-group-sm mb-2" role="group">
+                                        <button type="button" class="btn btn-outline-primary" data-action="location-staff-select-all">Tutti</button>
+                                        <button type="button" class="btn btn-outline-primary" data-action="location-staff-select-none">Nessuno</button>
+                                        <button type="button" class="btn btn-outline-primary" data-action="location-staff-select-current">Solo target</button>
+                                    </div>
+                                    <div class="small text-muted mb-2">Usa questa lista per azioni massive (stati, oggetti, note operative).</div>
+                                    <div class="list-group small" style="max-height: 220px; overflow: auto;" data-staff-bulk-list>
+                                        <div class="text-muted small py-2">Nessun personaggio disponibile.</div>
+                                    </div>
+                                </div>
+
+                                <div class="card card-body">
+                                    <h6 class="mb-2">Cronologia rapida</h6>
+                                    <div class="small text-muted mb-2">Ultime azioni staff eseguite da questa modale.</div>
+                                    <div class="small" style="max-height: 220px; overflow: auto;" data-staff-action-feed>
+                                        <div class="text-muted">Nessuna azione registrata.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-xl-8">
+                                <div class="card card-body mb-3">
+                                    <h6 class="mb-2">Aggiornamento rapido personaggio</h6>
+                                    <p class="small text-muted mb-2">Per correzioni immediate durante la scena: salute e punti esperienza del target corrente.</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Salute attuale</label>
+                                            <input type="number" step="0.01" class="form-control" data-staff-health placeholder="Salute attuale">
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Salute massima</label>
+                                            <input type="number" step="0.01" class="form-control" data-staff-health-max placeholder="Salute massima (opzionale)">
+                                        </div>
+                                        <div class="col-12 col-md-4 d-flex align-items-end">
+                                            <button type="button" class="btn btn-sm btn-primary" data-action="location-staff-update-health">Salva salute</button>
+                                        </div>
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Variazione esperienza</label>
+                                            <input type="number" class="form-control" data-staff-exp-delta placeholder="Esperienza (+/-)">
+                                        </div>
+                                        <div class="col-12 col-md-5">
+                                            <label class="form-label small mb-1">Motivazione esperienza</label>
+                                            <input type="text" class="form-control" maxlength="255" data-staff-exp-reason placeholder="Motivazione">
+                                        </div>
+                                        <div class="col-12 col-md-3 d-flex align-items-end">
+                                            <button type="button" class="btn btn-sm btn-primary" data-action="location-staff-assign-exp">Assegna XP</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card card-body mb-3">
+                                    <h6 class="mb-2">Messaggio macro guidato</h6>
+                                    <p class="small text-muted mb-2">Invia comunicazioni standard in chat in modo veloce e coerente (esito, avviso, chiusura).</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Template messaggio</label>
+                                            <select class="form-select" data-staff-macro-template>
+                                                <option value="master">Intervento master</option>
+                                                <option value="esito">Esito azione</option>
+                                                <option value="avviso">Avviso scena</option>
+                                                <option value="chiusura">Chiusura scena</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-8">
+                                            <label class="form-label small mb-1">Titolo messaggio</label>
+                                            <input type="text" class="form-control" maxlength="120" data-staff-macro-title placeholder="Titolo breve">
+                                        </div>
+                                    </div>
+                                    <label class="form-label small mb-1">Testo messaggio</label>
+                                    <textarea class="form-control mb-2" rows="3" maxlength="1200" data-staff-macro-body placeholder="Testo narrativo da inviare in chat..."></textarea>
+                                    <div class="d-flex justify-content-end">
+                                        <button type="button" class="btn btn-sm btn-primary" data-action="location-staff-send-macro">Invia in chat</button>
+                                    </div>
+                                </div>
+
+                                <div class="card card-body mb-3">
+                                    <h6 class="mb-2">Stati narrativi (massivo)</h6>
+                                    <p class="small text-muted mb-2">Applica o rimuovi stati a più personaggi insieme in modo guidato.</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-8 position-relative">
+                                            <label class="form-label small mb-1">Stato narrativo</label>
+                                            <input type="text" class="form-control" data-staff-state-query placeholder="Cerca e seleziona uno stato narrativo...">
+                                            <div class="list-group position-absolute w-100 mt-1 d-none" style="z-index: 30; max-height: 260px; overflow: auto;" data-staff-state-suggestions></div>
+                                            <input type="hidden" data-staff-state-select value="">
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Motivo rimozione</label>
+                                            <select class="form-select" data-staff-state-remove-reason>
+                                                <option value="manual_remove">Rimozione manuale staff</option>
+                                                <option value="consistency_fix">Correzione coerenza narrativa</option>
+                                                <option value="scene_transition">Cambio scena / contesto</option>
+                                                <option value="player_request">Richiesta del giocatore</option>
+                                                <option value="technical_cleanup">Pulizia tecnica</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted mb-2" data-staff-state-selected>Nessuno stato selezionato.</div>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Durata effetto</label>
+                                            <select class="form-select" data-staff-state-duration-mode>
+                                                <option value="permanent">Nessuna scadenza automatica</option>
+                                                <option value="scene">Fino a fine scena</option>
+                                                <option value="turn">Per turni</option>
+                                                <option value="minute">Per minuti</option>
+                                                <option value="hour">Per ore</option>
+                                                <option value="day">Per giorni</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-4 d-none" data-staff-state-duration-value-wrap>
+                                            <label class="form-label small mb-1">Quantita durata</label>
+                                            <input type="number" class="form-control" min="1" step="1" value="1" data-staff-state-duration-value placeholder="Quantita">
+                                        </div>
+                                        <div class="col-12 col-md-4 d-flex align-items-end">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" data-action="location-staff-state-toggle-advanced">Mostra opzioni avanzate</button>
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 mb-2 d-none" data-staff-state-advanced-wrap>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Intensita (avanzato)</label>
+                                            <input type="number" class="form-control" min="0.01" step="0.01" value="1" data-staff-state-intensity placeholder="Intensita">
+                                            <div class="small text-muted mt-1">Usala solo per effetti graduali: 1 standard, oltre 1 piu forte, sotto 1 piu lieve.</div>
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted mb-2">
+                                        `Applica`: imposta durata e applica ai target selezionati. `Rimuovi`: toglie lo stato selezionato usando il motivo indicato.
+                                    </div>
+                                    <div class="d-flex gap-2 justify-content-end">
+                                        <button type="button" class="btn btn-sm btn-success" data-action="location-staff-state-apply">Applica ai selezionati</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" data-action="location-staff-state-remove">Rimuovi dai selezionati</button>
+                                    </div>
+                                </div>
+
+                                <div class="card card-body mb-3">
+                                    <h6 class="mb-2">Assegnazione oggetti (massiva)</h6>
+                                    <p class="small text-muted mb-2">Consegna o rimuovi oggetti in blocco. Le assegnazioni inviano una notifica di sistema visibile solo ai destinatari coinvolti e allo staff.</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-8 position-relative">
+                                            <label class="form-label small mb-1">Ricerca oggetto</label>
+                                            <input type="text" class="form-control" data-staff-item-query placeholder="Cerca oggetto...">
+                                            <div class="list-group position-absolute w-100 mt-1 d-none" style="z-index: 30; max-height: 260px; overflow: auto;" data-staff-item-suggestions></div>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Quantita</label>
+                                            <input type="number" min="1" max="9999" value="1" class="form-control" data-staff-item-qty placeholder="Quantita">
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted mb-2" data-staff-item-selected>Nessun oggetto selezionato.</div>
+                                    <div class="small text-muted mb-2">La notifica in chat non e pubblica: viene mostrata solo ai destinatari interessati (e allo staff).</div>
+                                    <div class="d-flex gap-2 justify-content-end">
+                                        <button type="button" class="btn btn-sm btn-success" data-action="location-staff-grant-item">Aggiungi ai selezionati</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" data-action="location-staff-remove-item">Rimuovi dai selezionati</button>
+                                    </div>
+                                </div>
+
+                                <div class="card card-body mb-3">
+                                    <h6 class="mb-2">Note private staff (location)</h6>
+                                    <p class="small text-muted mb-2">Promemoria operativi condivisi solo tra staff: andamento scena, criticità, follow-up.</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-9">
+                                            <label class="form-label small mb-1">Testo nota staff</label>
+                                            <textarea class="form-control" rows="2" maxlength="5000" data-staff-note-text placeholder="Scrivi una nota privata per lo staff..."></textarea>
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label small mb-1">Priorita nota</label>
+                                            <select class="form-select mb-2" data-staff-note-priority>
+                                                <option value="normal">Priorita normale</option>
+                                                <option value="high">Priorita alta</option>
+                                                <option value="low">Priorita bassa</option>
+                                            </select>
+                                            <button type="button" class="btn btn-sm btn-primary w-100" data-action="location-staff-note-save">Salva nota</button>
+                                        </div>
+                                    </div>
+                                    <div class="small" style="max-height: 220px; overflow: auto;" data-staff-notes-list>
+                                        <div class="text-muted">Nessuna nota presente.</div>
+                                    </div>
+                                </div>
+
+                                <div class="card card-body mb-3">
+                                    <h6 class="mb-2">Flag urgenza personaggio</h6>
+                                    <p class="small text-muted mb-2">Etichetta rapida per priorità narrativa o tecnica del personaggio (monitor, urgente, critico).</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Livello flag</label>
+                                            <select class="form-select" data-staff-flag-select>
+                                                <option value="none">Nessun flag</option>
+                                                <option value="monitor">Monitor</option>
+                                                <option value="urgent">Urgente</option>
+                                                <option value="critical">Critico</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-5">
+                                            <label class="form-label small mb-1">Nota flag</label>
+                                            <input type="text" class="form-control" maxlength="255" data-staff-flag-note placeholder="Nota breve (opzionale)">
+                                        </div>
+                                        <div class="col-12 col-md-3 d-flex align-items-end">
+                                            <button type="button" class="btn btn-sm btn-primary" data-action="location-staff-flag-save">Salva flag</button>
+                                        </div>
+                                    </div>
+                                    <div class="small" style="max-height: 180px; overflow: auto;" data-staff-flags-list>
+                                        <div class="text-muted">Nessun flag presente.</div>
+                                    </div>
+                                </div>
+
+                                <div class="card card-body mb-3">
+                                    <h6 class="mb-2">Teletrasporto controllato</h6>
+                                    <p class="small text-muted mb-2">Sposta il target in un altra location. Inserisci sempre una motivazione chiara per tracciabilità staff.</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label small mb-1">Location destinazione</label>
+                                            <select class="form-select" data-staff-teleport-location>
+                                                <option value="">Seleziona location di destinazione...</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label small mb-1">Motivazione teletrasporto</label>
+                                            <input type="text" class="form-control" maxlength="255" data-staff-teleport-reason placeholder="Motivazione obbligatoria">
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-end">
+                                        <button type="button" class="btn btn-sm btn-warning" data-action="location-staff-teleport">Teletrasporta target</button>
+                                    </div>
+                                </div>
+
+                                {% if is_admin_or_superuser %}
+                                <div class="card card-body border border-danger">
+                                    <h6 class="mb-2 text-danger">Restrizione utente</h6>
+                                    <p class="small text-muted mb-2">Blocca globalmente o limita singole aree (chat, sussurri, comandi).</p>
+                                    <p class="small text-muted mb-2">Usa questa sezione solo per emergenze o violazioni del regolamento.</p>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="staff-restrict-chat" data-staff-restrict-chat>
+                                                <label class="form-check-label" for="staff-restrict-chat">Blocca chat</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="staff-restrict-whisper" data-staff-restrict-whisper>
+                                                <label class="form-check-label" for="staff-restrict-whisper">Blocca sussurri</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="staff-restrict-commands" data-staff-restrict-commands>
+                                                <label class="form-check-label" for="staff-restrict-commands">Blocca comandi</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-danger" data-action="location-staff-restrict-user" data-restrict-value="1">Restringi tutto</button>
+                                        <button type="button" class="btn btn-sm btn-outline-success" data-action="location-staff-restrict-user" data-restrict-value="0">Sblocca tutto</button>
+                                        <button type="button" class="btn btn-sm btn-primary" data-action="location-staff-restriction-save">Salva restrizioni mirate</button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-
-

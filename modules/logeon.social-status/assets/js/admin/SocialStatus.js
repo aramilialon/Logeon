@@ -21,8 +21,8 @@ var AdminSocialStatus = {
         }
 
         this.filtersForm = this.root.querySelector('#admin-social-status-filters');
-        this.modalNode   = this.root.querySelector('#admin-social-status-modal');
-        this.modalForm   = this.root.querySelector('#admin-social-status-form');
+        this.modalNode = this.root.querySelector('#admin-social-status-modal');
+        this.modalForm = this.root.querySelector('#admin-social-status-form');
 
         if (!this.filtersForm || !this.modalNode || !this.modalForm) {
             return this;
@@ -46,26 +46,37 @@ var AdminSocialStatus = {
         });
 
         this.root.addEventListener('click', function (event) {
-            var trigger = event.target.closest('[data-action]');
+            var trigger = event.target && event.target.closest ? event.target.closest('[data-action]') : null;
             if (!trigger) {
                 return;
             }
+
             var action = String(trigger.getAttribute('data-action') || '').trim();
+            if (!action) {
+                return;
+            }
 
             if (action === 'admin-social-status-reload') {
                 event.preventDefault();
                 self.loadGrid();
-            } else if (action === 'admin-social-status-create') {
+                return;
+            }
+            if (action === 'admin-social-status-create') {
                 event.preventDefault();
                 self.openCreate();
-            } else if (action === 'admin-social-status-edit') {
+                return;
+            }
+            if (action === 'admin-social-status-edit') {
                 event.preventDefault();
-                var id = parseInt(trigger.getAttribute('data-id') || '0', 10);
-                self.openEdit(id);
-            } else if (action === 'admin-social-status-save') {
+                self.openEdit(parseInt(trigger.getAttribute('data-id') || '0', 10) || 0);
+                return;
+            }
+            if (action === 'admin-social-status-save') {
                 event.preventDefault();
                 self.save();
-            } else if (action === 'admin-social-status-delete') {
+                return;
+            }
+            if (action === 'admin-social-status-delete') {
                 event.preventDefault();
                 self.remove();
             }
@@ -111,7 +122,7 @@ var AdminSocialStatus = {
                     style: { textAlign: 'center', width: '120px' },
                     format: function (row) {
                         return self.escapeHtml(String(row.min || 0))
-                            + ' <span class="text-muted">–</span> '
+                            + ' <span class="text-muted">-</span> '
                             + self.escapeHtml(String(row.max || 0));
                     }
                 },
@@ -124,7 +135,7 @@ var AdminSocialStatus = {
                         var val = parseInt(row.shop_discount || 0, 10);
                         return val > 0
                             ? '<span class="badge text-bg-success">-' + val + '%</span>'
-                            : '<span class="text-muted">—</span>';
+                            : '<span class="text-muted">-</span>';
                     }
                 },
                 {
@@ -134,7 +145,7 @@ var AdminSocialStatus = {
                     style: { textAlign: 'center', width: '80px' },
                     format: function (row) {
                         return parseInt(row.unlock_home || 0, 10) === 1
-                            ? '<span class="badge text-bg-info">Sì</span>'
+                            ? '<span class="badge text-bg-info">Si</span>'
                             : '<span class="badge text-bg-light text-dark">No</span>';
                     }
                 },
@@ -147,7 +158,7 @@ var AdminSocialStatus = {
                         var val = parseInt(row.quest_tier || 0, 10);
                         return val > 0
                             ? self.escapeHtml(String(val))
-                            : '<span class="text-muted">—</span>';
+                            : '<span class="text-muted">-</span>';
                     }
                 },
                 {
@@ -157,9 +168,9 @@ var AdminSocialStatus = {
                     style: { textAlign: 'left' },
                     format: function (row) {
                         var desc = (row.description || '').trim();
-                        return desc
+                        return desc !== ''
                             ? '<span class="text-muted small">' + self.escapeHtml(desc) + '</span>'
-                            : '<span class="text-muted">—</span>';
+                            : '<span class="text-muted">-</span>';
                     }
                 },
                 {
@@ -178,12 +189,12 @@ var AdminSocialStatus = {
     },
 
     setRows: function (rows) {
-        this.rows     = rows || [];
+        this.rows = rows || [];
         this.rowsById = {};
-        for (var i = 0; i < this.rows.length; i++) {
-            var r = this.rows[i];
-            if (r && r.id) {
-                this.rowsById[r.id] = r;
+        for (var i = 0; i < this.rows.length; i += 1) {
+            var row = this.rows[i];
+            if (row && row.id) {
+                this.rowsById[row.id] = row;
             }
         }
     },
@@ -192,24 +203,29 @@ var AdminSocialStatus = {
         if (!this.grid || typeof this.grid.loadData !== 'function') {
             return this;
         }
+
         this.grid.loadData(this.buildFiltersPayload(), 50, 1, 'min|ASC');
         return this;
     },
 
     buildFiltersPayload: function () {
-        var q = {};
-        if (this.filtersForm) {
-            var name = (this.filtersForm.querySelector('[name="name"]') || {}).value || '';
-            if (name) { q.name = name; }
+        var payload = {};
+        if (!this.filtersForm) {
+            return payload;
         }
-        return q;
-    },
 
-    // ── Modal ────────────────────────────────────────────────────────────
+        var name = (this.filtersForm.querySelector('[name="name"]') || {}).value || '';
+        if (name) {
+            payload.name = name;
+        }
+        return payload;
+    },
 
     openCreate: function () {
         this.editingRow = null;
-        if (this.modalForm) { this.modalForm.reset(); }
+        if (this.modalForm) {
+            this.modalForm.reset();
+        }
         this.setField('id', '');
         this.setField('min', '0');
         this.setField('max', '0');
@@ -222,7 +238,10 @@ var AdminSocialStatus = {
 
     openEdit: function (id) {
         var row = this.rowsById[id] || null;
-        if (!row) { return; }
+        if (!row) {
+            return;
+        }
+
         this.editingRow = row;
         this.setField('id', String(row.id));
         this.setField('name', row.name || '');
@@ -238,47 +257,59 @@ var AdminSocialStatus = {
     },
 
     toggleDelete: function (show) {
-        if (!this.modalNode) { return; }
-        var btn = this.modalNode.querySelector('[data-action="admin-social-status-delete"]');
-        if (btn) { btn.classList.toggle('d-none', !show); }
+        if (!this.modalNode) {
+            return;
+        }
+        var button = this.modalNode.querySelector('[data-action="admin-social-status-delete"]');
+        if (button) {
+            button.classList.toggle('d-none', !show);
+        }
     },
 
     setField: function (name, value) {
-        if (!this.modalForm) { return; }
-        var el = this.modalForm.querySelector('[name="' + name + '"]');
-        if (el) { el.value = value; }
+        if (!this.modalForm) {
+            return;
+        }
+        var field = this.modalForm.querySelector('[name="' + name + '"]');
+        if (field) {
+            field.value = value;
+        }
     },
 
     getField: function (name) {
-        if (!this.modalForm) { return ''; }
-        var el = this.modalForm.querySelector('[name="' + name + '"]');
-        return el ? el.value : '';
+        if (!this.modalForm) {
+            return '';
+        }
+        var field = this.modalForm.querySelector('[name="' + name + '"]');
+        return field ? field.value : '';
     },
 
     collectPayload: function () {
         return {
-            id:            parseInt(this.getField('id'), 10) || 0,
-            name:          this.getField('name').trim(),
-            description:   this.getField('description').trim(),
-            icon:          this.getField('icon').trim(),
-            min:           parseInt(this.getField('min'), 10) || 0,
-            max:           parseInt(this.getField('max'), 10) || 0,
+            id: parseInt(this.getField('id'), 10) || 0,
+            name: this.getField('name').trim(),
+            description: this.getField('description').trim(),
+            icon: this.getField('icon').trim(),
+            min: parseInt(this.getField('min'), 10) || 0,
+            max: parseInt(this.getField('max'), 10) || 0,
             shop_discount: parseInt(this.getField('shop_discount'), 10) || 0,
-            unlock_home:   parseInt(this.getField('unlock_home'), 10) || 0,
-            quest_tier:    parseInt(this.getField('quest_tier'), 10) || 0
+            unlock_home: parseInt(this.getField('unlock_home'), 10) || 0,
+            quest_tier: parseInt(this.getField('quest_tier'), 10) || 0
         };
     },
 
     save: function () {
         var payload = this.collectPayload();
         if (!payload.name) {
-            if (typeof Toast !== 'undefined') { Toast.show({ body: 'Il nome è obbligatorio.', type: 'error' }); }
+            if (typeof Toast !== 'undefined') {
+                Toast.show({ body: 'Il nome e obbligatorio.', type: 'error' });
+            }
             return;
         }
 
         var isNew = !payload.id;
-        var url   = isNew ? '/admin/social-status/create' : '/admin/social-status/update';
-        var self  = this;
+        var url = isNew ? '/admin/social-status/create' : '/admin/social-status/update';
+        var self = this;
 
         this.post(url, payload, function () {
             self.modal.hide();
@@ -291,8 +322,12 @@ var AdminSocialStatus = {
 
     remove: function () {
         var payload = this.collectPayload();
-        if (!payload.id) { return; }
-        if (!confirm('Eliminare questo stato sociale? L\'operazione non può essere annullata.')) { return; }
+        if (!payload.id) {
+            return;
+        }
+        if (!confirm('Eliminare questo stato sociale? L\'operazione non puo essere annullata.')) {
+            return;
+        }
 
         var self = this;
         this.post('/admin/social-status/delete', { id: payload.id }, function () {
@@ -304,37 +339,40 @@ var AdminSocialStatus = {
         });
     },
 
-    // ── HTTP helper ──────────────────────────────────────────────────────
-
     post: function (url, payload, onSuccess, onError) {
         if (typeof Request !== 'function' || !Request.http || typeof Request.http.post !== 'function') {
-            if (typeof Toast !== 'undefined') { Toast.show({ body: 'Servizio non disponibile.', type: 'error' }); }
+            if (typeof Toast !== 'undefined') {
+                Toast.show({ body: 'Servizio non disponibile.', type: 'error' });
+            }
             return this;
         }
+
         Request.http.post(url, payload || {}).then(function (response) {
-            if (typeof onSuccess === 'function') { onSuccess(response || null); }
+            if (typeof onSuccess === 'function') {
+                onSuccess(response || null);
+            }
         }).catch(function (error) {
             if (typeof onError === 'function') {
                 onError(error);
             } else if (typeof Toast !== 'undefined') {
-                var msg = (error && error.message) ? error.message : 'Errore di rete.';
-                Toast.show({ body: msg, type: 'error' });
+                var message = (error && error.message) ? error.message : 'Errore di rete.';
+                Toast.show({ body: message, type: 'error' });
             }
         });
     },
 
-    // ── Utils ────────────────────────────────────────────────────────────
-
-    escapeHtml: function (str) {
-        return String(str)
+    escapeHtml: function (value) {
+        return String(value == null ? '' : value)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
     },
 
-    escapeAttr: function (str) {
-        return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    escapeAttr: function (value) {
+        return String(value == null ? '' : value)
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 };
 

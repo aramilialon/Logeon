@@ -464,6 +464,8 @@ function GameShopPage(extension) {
                         priceVal = 0;
                     }
                     let canAfford = (priceVal <= balance);
+                    let isEconomyAvailable = !(parseInt(item.is_available, 10) === 0);
+                    let availabilityReason = String(item.availability_reason || '').trim();
                     let stockLabel = '';
                     if (stockVal !== null) {
                         stockLabel = (stockVal <= 0) ? 'Esaurito' : ('Disponibili: ' + stockVal);
@@ -483,7 +485,7 @@ function GameShopPage(extension) {
                     template.find('[name="description"]').text(item.description || '');
                     template.find('[name="price"]').html(priceLabel);
                     template.find('[name="stock"]').text(stockLabel);
-                    template.find('[name="afford"]').toggleClass('d-none', canAfford);
+                    template.find('[name="afford"]').toggleClass('d-none', canAfford || !isEconomyAvailable);
                     template.find('[name="meta"]').html(this.buildMeta(item));
                     let buyBtn = template.find('[name="buy"]');
                     buyBtn.removeClass('btn-outline-secondary btn-outline-warning').addClass('btn-success').text('Compra');
@@ -498,9 +500,12 @@ function GameShopPage(extension) {
                         template.find('[name="soldout"]').removeClass('d-none');
                         buyBtn.prop('disabled', true).removeClass('btn-success').addClass('btn-outline-secondary').text('Esaurito');
                         wrapTooltip(buyBtn, 'Esaurito');
+                    } else if (!isEconomyAvailable) {
+                        buyBtn.prop('disabled', true).removeClass('btn-success').addClass('btn-outline-warning').text('Non disponibile');
+                        wrapTooltip(buyBtn, availabilityReason || 'Non disponibile nel contesto attuale');
                     } else if (maxPurchase !== null && maxPurchase <= 0) {
                         buyBtn.prop('disabled', true).removeClass('btn-success').addClass('btn-outline-warning').text('Limite raggiunto');
-                        wrapTooltip(buyBtn, 'Limite raggiunto');
+                        wrapTooltip(buyBtn, availabilityReason || 'Limite raggiunto');
                     } else if (!canAfford) {
                         buyBtn.prop('disabled', true).removeClass('btn-success').addClass('btn-outline-secondary');
                         wrapTooltip(buyBtn, 'Saldo insufficiente');
@@ -547,6 +552,20 @@ function GameShopPage(extension) {
                 }
                 if (item.removes_state_name) {
                     parts.push('<span class="badge text-bg-warning">Rimuove: ' + this.escapeHtml(item.removes_state_name) + '</span>');
+                }
+                if (Array.isArray(item.runtime_labels)) {
+                    for (var i = 0; i < item.runtime_labels.length; i++) {
+                        let label = String(item.runtime_labels[i] || '').trim();
+                        if (label) {
+                            parts.push('<span class="badge text-bg-info-subtle text-dark border">' + this.escapeHtml(label) + '</span>');
+                        }
+                    }
+                }
+                if (item.price_explanation) {
+                    parts.push('<span class="d-block text-muted mt-1">' + this.escapeHtml(item.price_explanation) + '</span>');
+                }
+                if (parseInt(item.is_available, 10) === 0 && item.availability_reason) {
+                    parts.push('<span class="d-block text-warning mt-1">' + this.escapeHtml(item.availability_reason) + '</span>');
                 }
                 return parts.join(' ');
             },

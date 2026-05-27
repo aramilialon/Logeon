@@ -149,4 +149,3 @@ class CoreWeatherProvider implements WeatherProviderInterface
         return $this->override->listWorldOptions();
     }
 }
-

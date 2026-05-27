@@ -9,6 +9,7 @@ use Core\AppContext;
 use Core\AuthGuard;
 use Core\Http\AppError;
 use Core\Redirect;
+use Core\SessionStore;
 
 /** @var \Core\Router $route */
 $db = AppContext::dbProvider()->connection();
@@ -124,6 +125,26 @@ $renderAdminPage = function ($page = 'dashboard') use ($presence) {
     $guard->requireAbility('settings.manage', [], "Accesso non autorizzato all'admin");
     $userId = $guard->requireUser();
     $presence->touchUser((int) $userId);
+    try {
+        $currentAdminUser = AppContext::dbProvider()->connection()->fetchOnePrepared(
+            'SELECT is_administrator, is_superuser, superuser_role, is_moderator, is_master
+             FROM users
+             WHERE id = ?
+             LIMIT 1',
+            [(int) $userId],
+        );
+        if (!empty($currentAdminUser)) {
+            $isSuperuser = (int) ($currentAdminUser->is_superuser ?? 0);
+            $superuserRole = strtolower(trim((string) ($currentAdminUser->superuser_role ?? '')));
+            SessionStore::set('user_is_administrator', (int) ($currentAdminUser->is_administrator ?? 0));
+            SessionStore::set('user_is_superuser', $isSuperuser);
+            SessionStore::set('user_is_moderator', (int) ($currentAdminUser->is_moderator ?? 0));
+            SessionStore::set('user_is_master', (int) ($currentAdminUser->is_master ?? 0));
+            SessionStore::set('user_superuser_role', $superuserRole);
+            SessionStore::set('user_is_superuser_creator', ($isSuperuser === 1 && $superuserRole === 'creatore') ? 1 : 0);
+        }
+    } catch (\Throwable $e) {
+    }
 
     $page = strtolower(trim((string) $page));
     if ($page === '') {
@@ -341,12 +362,15 @@ $route->group('/game/maps', function ($route) use ($db, $presence, $mapHierarchy
             $musicState = null;
         }
         $musicStateDefault = [
-            'is_active'        => false,
-            'source_type'      => null,
-            'source_url'       => null,
+            'is_active' => false,
+            'source_type' => null,
+            'source_url' => null,
             'youtube_video_id' => null,
-            'title'            => null,
-            'force_muted'      => false,
+            'title' => null,
+            'force_muted' => false,
+            'started_at' => null,
+            'started_at_ts' => null,
+            'server_now_ts' => time(),
         ];
         $music_state_json = json_encode(
             $musicState ?: $musicStateDefault,
@@ -354,14 +378,14 @@ $route->group('/game/maps', function ($route) use ($db, $presence, $mapHierarchy
         );
 
         return AppContext::templateRenderer()->render('app/location.twig', [
-            'map_id'               => (int) $map_id,
-            'location_id'          => (int) $location_id,
-            'show_jobs_board'      => !empty($has_location_job),
-            'map_name'             => $map_name,
-            'location_name'        => $location_name,
+            'map_id' => (int) $map_id,
+            'location_id' => (int) $location_id,
+            'show_jobs_board' => !empty($has_location_job),
+            'map_name' => $map_name,
+            'location_name' => $location_name,
             'location_description' => $location_description,
-            'location_status'      => $location_status,
-            'music_state_json'     => $music_state_json,
+            'location_status' => $location_status,
+            'music_state_json' => $music_state_json,
         ]);
     });
 });
@@ -512,19 +536,30 @@ $route->group('/game/jobs', function ($route) use ($db, $presence) {
     $route->get('/location/{id}', function ($id) use ($db, $presence) {
         $characterId = AuthGuard::html()->requireCharacter();
 
-        $presence->touchCharacter((int) $characterId);
+        $locationId = (int) $id;
+        $access = (new Locations())->canAccess($locationId, (int) $characterId);
+        if (!$access['allowed']) {
+            throw AppError::notFound('Location non trovata');
+        }
 
         $location_name = null;
+        $location_map_id = null;
         $location = $db->fetchOnePrepared(
-            'SELECT name FROM locations WHERE id = ? LIMIT 1',
-            [(int) $id],
+            'SELECT map_id, name
+             FROM locations
+             WHERE id = ?
+             LIMIT 1',
+            [$locationId],
         );
         if (!empty($location)) {
             $location_name = $location->name;
+            $location_map_id = isset($location->map_id) ? (int) $location->map_id : null;
         }
 
+        $presence->setCharacterPositionAndTouch((int) $characterId, $location_map_id, $locationId);
+
         return AppContext::templateRenderer()->render('app/jobs.twig', [
-            'location_id' => $id,
+            'location_id' => $locationId,
             'location_name' => $location_name,
         ]);
     });

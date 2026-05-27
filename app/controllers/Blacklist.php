@@ -48,6 +48,7 @@ class Blacklist
     public function list()
     {
         $this->requireAdmin();
+        $isSuperuser = \Core\AppContext::authContext()->isSuperuser();
 
         $data = $this->requestDataObject();
         $query = (isset($data->query) && is_object($data->query)) ? $data->query : (object) [];
@@ -58,7 +59,7 @@ class Blacklist
         $results = max(1, InputValidator::integer($data, 'results', 20));
         $orderBy = InputValidator::string($data, 'orderBy', 'date_start|DESC');
 
-        $result = $this->blacklistAdminService()->listEntries($email, $status, $page, $results, $orderBy);
+        $result = $this->blacklistAdminService()->listEntries($email, $status, $page, $results, $orderBy, $isSuperuser);
 
         $this->emitJson([
             'success' => true,

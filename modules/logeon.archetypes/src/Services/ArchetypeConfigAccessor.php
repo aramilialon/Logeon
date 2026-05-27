@@ -13,7 +13,7 @@ class ArchetypeConfigAccessor
     public static function normalize(array $config): array
     {
         return [
-            'archetypes_enabled'         => 1,
+            'archetypes_enabled'         => ((int) ($config['archetypes_enabled'] ?? 1) === 1) ? 1 : 0,
             'archetype_required'         => ((int) ($config['archetype_required'] ?? 0) === 1) ? 1 : 0,
             'multiple_archetypes_allowed' => ((int) ($config['multiple_archetypes_allowed'] ?? 0) === 1) ? 1 : 0,
         ];
@@ -38,7 +38,8 @@ class ArchetypeConfigAccessor
      */
     public static function isEnabled(array $config = null): bool
     {
-        return true;
+        $resolved = is_array($config) ? self::normalize($config) : self::getConfig();
+        return $resolved['archetypes_enabled'] === 1;
     }
 
     /**
@@ -65,7 +66,7 @@ class ArchetypeConfigAccessor
     private static function disabledConfig(): array
     {
         return [
-            'archetypes_enabled'         => 1,
+            'archetypes_enabled'         => 0,
             'archetype_required'         => 0,
             'multiple_archetypes_allowed' => 0,
         ];

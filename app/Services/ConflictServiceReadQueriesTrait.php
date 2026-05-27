@@ -396,7 +396,34 @@ trait ConflictServiceReadQueriesTrait
         foreach ($rows ?: [] as $row) {
             $conflictId = (int) ($row->id ?? 0);
             $isParticipant = $viewerCharacterId > 0 ? $this->isParticipant($conflictId, $viewerCharacterId) : false;
+            $openedBy = (int) ($row->opened_by ?? 0);
+            $canManage = ($isStaff || $isParticipant || ($viewerCharacterId > 0 && $openedBy === $viewerCharacterId));
+            $authority = $this->normalizeResolutionAuthority($row->resolution_authority ?? 'mixed');
+            $canResolve = false;
+            $canClose = false;
+            if ($canManage) {
+                if ($isStaff) {
+                    $canResolve = true;
+                    $canClose = true;
+                } elseif ($authority === 'players') {
+                    $canResolve = true;
+                    $canClose = true;
+                } elseif ($authority === 'mixed') {
+                    $canResolve = true;
+                    $canClose = true;
+                } elseif ($authority === 'deferred_review') {
+                    $canResolve = true;
+                    $canClose = false;
+                } else {
+                    // master
+                    $canResolve = false;
+                    $canClose = false;
+                }
+            }
             $row->viewer_is_participant = $isParticipant ? 1 : 0;
+            $row->viewer_can_manage = $canManage ? 1 : 0;
+            $row->viewer_can_resolve = $canResolve ? 1 : 0;
+            $row->viewer_can_close = $canClose ? 1 : 0;
             $row->viewer_can_respond_proposal = (
                 strtolower((string) ($row->status ?? '')) === self::STATUS_PROPOSAL
                 && ($isParticipant || $isStaff)
@@ -438,4 +465,3 @@ trait ConflictServiceReadQueriesTrait
         ];
     }
 }
-

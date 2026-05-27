@@ -17,8 +17,417 @@ function Form() {
     var base = {
         form: null,
         richTextSelector: '.summernote, .richtext-editor',
+        passwordToggleSelector: '[data-form-password-toggle]',
+        passwordToggleIdPrefix: 'form-password-input-',
+        passwordConfirmErrorMessage: 'La password di conferma non corrisponde.',
+        passwordToggleRightDefault: '0.45rem',
+        passwordToggleRightFloating: '0.65rem',
+        passwordToggleRightInvalid: '2.35rem',
         isRichTextInput: function (input) {
             return !!(input && input.length && (input.hasClass('summernote') || input.hasClass('richtext-editor')));
+        },
+
+        ensurePasswordInputId: function (input) {
+            if (!input || !input.length) {
+                return '';
+            }
+
+            var id = String(input.attr('id') || '').trim();
+            if (id !== '') {
+                return id;
+            }
+
+            var generated = this.passwordToggleIdPrefix + Math.random().toString(36).slice(2, 10);
+            input.attr('id', generated);
+            return generated;
+        },
+
+        createPasswordToggleButton: function (targetId) {
+            var button = $('<button type="button" class="btn btn-sm lf-password-toggle-btn" data-form-password-toggle aria-label="Mostra password" title="Mostra password"></button>');
+            button.attr('data-target', targetId);
+            button.append('<i class="bi bi-eye" aria-hidden="true"></i>');
+            return button;
+        },
+
+        resolvePasswordFieldWrapper: function (input) {
+            if (!input || !input.length) {
+                return null;
+            }
+
+            var floating = input.closest('.form-floating');
+            if (floating.length) {
+                floating.addClass('lf-password-field');
+                return floating;
+            }
+
+            var group = input.closest('.input-group');
+            if (group.length) {
+                group.addClass('lf-password-field');
+                return group;
+            }
+
+            var wrapper = input.parent('.lf-password-field');
+            if (wrapper.length) {
+                return wrapper;
+            }
+
+            input.wrap('<div class="lf-password-field"></div>');
+            return input.parent('.lf-password-field');
+        },
+
+        enhancePasswordInput: function (input) {
+            if (!input || !input.length) {
+                return;
+            }
+
+            if (String(input.attr('type') || '').toLowerCase() !== 'password') {
+                return;
+            }
+
+            if (String(input.attr('data-password-toggle-disabled') || '') === '1') {
+                return;
+            }
+
+            if (String(input.attr('data-password-toggle-bound') || '') === '1') {
+                return;
+            }
+
+            var targetId = this.ensurePasswordInputId(input);
+            if (targetId === '') {
+                return;
+            }
+
+            var wrapper = this.resolvePasswordFieldWrapper(input);
+            if (!wrapper || !wrapper.length) {
+                return;
+            }
+
+            if (wrapper.find(this.passwordToggleSelector + '[data-target="' + targetId + '"]').length > 0) {
+                input.attr('data-password-toggle-bound', '1');
+                this.positionPasswordToggle(input);
+                return;
+            }
+
+            var button = this.createPasswordToggleButton(targetId);
+            input.addClass('lf-password-toggle-input');
+            wrapper.append(button);
+
+            input.attr('data-password-toggle-bound', '1');
+            this.positionPasswordToggle(input);
+        },
+
+        positionPasswordToggle: function (input) {
+            if (!input || !input.length) {
+                return;
+            }
+
+            var targetId = String(input.attr('id') || '').trim();
+            if (targetId === '') {
+                return;
+            }
+
+            var wrapper = this.resolvePasswordFieldWrapper(input);
+            if (!wrapper || !wrapper.length) {
+                return;
+            }
+
+            var button = wrapper.find(this.passwordToggleSelector + '[data-target="' + targetId + '"]');
+            if (!button.length) {
+                return;
+            }
+
+            var isInvalid = input.hasClass('is-invalid')
+                || String(input.attr('aria-invalid') || '').toLowerCase() === 'true';
+            var rightValue = wrapper.hasClass('form-floating')
+                ? this.passwordToggleRightFloating
+                : this.passwordToggleRightDefault;
+            if (isInvalid) {
+                rightValue = this.passwordToggleRightInvalid;
+            }
+            button.css('right', rightValue);
+
+            if (wrapper.hasClass('form-floating')) {
+                button.css('top', '');
+                return;
+            }
+
+            var top = input.position().top + (input.outerHeight() / 2);
+            if (isFinite(top)) {
+                button.css('top', top + 'px');
+            }
+        },
+
+        initPasswordToggles: function (scope) {
+            var root = null;
+            if (scope && scope.jquery) {
+                root = scope;
+            } else if (scope) {
+                root = $(scope);
+            } else {
+                root = $(document);
+            }
+
+            if (!root || !root.length) {
+                root = $(document);
+            }
+
+            var self = this;
+            root.find('input[type="password"]').each(function () {
+                self.enhancePasswordInput($(this));
+            });
+
+            $(window).off('resize.form-password-toggle').on('resize.form-password-toggle', function () {
+                $('[data-password-toggle-bound="1"]').each(function () {
+                    self.positionPasswordToggle($(this));
+                });
+            });
+
+            $(document).off('input.form-password-toggle-position change.form-password-toggle-position blur.form-password-toggle-position', 'input[type="password"]');
+            $(document).on('input.form-password-toggle-position change.form-password-toggle-position blur.form-password-toggle-position', 'input[type="password"]', function () {
+                self.positionPasswordToggle($(this));
+            });
+
+            $(document).off('click.form-password-toggle', self.passwordToggleSelector);
+            $(document).on('click.form-password-toggle', self.passwordToggleSelector, function (event) {
+                event.preventDefault();
+
+                var toggle = $(this);
+                var targetId = String(toggle.attr('data-target') || '').trim();
+                if (targetId === '') {
+                    return;
+                }
+
+                var input = $('#' + targetId);
+                if (!input.length) {
+                    return;
+                }
+
+                var isPassword = String(input.attr('type') || '').toLowerCase() === 'password';
+                input.attr('type', isPassword ? 'text' : 'password');
+
+                var icon = toggle.find('i');
+                if (icon.length) {
+                    icon.removeClass('bi-eye bi-eye-slash');
+                    icon.addClass(isPassword ? 'bi-eye-slash' : 'bi-eye');
+                }
+
+                var nextLabel = isPassword ? 'Nascondi password' : 'Mostra password';
+                toggle.attr('aria-label', nextLabel);
+                toggle.attr('title', nextLabel);
+                self.positionPasswordToggle(input);
+            });
+
+            return this;
+        },
+
+        isPasswordConfirmInput: function (input) {
+            if (!input || !input.length) {
+                return false;
+            }
+
+            var name = String(input.attr('name') || '').toLowerCase();
+            var id = String(input.attr('id') || '').toLowerCase();
+            var marker = String(input.attr('data-password-confirm') || '').toLowerCase();
+            if (marker === '1' || marker === 'true' || marker === 'yes') {
+                return true;
+            }
+
+            return /(confirm|rewrite|repeat|ripeti|conferma)/.test(name) || /(confirm|rewrite|repeat|ripeti|conferma)/.test(id);
+        },
+
+        resolvePasswordConfirmPair: function (form) {
+            if (!form || !form.length) {
+                return null;
+            }
+
+            var inputs = form.find('input[type="password"]').filter(function () {
+                return !$(this).is(':disabled');
+            });
+            if (inputs.length < 2) {
+                return null;
+            }
+
+            var confirmInput = null;
+            var baseInput = null;
+            var confirmIndex = -1;
+
+            inputs.each(function () {
+                var current = $(this);
+                if (!confirmInput && base.isPasswordConfirmInput(current)) {
+                    confirmInput = current;
+                }
+            });
+
+            if (!confirmInput) {
+                return null;
+            }
+
+            for (var i = 0; i < inputs.length; i += 1) {
+                if (inputs.eq(i).get(0) === confirmInput.get(0)) {
+                    confirmIndex = i;
+                    break;
+                }
+            }
+            if (confirmIndex < 0) {
+                return null;
+            }
+
+            // Priorita: il campo password immediatamente precedente alla conferma.
+            for (var prev = confirmIndex - 1; prev >= 0; prev -= 1) {
+                var prevInput = inputs.eq(prev);
+                if (!base.isPasswordConfirmInput(prevInput)) {
+                    baseInput = prevInput;
+                    break;
+                }
+            }
+
+            // Fallback: primo campo password non-marked come conferma.
+            if (!baseInput) {
+                inputs.each(function () {
+                    var current = $(this);
+                    if (current.get(0) === confirmInput.get(0)) {
+                        return;
+                    }
+                    if (!base.isPasswordConfirmInput(current) && !baseInput) {
+                        baseInput = current;
+                    }
+                });
+            }
+
+            if (!baseInput || !confirmInput) {
+                return null;
+            }
+
+            return {
+                base: baseInput,
+                confirm: confirmInput
+            };
+        },
+
+        ensurePasswordConfirmFeedback: function (confirmInput) {
+            if (!confirmInput || !confirmInput.length) {
+                return null;
+            }
+
+            var feedback = confirmInput.siblings('.lf-password-confirm-feedback');
+            if (feedback.length) {
+                return feedback;
+            }
+
+            feedback = $('<div class="invalid-feedback lf-password-confirm-feedback"></div>');
+            feedback.text(this.passwordConfirmErrorMessage);
+            confirmInput.after(feedback);
+            return feedback;
+        },
+
+        validatePasswordConfirmPair: function (baseInput, confirmInput, forceShow) {
+            if (!baseInput || !baseInput.length || !confirmInput || !confirmInput.length) {
+                return true;
+            }
+
+            var baseValue = String(baseInput.val() || '');
+            var confirmValue = String(confirmInput.val() || '');
+            var shouldValidate = forceShow === true || confirmValue !== '';
+            var isValid = !shouldValidate || baseValue === confirmValue;
+
+            var feedback = this.ensurePasswordConfirmFeedback(confirmInput);
+            if (!isValid) {
+                confirmInput.addClass('is-invalid');
+                confirmInput.attr('aria-invalid', 'true');
+                confirmInput.get(0).setCustomValidity(this.passwordConfirmErrorMessage);
+                if (feedback && feedback.length) {
+                    feedback.text(this.passwordConfirmErrorMessage);
+                }
+            } else {
+                confirmInput.removeClass('is-invalid');
+                confirmInput.removeAttr('aria-invalid');
+                confirmInput.get(0).setCustomValidity('');
+            }
+
+            this.positionPasswordToggle(confirmInput);
+
+            return isValid;
+        },
+
+        enhancePasswordConfirmInForm: function (form) {
+            if (!form || !form.length) {
+                return;
+            }
+
+            var pair = this.resolvePasswordConfirmPair(form);
+            if (!pair) {
+                return;
+            }
+
+            pair.base.attr('data-password-confirm-source', '1');
+            pair.confirm.attr('data-password-confirm-target', '1');
+            this.ensurePasswordConfirmFeedback(pair.confirm);
+            this.validatePasswordConfirmPair(pair.base, pair.confirm, false);
+        },
+
+        initPasswordConfirmValidation: function (scope) {
+            var root = null;
+            if (scope && scope.jquery) {
+                root = scope;
+            } else if (scope) {
+                root = $(scope);
+            } else {
+                root = $(document);
+            }
+
+            if (!root || !root.length) {
+                root = $(document);
+            }
+
+            var self = this;
+
+            root.find('form').each(function () {
+                self.enhancePasswordConfirmInForm($(this));
+            });
+
+            $(document).off('input.form-password-confirm change.form-password-confirm', 'input[type="password"]');
+            $(document).on('input.form-password-confirm change.form-password-confirm', 'input[type="password"]', function () {
+                var field = $(this);
+                var form = field.closest('form');
+                if (!form.length) {
+                    return;
+                }
+
+                self.enhancePasswordConfirmInForm(form);
+                var pair = self.resolvePasswordConfirmPair(form);
+                if (!pair) {
+                    return;
+                }
+                self.validatePasswordConfirmPair(pair.base, pair.confirm, false);
+            });
+
+            $(document).off('submit.form-password-confirm');
+            $(document).on('submit.form-password-confirm', 'form', function (event) {
+                var form = $(this);
+                self.enhancePasswordConfirmInForm(form);
+                var pair = self.resolvePasswordConfirmPair(form);
+                if (!pair) {
+                    return;
+                }
+
+                var isValid = self.validatePasswordConfirmPair(pair.base, pair.confirm, true);
+                if (isValid) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                pair.confirm.trigger('focus');
+
+                if (typeof window !== 'undefined' && window.Toast && typeof window.Toast.show === 'function') {
+                    window.Toast.show({
+                        body: self.passwordConfirmErrorMessage,
+                        type: 'warning'
+                    });
+                }
+            });
+
+            return this;
         },
 
         /**
@@ -291,4 +700,10 @@ function Form() {
 
 if (typeof window !== 'undefined') {
     window.Form = Form;
+    if (typeof window.$ !== 'undefined') {
+        $(function () {
+            Form().initPasswordToggles(document);
+            Form().initPasswordConfirmValidation(document);
+        });
+    }
 }

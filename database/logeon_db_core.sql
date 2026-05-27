@@ -50,44 +50,6 @@ CREATE TABLE IF NOT EXISTS `applied_narrative_states` (
 -- Dump dei dati della tabella logeon_db.applied_narrative_states: ~0 rows (circa)
 DELETE FROM `applied_narrative_states`;
 
--- Dump della struttura di tabella logeon_db.archetype_configs
-DROP TABLE IF EXISTS `archetype_configs`;
-CREATE TABLE IF NOT EXISTS `archetype_configs` (
-  `id` tinyint(3) unsigned NOT NULL DEFAULT 1,
-  `archetypes_enabled` tinyint(1) NOT NULL DEFAULT 1,
-  `archetype_required` tinyint(1) NOT NULL DEFAULT 0,
-  `multiple_archetypes_allowed` tinyint(1) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.archetype_configs: ~0 rows (circa)
-DELETE FROM `archetype_configs`;
-INSERT INTO `archetype_configs` (`id`, `archetypes_enabled`, `archetype_required`, `multiple_archetypes_allowed`) VALUES
-	(1, 1, 0, 0);
-
--- Dump della struttura di tabella logeon_db.archetypes
-DROP TABLE IF EXISTS `archetypes`;
-CREATE TABLE IF NOT EXISTS `archetypes` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `name` varchar(120) NOT NULL,
-  `slug` varchar(120) NOT NULL,
-  `description` text DEFAULT NULL,
-  `lore_text` text DEFAULT NULL,
-  `icon` varchar(512) DEFAULT NULL,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `is_selectable` tinyint(1) NOT NULL DEFAULT 1,
-  `sort_order` int(11) NOT NULL DEFAULT 0,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_archetypes_slug` (`slug`),
-  KEY `idx_archetypes_active_selectable` (`is_active`,`is_selectable`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.archetypes: ~0 rows (circa)
-DELETE FROM `archetypes`;
-INSERT INTO `archetypes` (`id`, `name`, `slug`, `description`, `lore_text`, `icon`, `is_active`, `is_selectable`, `sort_order`, `created_at`) VALUES
-	(1, 'Umano', 'umano', 'Un semplice umano', NULL, NULL, 1, 1, 1, '2026-04-15 12:58:38');
-
 -- Dump della struttura di tabella logeon_db.blacklist
 DROP TABLE IF EXISTS `blacklist`;
 CREATE TABLE IF NOT EXISTS `blacklist` (
@@ -104,115 +66,6 @@ CREATE TABLE IF NOT EXISTS `blacklist` (
 
 -- Dump dei dati della tabella logeon_db.blacklist: ~0 rows (circa)
 DELETE FROM `blacklist`;
-
--- Dump della struttura di tabella logeon_db.character_archetypes
-DROP TABLE IF EXISTS `character_archetypes`;
-CREATE TABLE IF NOT EXISTS `character_archetypes` (
-  `character_id` int(10) unsigned NOT NULL,
-  `archetype_id` int(10) unsigned NOT NULL,
-  `assigned_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`character_id`,`archetype_id`),
-  KEY `idx_character_archetypes_archetype` (`archetype_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.character_archetypes: ~0 rows (circa)
-DELETE FROM `character_archetypes`;
-
--- Dump della struttura di tabella logeon_db.character_attribute_definitions
-DROP TABLE IF EXISTS `character_attribute_definitions`;
-CREATE TABLE IF NOT EXISTS `character_attribute_definitions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `slug` varchar(80) NOT NULL,
-  `name` varchar(120) NOT NULL,
-  `description` text DEFAULT NULL,
-  `attribute_group` enum('primary','secondary','narrative') NOT NULL DEFAULT 'primary',
-  `value_type` enum('number') NOT NULL DEFAULT 'number',
-  `position` int(11) NOT NULL DEFAULT 0,
-  `min_value` decimal(12,2) DEFAULT NULL,
-  `max_value` decimal(12,2) DEFAULT NULL,
-  `default_value` decimal(12,2) DEFAULT NULL,
-  `fallback_value` decimal(12,2) DEFAULT NULL,
-  `round_mode` enum('none','floor','ceil','round') NOT NULL DEFAULT 'none',
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `is_derived` tinyint(1) NOT NULL DEFAULT 0,
-  `allow_manual_override` tinyint(1) NOT NULL DEFAULT 0,
-  `visible_in_profile` tinyint(1) NOT NULL DEFAULT 1,
-  `visible_in_location` tinyint(1) NOT NULL DEFAULT 0,
-  `maps_to_core_health_max` tinyint(1) NOT NULL DEFAULT 0,
-  `maps_health_active` tinyint(4) GENERATED ALWAYS AS (case when `is_active` = 1 and `maps_to_core_health_max` = 1 then 1 else NULL end) VIRTUAL,
-  `created_by` int(11) DEFAULT NULL,
-  `updated_by` int(11) DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_character_attribute_slug` (`slug`),
-  UNIQUE KEY `uq_character_attribute_health_active` (`maps_health_active`),
-  KEY `idx_character_attribute_group_position` (`attribute_group`,`position`),
-  KEY `idx_character_attribute_is_active` (`is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.character_attribute_definitions: ~0 rows (circa)
-DELETE FROM `character_attribute_definitions`;
-
--- Dump della struttura di tabella logeon_db.character_attribute_rule_steps
-DROP TABLE IF EXISTS `character_attribute_rule_steps`;
-CREATE TABLE IF NOT EXISTS `character_attribute_rule_steps` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `rule_id` int(11) NOT NULL,
-  `step_order` int(11) NOT NULL DEFAULT 1,
-  `operator_code` enum('set','add','sub','mul','div','min','max') NOT NULL DEFAULT 'set',
-  `operand_type` enum('attribute','value') NOT NULL DEFAULT 'value',
-  `operand_attribute_id` int(11) DEFAULT NULL,
-  `operand_value` decimal(12,2) DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_character_attribute_rule_step` (`rule_id`,`step_order`),
-  KEY `idx_character_attribute_rule_steps_rule` (`rule_id`),
-  KEY `idx_character_attribute_rule_steps_operand_attr` (`operand_attribute_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.character_attribute_rule_steps: ~0 rows (circa)
-DELETE FROM `character_attribute_rule_steps`;
-
--- Dump della struttura di tabella logeon_db.character_attribute_rules
-DROP TABLE IF EXISTS `character_attribute_rules`;
-CREATE TABLE IF NOT EXISTS `character_attribute_rules` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `attribute_id` int(11) NOT NULL,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `fallback_value` decimal(12,2) DEFAULT NULL,
-  `round_mode` enum('none','floor','ceil','round') DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_character_attribute_rule_attribute` (`attribute_id`),
-  KEY `idx_character_attribute_rule_active` (`is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.character_attribute_rules: ~0 rows (circa)
-DELETE FROM `character_attribute_rules`;
-
--- Dump della struttura di tabella logeon_db.character_attribute_values
-DROP TABLE IF EXISTS `character_attribute_values`;
-CREATE TABLE IF NOT EXISTS `character_attribute_values` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `character_id` int(11) NOT NULL,
-  `attribute_id` int(11) NOT NULL,
-  `base_value` decimal(12,2) DEFAULT NULL,
-  `override_value` decimal(12,2) DEFAULT NULL,
-  `effective_value` decimal(12,2) DEFAULT NULL,
-  `value_source` enum('base','default','override','derived','fallback') NOT NULL DEFAULT 'base',
-  `last_recomputed_at` timestamp NULL DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_character_attribute_value` (`character_id`,`attribute_id`),
-  KEY `idx_character_attribute_values_character` (`character_id`),
-  KEY `idx_character_attribute_values_attribute` (`attribute_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.character_attribute_values: ~0 rows (circa)
-DELETE FROM `character_attribute_values`;
 
 -- Dump della struttura di tabella logeon_db.character_bond_events
 DROP TABLE IF EXISTS `character_bond_events`;
@@ -496,7 +349,7 @@ CREATE TABLE IF NOT EXISTS `character_lifecycle_transitions` (
   KEY `idx_lifecycle_transitions_character` (`character_id`,`created_at`),
   KEY `idx_lifecycle_transitions_phase` (`to_phase_id`),
   KEY `idx_lifecycle_transitions_event` (`triggered_by_event_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=85 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.character_lifecycle_transitions: ~0 rows (circa)
 DELETE FROM `character_lifecycle_transitions`;
@@ -549,24 +402,6 @@ CREATE TABLE IF NOT EXISTS `character_name_requests` (
 -- Dump dei dati della tabella logeon_db.character_name_requests: ~0 rows (circa)
 DELETE FROM `character_name_requests`;
 
--- Dump della struttura di tabella logeon_db.character_wallets
-DROP TABLE IF EXISTS `character_wallets`;
-CREATE TABLE IF NOT EXISTS `character_wallets` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `character_id` int(11) NOT NULL,
-  `currency_id` int(11) NOT NULL,
-  `balance` int(11) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `character_currency_unique` (`character_id`,`currency_id`),
-  KEY `character_id` (`character_id`),
-  KEY `currency_id` (`currency_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.character_wallets: ~0 rows (circa)
-DELETE FROM `character_wallets`;
-INSERT INTO `character_wallets` (`id`, `character_id`, `currency_id`, `balance`) VALUES
-	(1, 1, 1, 0);
-
 -- Dump della struttura di tabella logeon_db.character_whisper_policies
 DROP TABLE IF EXISTS `character_whisper_policies`;
 CREATE TABLE IF NOT EXISTS `character_whisper_policies` (
@@ -614,7 +449,6 @@ CREATE TABLE IF NOT EXISTS `characters` (
   `invite_policy` tinyint(1) NOT NULL DEFAULT 0,
   `notify_messages` tinyint(1) NOT NULL DEFAULT 1,
   `notify_invites` tinyint(1) NOT NULL DEFAULT 1,
-  `notify_news` tinyint(1) NOT NULL DEFAULT 1,
   `availability` tinyint(4) NOT NULL DEFAULT 1,
   `is_visible` tinyint(1) DEFAULT 1,
   `avatar` varchar(255) DEFAULT '/assets/imgs/defaults-images/default-profile.png',
@@ -641,109 +475,12 @@ CREATE TABLE IF NOT EXISTS `characters` (
   KEY `idx_characters_visibility_seed` (`is_visible`,`date_last_seed`),
   KEY `idx_characters_availability_seed` (`availability`,`date_last_seed`),
   KEY `idx_characters_online_lookup` (`is_visible`,`privacy_show_online`,`date_last_seed`,`last_location`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump della struttura di tabella logeon_db.climate_areas
-DROP TABLE IF EXISTS `climate_areas`;
-CREATE TABLE IF NOT EXISTS `climate_areas` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `code` varchar(50) NOT NULL,
-  `description` text DEFAULT NULL,
-  `weather_key` varchar(32) DEFAULT NULL,
-  `degrees` int(11) DEFAULT NULL,
-  `moon_phase` varchar(32) DEFAULT NULL,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `updated_by` int(11) DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_climate_areas_code` (`code`),
-  KEY `idx_climate_areas_is_active` (`is_active`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.climate_areas: ~0 rows (circa)
-DELETE FROM `climate_areas`;
-
--- Dump della struttura di tabella logeon_db.climate_assignments
-DROP TABLE IF EXISTS `climate_assignments`;
-CREATE TABLE IF NOT EXISTS `climate_assignments` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `scope_type` varchar(32) NOT NULL,
-  `scope_id` int(11) NOT NULL,
-  `climate_zone_id` int(11) NOT NULL,
-  `priority` int(11) NOT NULL DEFAULT 0,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_climate_assign_scope_zone` (`scope_type`,`scope_id`,`climate_zone_id`),
-  KEY `idx_climate_assign_scope` (`scope_type`,`scope_id`,`is_active`,`priority`),
-  KEY `idx_climate_assign_zone` (`climate_zone_id`,`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump dei dati della tabella logeon_db.climate_assignments: ~0 rows (circa)
-DELETE FROM `climate_assignments`;
 
--- Dump della struttura di tabella logeon_db.climate_zone_season_profiles
-DROP TABLE IF EXISTS `climate_zone_season_profiles`;
-CREATE TABLE IF NOT EXISTS `climate_zone_season_profiles` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `climate_zone_id` int(11) NOT NULL,
-  `season_id` int(11) NOT NULL,
-  `temperature_min` decimal(6,2) DEFAULT NULL,
-  `temperature_max` decimal(6,2) DEFAULT NULL,
-  `temperature_round_mode` varchar(16) NOT NULL DEFAULT 'round',
-  `default_weather_type_id` int(11) DEFAULT NULL,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_climate_zone_season` (`climate_zone_id`,`season_id`),
-  KEY `idx_czsp_active` (`is_active`,`climate_zone_id`,`season_id`),
-  KEY `idx_czsp_weather_type` (`default_weather_type_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump dei dati della tabella logeon_db.climate_zone_season_profiles: ~0 rows (circa)
-DELETE FROM `climate_zone_season_profiles`;
 
--- Dump della struttura di tabella logeon_db.climate_zone_weather_weights
-DROP TABLE IF EXISTS `climate_zone_weather_weights`;
-CREATE TABLE IF NOT EXISTS `climate_zone_weather_weights` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `profile_id` int(11) NOT NULL,
-  `weather_type_id` int(11) NOT NULL,
-  `weight` decimal(10,4) NOT NULL DEFAULT 1.0000,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_czww_profile_weather` (`profile_id`,`weather_type_id`),
-  KEY `idx_czww_profile_active` (`profile_id`,`is_active`),
-  KEY `idx_czww_weather_active` (`weather_type_id`,`is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump dei dati della tabella logeon_db.climate_zone_weather_weights: ~0 rows (circa)
-DELETE FROM `climate_zone_weather_weights`;
-
--- Dump della struttura di tabella logeon_db.climate_zones
-DROP TABLE IF EXISTS `climate_zones`;
-CREATE TABLE IF NOT EXISTS `climate_zones` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(120) NOT NULL,
-  `slug` varchar(80) NOT NULL,
-  `description` text DEFAULT NULL,
-  `sort_order` int(11) NOT NULL DEFAULT 0,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_climate_zones_slug` (`slug`),
-  KEY `idx_climate_zones_active_sort` (`is_active`,`sort_order`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.climate_zones: ~0 rows (circa)
-DELETE FROM `climate_zones`;
 
 -- Dump della struttura di tabella logeon_db.conflict_action_targets
 DROP TABLE IF EXISTS `conflict_action_targets`;
@@ -872,49 +609,6 @@ CREATE TABLE IF NOT EXISTS `conflicts` (
 -- Dump dei dati della tabella logeon_db.conflicts: ~0 rows (circa)
 DELETE FROM `conflicts`;
 
--- Dump della struttura di tabella logeon_db.currencies
-DROP TABLE IF EXISTS `currencies`;
-CREATE TABLE IF NOT EXISTS `currencies` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `code` varchar(20) NOT NULL,
-  `name` varchar(100) NOT NULL,
-  `symbol` varchar(10) DEFAULT NULL,
-  `image` varchar(255) DEFAULT NULL,
-  `is_default` tinyint(1) NOT NULL DEFAULT 0,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `code_unique` (`code`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.currencies: ~0 rows (circa)
-DELETE FROM `currencies`;
-INSERT INTO `currencies` (`id`, `code`, `name`, `symbol`, `image`, `is_default`, `is_active`) VALUES
-	(1, 'Coin', 'Coin', 'C', '/assets/imgs/defaults-images/default-icon.png', 1, 1);
-
--- Dump della struttura di tabella logeon_db.currency_logs
-DROP TABLE IF EXISTS `currency_logs`;
-CREATE TABLE IF NOT EXISTS `currency_logs` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `character_id` int(11) NOT NULL,
-  `currency_id` int(11) NOT NULL,
-  `account` varchar(20) NOT NULL DEFAULT 'money',
-  `amount` decimal(11,2) NOT NULL,
-  `balance_before` decimal(11,2) DEFAULT NULL,
-  `balance_after` decimal(11,2) DEFAULT NULL,
-  `source` varchar(50) NOT NULL,
-  `meta` text DEFAULT NULL,
-  `date_created` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `character_id` (`character_id`),
-  KEY `currency_id` (`currency_id`),
-  KEY `account` (`account`),
-  KEY `source` (`source`),
-  KEY `date_created` (`date_created`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.currency_logs: ~0 rows (circa)
-DELETE FROM `currency_logs`;
-
 -- Dump della struttura di tabella logeon_db.email_verifications
 DROP TABLE IF EXISTS `email_verifications`;
 CREATE TABLE IF NOT EXISTS `email_verifications` (
@@ -952,7 +646,7 @@ CREATE TABLE IF NOT EXISTS `equipment_slots` (
   UNIQUE KEY `uniq_equipment_slots_key` (`key`),
   KEY `idx_equipment_slots_active_sort` (`is_active`,`sort_order`),
   KEY `idx_equipment_slots_group` (`group_key`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.equipment_slots: ~9 rows (circa)
 DELETE FROM `equipment_slots`;
@@ -988,96 +682,9 @@ CREATE TABLE IF NOT EXISTS `experience_logs` (
 -- Dump dei dati della tabella logeon_db.experience_logs: ~0 rows (circa)
 DELETE FROM `experience_logs`;
 
--- Dump della struttura di tabella logeon_db.faction_join_requests
-DROP TABLE IF EXISTS `faction_join_requests`;
-CREATE TABLE IF NOT EXISTS `faction_join_requests` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `faction_id` int(11) NOT NULL,
-  `character_id` int(11) NOT NULL,
-  `message` text DEFAULT NULL,
-  `status` enum('pending','approved','rejected','withdrawn') NOT NULL DEFAULT 'pending',
-  `reviewed_by_character_id` int(11) DEFAULT NULL,
-  `reviewed_at` timestamp NULL DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_fjr_faction` (`faction_id`,`status`),
-  KEY `idx_fjr_character` (`character_id`,`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump dei dati della tabella logeon_db.faction_join_requests: ~0 rows (circa)
-DELETE FROM `faction_join_requests`;
 
--- Dump della struttura di tabella logeon_db.faction_memberships
-DROP TABLE IF EXISTS `faction_memberships`;
-CREATE TABLE IF NOT EXISTS `faction_memberships` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `faction_id` int(11) NOT NULL,
-  `character_id` int(11) NOT NULL,
-  `role` varchar(60) NOT NULL DEFAULT 'member' COMMENT 'member|leader|advisor|agent|initiate',
-  `rank` varchar(60) DEFAULT NULL COMMENT 'narrative rank title within faction',
-  `status` enum('active','inactive','expelled') NOT NULL DEFAULT 'active',
-  `notes` text DEFAULT NULL,
-  `joined_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `left_at` timestamp NULL DEFAULT NULL,
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_faction_member` (`faction_id`,`character_id`),
-  KEY `idx_faction_memberships_faction` (`faction_id`,`status`),
-  KEY `idx_faction_memberships_character` (`character_id`,`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump dei dati della tabella logeon_db.faction_memberships: ~0 rows (circa)
-DELETE FROM `faction_memberships`;
-
--- Dump della struttura di tabella logeon_db.faction_relationships
-DROP TABLE IF EXISTS `faction_relationships`;
-CREATE TABLE IF NOT EXISTS `faction_relationships` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `faction_id` int(11) NOT NULL,
-  `target_faction_id` int(11) NOT NULL,
-  `relation_type` enum('ally','neutral','rival','enemy','vassal','overlord') NOT NULL DEFAULT 'neutral',
-  `intensity` tinyint(4) NOT NULL DEFAULT 5 COMMENT '1-10 relationship strength',
-  `notes` text DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_faction_relation` (`faction_id`,`target_faction_id`),
-  KEY `idx_faction_relations_faction` (`faction_id`),
-  KEY `idx_faction_relations_target` (`target_faction_id`),
-  KEY `idx_faction_relations_type` (`relation_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.faction_relationships: ~0 rows (circa)
-DELETE FROM `faction_relationships`;
-
--- Dump della struttura di tabella logeon_db.factions
-DROP TABLE IF EXISTS `factions`;
-CREATE TABLE IF NOT EXISTS `factions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `code` varchar(80) NOT NULL,
-  `name` varchar(120) NOT NULL,
-  `description` text DEFAULT NULL,
-  `type` varchar(60) NOT NULL DEFAULT 'political' COMMENT 'political|military|religious|criminal|mercantile|other',
-  `scope` enum('local','regional','global') NOT NULL DEFAULT 'regional',
-  `alignment` varchar(60) DEFAULT NULL COMMENT 'narrative alignment e.g. lawful_good, neutral, chaotic_evil',
-  `power_level` tinyint(4) NOT NULL DEFAULT 1 COMMENT '1-10 narrative weight',
-  `is_public` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'visible to players',
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `allow_join_requests` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Se 1, i player possono inviare richieste di adesione',
-  `color_hex` varchar(7) DEFAULT NULL,
-  `icon` varchar(255) DEFAULT NULL,
-  `meta_json` longtext DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_factions_code` (`code`),
-  KEY `idx_factions_active` (`is_active`,`is_public`),
-  KEY `idx_factions_type` (`type`),
-  KEY `idx_factions_scope` (`scope`)
-) ENGINE=InnoDB AUTO_INCREMENT=85 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.factions: ~0 rows (circa)
-DELETE FROM `factions`;
 
 -- Dump della struttura di tabella logeon_db.fame_logs
 DROP TABLE IF EXISTS `fame_logs`;
@@ -1132,7 +739,7 @@ CREATE TABLE IF NOT EXISTS `forum_types` (
   `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
   `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.forum_types: ~4 rows (circa)
 DELETE FROM `forum_types`;
@@ -1151,7 +758,7 @@ CREATE TABLE IF NOT EXISTS `forums` (
   `type` tinyint(2) NOT NULL,
   `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.forums: ~4 rows (circa)
 DELETE FROM `forums`;
@@ -1672,7 +1279,7 @@ CREATE TABLE IF NOT EXISTS `lifecycle_phase_definitions` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_lifecycle_phase_code` (`code`),
   KEY `idx_lifecycle_phase_active` (`is_active`,`sort_order`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.lifecycle_phase_definitions: ~5 rows (circa)
 DELETE FROM `lifecycle_phase_definitions`;
@@ -1697,7 +1304,7 @@ CREATE TABLE IF NOT EXISTS `location_access_logs` (
   KEY `idx_character_date` (`character_id`,`date_created`),
   KEY `idx_location_date` (`location_id`,`date_created`),
   KEY `idx_allowed` (`allowed`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dump dei dati della tabella logeon_db.location_access_logs: ~3 rows (circa)
 DELETE FROM `location_access_logs`;
@@ -1791,7 +1398,7 @@ CREATE TABLE IF NOT EXISTS `location_weather_overrides` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_location_weather_overrides_location` (`location_id`),
   KEY `idx_location_weather_overrides_updated_by` (`updated_by`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.location_weather_overrides: ~0 rows (circa)
 DELETE FROM `location_weather_overrides`;
@@ -1853,7 +1460,7 @@ CREATE TABLE IF NOT EXISTS `locations` (
   KEY `idx_locations_map_active` (`map_id`,`date_deleted`),
   KEY `idx_locations_access` (`is_private`,`is_house`,`min_fame`,`min_socialstatus_id`),
   KEY `idx_locations_climate_area_id` (`climate_area_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.locations: ~1 rows (circa)
 DELETE FROM `locations`;
@@ -1907,12 +1514,12 @@ CREATE TABLE IF NOT EXISTS `maps` (
   PRIMARY KEY (`id`),
   KEY `idx_maps_parent_map_id` (`parent_map_id`),
   UNIQUE KEY `MAP_NAME_UNIQUE` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.maps: ~0 rows (circa)
 DELETE FROM `maps`;
 INSERT INTO `maps` (`id`, `name`, `description`, `status`, `initial`, `position`, `parent_map_id`, `mobile`, `width`, `height`, `icon`, `image`, `render_mode`, `meteo`) VALUES
-	(1, 'CittÃ ', NULL, 'active', 1, 1, NULL, 0, NULL, NULL, NULL, NULL, 'grid', NULL);
+	(1, 'Città', NULL, 'active', 1, 1, NULL, 0, NULL, NULL, NULL, NULL, 'grid', NULL);
 -- Dump della struttura di tabella logeon_db.message_reports
 DROP TABLE IF EXISTS `message_reports`;
 CREATE TABLE IF NOT EXISTS `message_reports` (
@@ -2012,7 +1619,7 @@ CREATE TABLE IF NOT EXISTS `module_runtime_artifacts` (
   UNIQUE KEY `uq_module_artifact` (`module_id`,`artifact_type`,`artifact_key`),
   KEY `idx_module_artifact_module` (`module_id`),
   KEY `idx_module_artifact_scope` (`artifact_scope`)
-) ENGINE=InnoDB AUTO_INCREMENT=641 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.module_runtime_artifacts: ~40 rows (circa)
 DELETE FROM `module_runtime_artifacts`;
@@ -2069,7 +1676,7 @@ CREATE TABLE IF NOT EXISTS `narrative_capabilities` (
   `date_created` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_capability_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.narrative_capabilities: ~6 rows (circa)
 DELETE FROM `narrative_capabilities`;
@@ -2095,7 +1702,7 @@ CREATE TABLE IF NOT EXISTS `narrative_capability_grants` (
   UNIQUE KEY `uq_grant` (`grantee_type`,`grantee_ref`,`capability`),
   KEY `idx_capability` (`capability`),
   KEY `idx_grantee` (`grantee_type`,`grantee_ref`)
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.narrative_capability_grants: ~10 rows (circa)
 DELETE FROM `narrative_capability_grants`;
@@ -2210,7 +1817,7 @@ CREATE TABLE IF NOT EXISTS `narrative_states` (
   UNIQUE KEY `uniq_narrative_states_code` (`code`),
   KEY `idx_narrative_states_active` (`is_active`,`visible_to_players`),
   KEY `idx_narrative_states_conflict` (`conflict_group`,`priority`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.narrative_states: ~8 rows (circa)
 DELETE FROM `narrative_states`;
@@ -2259,7 +1866,7 @@ CREATE TABLE IF NOT EXISTS `narrative_tags` (
   UNIQUE KEY `uq_narrative_tags_slug` (`slug`),
   KEY `idx_narrative_tags_active` (`is_active`),
   KEY `idx_narrative_tags_category` (`category`)
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.narrative_tags: ~18 rows (circa)
 DELETE FROM `narrative_tags`;
@@ -2302,29 +1909,6 @@ CREATE TABLE IF NOT EXISTS `nationalities` (
 
 -- Dump dei dati della tabella logeon_db.nationalities: ~0 rows (circa)
 DELETE FROM `nationalities`;
-
--- Dump della struttura di tabella logeon_db.news
-DROP TABLE IF EXISTS `news`;
-CREATE TABLE IF NOT EXISTS `news` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `title` varchar(255) NOT NULL,
-  `body` text DEFAULT NULL,
-  `excerpt` varchar(255) DEFAULT NULL,
-  `image` varchar(255) DEFAULT NULL,
-  `type` tinyint(2) NOT NULL DEFAULT 0,
-  `is_published` tinyint(1) NOT NULL DEFAULT 1,
-  `is_pinned` tinyint(1) NOT NULL DEFAULT 0,
-  `author_id` int(11) NOT NULL,
-  `date_created` timestamp NULL DEFAULT current_timestamp(),
-  `date_published` timestamp NULL DEFAULT NULL,
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_news_published` (`is_published`,`type`,`date_published`),
-  KEY `idx_news_pinned` (`is_pinned`,`date_published`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.news: ~0 rows (circa)
-DELETE FROM `news`;
 
 -- Dump della struttura di tabella logeon_db.notifications
 DROP TABLE IF EXISTS `notifications`;
@@ -2379,259 +1963,6 @@ CREATE TABLE IF NOT EXISTS `password_resets` (
 -- Dump dei dati della tabella logeon_db.password_resets: ~0 rows (circa)
 DELETE FROM `password_resets`;
 
--- Dump della struttura di tabella logeon_db.quest_closure_reports
-DROP TABLE IF EXISTS `quest_closure_reports`;
-CREATE TABLE IF NOT EXISTS `quest_closure_reports` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_instance_id` int(11) NOT NULL,
-  `closure_type` enum('success','partial_success','failure','cancelled','unresolved') NOT NULL DEFAULT 'success',
-  `summary_public` text DEFAULT NULL,
-  `summary_private` longtext DEFAULT NULL,
-  `outcome_label` varchar(120) NOT NULL DEFAULT 'Obiettivo completato',
-  `closed_by` int(11) DEFAULT NULL,
-  `closed_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `player_visible` tinyint(1) NOT NULL DEFAULT 1,
-  `staff_notes` longtext DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_quest_closure_reports_instance` (`quest_instance_id`),
-  KEY `idx_quest_closure_reports_closed_at` (`closed_at`),
-  KEY `idx_quest_closure_reports_player_visible` (`player_visible`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_closure_reports: ~0 rows (circa)
-DELETE FROM `quest_closure_reports`;
-
--- Dump della struttura di tabella logeon_db.quest_conditions
-DROP TABLE IF EXISTS `quest_conditions`;
-CREATE TABLE IF NOT EXISTS `quest_conditions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_definition_id` int(11) DEFAULT NULL,
-  `quest_step_definition_id` int(11) DEFAULT NULL,
-  `condition_type` varchar(80) NOT NULL,
-  `operator` varchar(20) NOT NULL DEFAULT 'eq',
-  `condition_payload` longtext DEFAULT NULL,
-  `evaluation_mode` enum('all_required','any_required','blocking','optional') NOT NULL DEFAULT 'all_required',
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_quest_conditions_definition` (`quest_definition_id`),
-  KEY `idx_quest_conditions_step` (`quest_step_definition_id`),
-  KEY `idx_quest_conditions_type` (`condition_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_conditions: ~0 rows (circa)
-DELETE FROM `quest_conditions`;
-
--- Dump della struttura di tabella logeon_db.quest_definitions
-DROP TABLE IF EXISTS `quest_definitions`;
-CREATE TABLE IF NOT EXISTS `quest_definitions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `slug` varchar(120) NOT NULL,
-  `title` varchar(255) NOT NULL,
-  `summary` text DEFAULT NULL,
-  `description` longtext DEFAULT NULL,
-  `quest_type` varchar(80) NOT NULL DEFAULT 'personal',
-  `intensity_level` varchar(20) NOT NULL DEFAULT 'STANDARD',
-  `intensity_visibility` varchar(20) NOT NULL DEFAULT 'visible',
-  `visibility` enum('public','private','staff_only','hidden') NOT NULL DEFAULT 'public',
-  `scope_type` varchar(40) NOT NULL DEFAULT 'character',
-  `scope_id` int(11) DEFAULT NULL,
-  `availability_type` varchar(40) NOT NULL DEFAULT 'automatic_unlock',
-  `status` enum('draft','published','archived') NOT NULL DEFAULT 'draft',
-  `sort_order` int(11) NOT NULL DEFAULT 0,
-  `meta_json` longtext DEFAULT NULL,
-  `created_by` int(11) DEFAULT NULL,
-  `updated_by` int(11) DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_quest_definitions_slug` (`slug`),
-  KEY `idx_quest_definitions_status` (`status`),
-  KEY `idx_quest_definitions_scope` (`scope_type`,`scope_id`),
-  KEY `idx_quest_definitions_visibility` (`visibility`),
-  KEY `idx_quest_definitions_availability` (`availability_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_definitions: ~0 rows (circa)
-DELETE FROM `quest_definitions`;
-
--- Dump della struttura di tabella logeon_db.quest_event_links
-DROP TABLE IF EXISTS `quest_event_links`;
-CREATE TABLE IF NOT EXISTS `quest_event_links` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_definition_id` int(11) DEFAULT NULL,
-  `quest_instance_id` int(11) DEFAULT NULL,
-  `narrative_event_id` int(11) DEFAULT NULL,
-  `system_event_id` int(11) DEFAULT NULL,
-  `link_type` varchar(40) NOT NULL DEFAULT 'contextualized_by',
-  `meta_json` longtext DEFAULT NULL,
-  `created_by` int(11) DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_quest_event_link_definition` (`quest_definition_id`),
-  KEY `idx_quest_event_link_instance` (`quest_instance_id`),
-  KEY `idx_quest_event_link_narrative` (`narrative_event_id`),
-  KEY `idx_quest_event_link_system` (`system_event_id`),
-  KEY `idx_quest_event_link_type` (`link_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_event_links: ~0 rows (circa)
-DELETE FROM `quest_event_links`;
-
--- Dump della struttura di tabella logeon_db.quest_instances
-DROP TABLE IF EXISTS `quest_instances`;
-CREATE TABLE IF NOT EXISTS `quest_instances` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_definition_id` int(11) NOT NULL,
-  `assignee_type` varchar(40) NOT NULL DEFAULT 'character',
-  `assignee_id` int(11) DEFAULT NULL,
-  `current_status` enum('locked','available','active','completed','failed','cancelled','expired') NOT NULL DEFAULT 'available',
-  `intensity_level` varchar(20) DEFAULT NULL,
-  `current_branch` varchar(80) DEFAULT NULL,
-  `started_at` datetime DEFAULT NULL,
-  `completed_at` datetime DEFAULT NULL,
-  `failed_at` datetime DEFAULT NULL,
-  `expires_at` datetime DEFAULT NULL,
-  `source_type` varchar(60) NOT NULL DEFAULT 'manual',
-  `source_id` int(11) DEFAULT NULL,
-  `assigned_by` int(11) DEFAULT NULL,
-  `notes` text DEFAULT NULL,
-  `last_activity_at` datetime DEFAULT NULL,
-  `meta_json` longtext DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_quest_instances_definition_status` (`quest_definition_id`,`current_status`),
-  KEY `idx_quest_instances_assignee` (`assignee_type`,`assignee_id`,`current_status`),
-  KEY `idx_quest_instances_source` (`source_type`,`source_id`),
-  KEY `idx_quest_instances_expire` (`expires_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=85 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_instances: ~0 rows (circa)
-DELETE FROM `quest_instances`;
-
--- Dump della struttura di tabella logeon_db.quest_outcomes
-DROP TABLE IF EXISTS `quest_outcomes`;
-CREATE TABLE IF NOT EXISTS `quest_outcomes` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_definition_id` int(11) NOT NULL,
-  `trigger_type` varchar(40) NOT NULL,
-  `outcome_type` varchar(80) NOT NULL,
-  `outcome_payload` longtext DEFAULT NULL,
-  `visibility` enum('public','private','staff_only','hidden') NOT NULL DEFAULT 'hidden',
-  `requires_staff_confirmation` tinyint(1) NOT NULL DEFAULT 0,
-  `sort_order` int(11) NOT NULL DEFAULT 0,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_quest_outcomes_definition` (`quest_definition_id`,`trigger_type`,`is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_outcomes: ~0 rows (circa)
-DELETE FROM `quest_outcomes`;
-
--- Dump della struttura di tabella logeon_db.quest_progress_logs
-DROP TABLE IF EXISTS `quest_progress_logs`;
-CREATE TABLE IF NOT EXISTS `quest_progress_logs` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_instance_id` int(11) NOT NULL,
-  `step_instance_id` int(11) DEFAULT NULL,
-  `log_type` varchar(60) NOT NULL,
-  `source_type` varchar(60) NOT NULL DEFAULT 'system',
-  `source_id` int(11) DEFAULT NULL,
-  `payload` longtext DEFAULT NULL,
-  `created_by` int(11) DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_quest_progress_logs_instance` (`quest_instance_id`,`date_created`),
-  KEY `idx_quest_progress_logs_step` (`step_instance_id`),
-  KEY `idx_quest_progress_logs_source` (`source_type`,`source_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=253 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_progress_logs: ~0 rows (circa)
-DELETE FROM `quest_progress_logs`;
-
--- Dump della struttura di tabella logeon_db.quest_reward_assignments
-DROP TABLE IF EXISTS `quest_reward_assignments`;
-CREATE TABLE IF NOT EXISTS `quest_reward_assignments` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_instance_id` int(11) NOT NULL,
-  `recipient_type` varchar(40) NOT NULL DEFAULT 'character',
-  `recipient_id` int(11) DEFAULT NULL,
-  `reward_type` varchar(60) NOT NULL,
-  `reward_reference_id` int(11) DEFAULT NULL,
-  `reward_value` decimal(14,2) DEFAULT NULL,
-  `assigned_by` int(11) DEFAULT NULL,
-  `assigned_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `visibility` enum('public','player_private','staff_only') NOT NULL DEFAULT 'public',
-  `notes` text DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_quest_reward_assignments_instance` (`quest_instance_id`),
-  KEY `idx_quest_reward_assignments_recipient` (`recipient_type`,`recipient_id`),
-  KEY `idx_quest_reward_assignments_visibility` (`visibility`),
-  KEY `idx_quest_reward_assignments_assigned_at` (`assigned_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_reward_assignments: ~0 rows (circa)
-DELETE FROM `quest_reward_assignments`;
-
--- Dump della struttura di tabella logeon_db.quest_step_definitions
-DROP TABLE IF EXISTS `quest_step_definitions`;
-CREATE TABLE IF NOT EXISTS `quest_step_definitions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_definition_id` int(11) NOT NULL,
-  `step_key` varchar(120) NOT NULL,
-  `title` varchar(255) NOT NULL,
-  `description` longtext DEFAULT NULL,
-  `step_type` varchar(80) NOT NULL DEFAULT 'narrative_action',
-  `order_index` int(11) NOT NULL DEFAULT 0,
-  `is_optional` tinyint(1) NOT NULL DEFAULT 0,
-  `completion_mode` varchar(40) NOT NULL DEFAULT 'automatic',
-  `branch_on_success` varchar(80) DEFAULT NULL,
-  `branch_on_failure` varchar(80) DEFAULT NULL,
-  `visibility_mode` varchar(40) NOT NULL DEFAULT 'visible',
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `meta_json` longtext DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_quest_step_definition_key` (`quest_definition_id`,`step_key`),
-  KEY `idx_quest_step_definition_order` (`quest_definition_id`,`order_index`,`is_active`)
-) ENGINE=InnoDB AUTO_INCREMENT=85 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_step_definitions: ~0 rows (circa)
-DELETE FROM `quest_step_definitions`;
-
--- Dump della struttura di tabella logeon_db.quest_step_instances
-DROP TABLE IF EXISTS `quest_step_instances`;
-CREATE TABLE IF NOT EXISTS `quest_step_instances` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `quest_instance_id` int(11) NOT NULL,
-  `quest_step_definition_id` int(11) NOT NULL,
-  `progress_status` enum('pending','active','completed','failed','skipped','locked') NOT NULL DEFAULT 'locked',
-  `progress_value` decimal(12,2) DEFAULT NULL,
-  `started_at` datetime DEFAULT NULL,
-  `completed_at` datetime DEFAULT NULL,
-  `failed_at` datetime DEFAULT NULL,
-  `updated_at` datetime DEFAULT NULL,
-  `internal_notes` text DEFAULT NULL,
-  `meta_json` longtext DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_quest_step_instance` (`quest_instance_id`,`quest_step_definition_id`),
-  KEY `idx_quest_step_instance_status` (`quest_instance_id`,`progress_status`),
-  KEY `idx_quest_step_instance_definition` (`quest_step_definition_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=85 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.quest_step_instances: ~1 rows (circa)
-DELETE FROM `quest_step_instances`;
-
 -- Dump della struttura di tabella logeon_db.rules
 DROP TABLE IF EXISTS `rules`;
 CREATE TABLE IF NOT EXISTS `rules` (
@@ -2644,36 +1975,7 @@ CREATE TABLE IF NOT EXISTS `rules` (
   UNIQUE KEY `uq_rules_article_subarticle` (`article`,`subarticle`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump dei dati della tabella logeon_db.rules: ~0 rows (circa)
 DELETE FROM `rules`;
-
--- Dump della struttura di tabella logeon_db.seasons
-DROP TABLE IF EXISTS `seasons`;
-CREATE TABLE IF NOT EXISTS `seasons` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `slug` varchar(80) NOT NULL,
-  `description` text DEFAULT NULL,
-  `sort_order` int(11) NOT NULL DEFAULT 0,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `starts_at_month` tinyint(3) unsigned DEFAULT NULL,
-  `starts_at_day` tinyint(3) unsigned DEFAULT NULL,
-  `ends_at_month` tinyint(3) unsigned DEFAULT NULL,
-  `ends_at_day` tinyint(3) unsigned DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_seasons_slug` (`slug`),
-  KEY `idx_seasons_active_sort` (`is_active`,`sort_order`,`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.seasons: ~4 rows (circa)
-DELETE FROM `seasons`;
-INSERT INTO `seasons` (`id`, `name`, `slug`, `description`, `sort_order`, `is_active`, `starts_at_month`, `starts_at_day`, `ends_at_month`, `ends_at_day`, `date_created`, `date_updated`) VALUES
-	(1, 'Primavera', 'spring', 'Stagione primaverile', 10, 1, 3, 21, 6, 20, '2026-04-02 12:10:33', '2026-04-02 12:10:33'),
-	(2, 'Estate', 'summer', 'Stagione estiva', 20, 1, 6, 21, 9, 22, '2026-04-02 12:10:33', '2026-04-02 12:10:33'),
-	(3, 'Autunno', 'autumn', 'Stagione autunnale', 30, 1, 9, 23, 12, 20, '2026-04-02 12:10:33', '2026-04-02 12:10:33'),
-	(4, 'Inverno', 'winter', 'Stagione invernale', 40, 1, 12, 21, 3, 20, '2026-04-02 12:10:33', '2026-04-02 12:10:33');
 
 -- Dump della struttura di tabella logeon_db.shop_inventory
 DROP TABLE IF EXISTS `shop_inventory`;
@@ -2757,29 +2059,6 @@ CREATE TABLE IF NOT EXISTS `shops` (
 -- Dump dei dati della tabella logeon_db.shops: ~0 rows (circa)
 DELETE FROM `shops`;
 
--- Dump della struttura di tabella logeon_db.social_status
-DROP TABLE IF EXISTS `social_status`;
-CREATE TABLE IF NOT EXISTS `social_status` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(120) NOT NULL,
-  `description` tinytext NOT NULL,
-  `icon` varchar(255) NOT NULL DEFAULT 'http://via.placeholder.com/48x48',
-  `shop_discount` tinyint(3) NOT NULL DEFAULT 0,
-  `unlock_home` tinyint(1) NOT NULL DEFAULT 0,
-  `quest_tier` tinyint(2) NOT NULL DEFAULT 0,
-  `min` int(11) NOT NULL,
-  `max` int(11) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.social_status: ~5 rows (circa)
-DELETE FROM `social_status`;
-INSERT INTO `social_status` (`id`, `name`, `description`, `icon`, `shop_discount`, `unlock_home`, `quest_tier`, `min`, `max`) VALUES
-	(1, 'Sconosciuto', 'Il personaggio ÃƒÂ¨ pelopiÃƒÂ¹ ignoto alla comunitÃƒÂ  e non ha alcuna rilevanza a livello sociale. Non sarÃƒÂ  ricordato o riconosciuto dalla popolazione.', '/assets/imgs/defaults-images/default-icon.png', 0, 0, 0, 0, 19),
-	(2, 'Riconosciuto', 'Il nome del personaggio ÃƒÂ¨ diventato familiare nel settore in cui opera, riuscendo a vantare una piccola notorietÃƒÂ  a livello locale per le sue qualitÃƒÂ . Comincia ad avere una certa rilevanza sociale.', '/assets/imgs/defaults-images/default-icon.png', 0, 0, 0, 20, 49),
-	(3, 'Famoso', 'Una figura che ÃƒÂ¨ si ÃƒÂ¨ posta in prima linea. Il personaggio vanta notorietÃƒÂ  per le sue imprese e le sue qualitÃƒÂ , divenendo una figura di rilievo in una cittÃƒÂ , ÃƒÂ¨ difficile che passi inosservato.', '/assets/imgs/defaults-images/default-icon.png', 0, 0, 0, 50, 69),
-	(4, 'CelebritÃ ', 'Un personaggio il cui nome ÃƒÂ¨ risaputo nei confini della propria nazione. SarÃƒÂ  difficile restare in incognito.', '/assets/imgs/defaults-images/default-icon.png', 0, 0, 0, 70, 99),
-	(5, 'Leggenda Vivente', 'Personaggio che ha importanza internazionale. Questa figura ÃƒÂ¨ nota a livello mondiale per le sue qualitÃƒÂ  e le sue imprese, sia in positivo che in negativo. In tutte le terre si potrÃƒÂ  sentire parlare di lui.', '/assets/imgs/defaults-images/default-icon.png', 0, 0, 0, 100, 9000);
 
 -- Dump della struttura di tabella logeon_db.storyboards
 DROP TABLE IF EXISTS `storyboards`;
@@ -2809,7 +2088,7 @@ CREATE TABLE IF NOT EXISTS `sys_configs` (
   `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `CONFIG_KEY_UNIQUE` (`key`)
-) ENGINE=InnoDB AUTO_INCREMENT=632 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.sys_configs: ~64 rows (circa)
 DELETE FROM `sys_configs`;
@@ -2841,7 +2120,6 @@ INSERT INTO `sys_configs` (`id`, `key`, `value`, `type`, `date_created`, `date_u
 	(26, 'rate_location_whisper_limit', '6', 'number', '2026-02-13 12:18:15', NULL),
 	(27, 'rate_location_whisper_window_seconds', '20', 'number', '2026-02-13 12:18:15', NULL),
 	(28, 'loanface_change_cooldown_days', '90', 'number', '2026-03-07 12:28:51', NULL),
-	(29, 'character_attributes_enabled', '0', 'number', '2026-03-14 22:48:39', NULL),
 	(31, 'presence_resume_last_position_on_signin', '0', 'number', '2026-03-15 17:44:15', NULL),
 	(32, 'conflict_resolution_mode', 'narrative', 'text', '2026-03-16 09:54:54', NULL),
 	(33, 'conflict_margin_narrow_max', '2', 'number', '2026-03-16 09:54:54', NULL),
@@ -2852,34 +2130,25 @@ INSERT INTO `sys_configs` (`id`, `key`, `value`, `type`, `date_created`, `date_u
 	(43, 'conflict_inactivity_warning_hours', '72', 'number', '2026-03-16 12:24:39', NULL),
 	(44, 'conflict_inactivity_archive_days', '7', 'number', '2026-03-16 12:24:39', NULL),
 	(45, 'conflict_chat_compact_events', '1', 'number', '2026-03-16 12:24:39', NULL),
-	(179, 'system_events_enabled', '1', 'number', '2026-03-19 21:58:17', NULL),
-	(180, 'system_events_maintenance_interval_minutes', '5', 'number', '2026-03-19 21:58:17', NULL),
-	(181, 'system_events_default_visibility', 'public', 'text', '2026-03-19 21:58:17', NULL),
-	(182, 'system_events_auto_notify', '1', 'number', '2026-03-19 21:58:17', NULL),
-	(183, 'quests_enabled', '1', 'number', '2026-03-20 00:28:19', NULL),
-	(184, 'quests_maintenance_interval_minutes', '5', 'number', '2026-03-20 00:28:19', NULL),
-	(185, 'quests_auto_notify', '1', 'number', '2026-03-20 00:28:19', NULL),
-	(186, 'narrative_tags_max_per_entity', '8', 'int', '2026-03-30 21:31:26', NULL),
-	(196, 'weather_climate_enabled', '1', 'number', '2026-04-02 12:10:33', NULL),
-	(197, 'weather_season_mode', 'auto', 'string', '2026-04-02 12:10:33', NULL),
-	(198, 'weather_active_season_id', '', 'number', '2026-04-02 12:10:33', NULL),
-	(199, 'weather_fallback_scope_type', 'world', 'string', '2026-04-02 12:10:33', NULL),
-	(200, 'weather_fallback_scope_id', '1', 'number', '2026-04-02 12:10:33', NULL),
-	(224, 'presence_restore_last_position_on_signin', '0', 'number', '2026-04-02 20:01:27', NULL),
-	(225, 'narrative_delegation_enabled', '0', 'number', '2026-04-12 00:00:00', '2026-04-23 10:33:18'),
-	(226, 'narrative_delegation_level', '2', 'number', '2026-04-12 00:00:00', '2026-04-23 10:33:04'),
-	(479, 'auth_google_enabled', '0', 'number', '2026-04-23 10:33:04', NULL),
-	(480, 'auth_google_client_id', '', 'string', '2026-04-23 10:33:04', NULL),
-	(481, 'auth_google_client_secret', '', 'string', '2026-04-23 10:33:04', NULL),
-	(482, 'auth_google_redirect_uri', '', 'string', '2026-04-23 10:33:04', NULL),
-	(483, 'multi_character_enabled', '0', 'number', '2026-04-23 10:33:04', NULL),
-	(484, 'multi_character_max_per_user', '1', 'number', '2026-04-23 10:33:04', NULL),
-	(564, 'storyboard_view_mode', 'monolithic', 'string', '2026-04-24 20:07:06', '2026-04-24 20:26:29'),
-	(565, 'rules_view_mode', 'monolithic', 'string', '2026-04-24 20:07:06', '2026-04-24 20:26:29'),
-	(566, 'how_to_play_view_mode', 'monolithic', 'string', '2026-04-24 20:07:06', '2026-04-24 20:26:29'),
-	(625, 'archetypes_view_mode', 'monolithic', 'string', '2026-04-24 21:27:02', NULL),
-	(628, 'theme_system_enabled', '0', NULL, '2026-04-26 15:01:19', '2026-04-26 15:01:50'),
-	(629, 'active_theme', '', NULL, '2026-04-26 15:01:19', '2026-04-26 15:01:50');
+	(46, 'system_events_enabled', '1', 'number', '2026-03-19 21:58:17', NULL),
+	(47, 'system_events_maintenance_interval_minutes', '5', 'number', '2026-03-19 21:58:17', NULL),
+	(48, 'system_events_default_visibility', 'public', 'text', '2026-03-19 21:58:17', NULL),
+	(49, 'system_events_auto_notify', '1', 'number', '2026-03-19 21:58:17', NULL),
+	(53, 'narrative_tags_max_per_entity', '8', 'int', '2026-03-30 21:31:26', NULL),
+	(59, 'presence_restore_last_position_on_signin', '0', 'number', '2026-04-02 20:01:27', NULL),
+	(60, 'narrative_delegation_enabled', '0', 'number', '2026-04-12 00:00:00', '2026-04-23 10:33:18'),
+	(61, 'narrative_delegation_level', '2', 'number', '2026-04-12 00:00:00', '2026-04-23 10:33:04'),
+	(62, 'auth_google_enabled', '0', 'number', '2026-04-23 10:33:04', NULL),
+	(63, 'auth_google_client_id', '', 'string', '2026-04-23 10:33:04', NULL),
+	(64, 'auth_google_client_secret', '', 'string', '2026-04-23 10:33:04', NULL),
+	(65, 'auth_google_redirect_uri', '', 'string', '2026-04-23 10:33:04', NULL),
+	(66, 'multi_character_enabled', '0', 'number', '2026-04-23 10:33:04', NULL),
+	(67, 'multi_character_max_per_user', '1', 'number', '2026-04-23 10:33:04', NULL),
+	(68, 'storyboard_view_mode', 'monolithic', 'string', '2026-04-24 20:07:06', '2026-04-24 20:26:29'),
+	(69, 'rules_view_mode', 'monolithic', 'string', '2026-04-24 20:07:06', '2026-04-24 20:26:29'),
+	(70, 'how_to_play_view_mode', 'monolithic', 'string', '2026-04-24 20:07:06', '2026-04-24 20:26:29'),
+	(72, 'theme_system_enabled', '0', NULL, '2026-04-26 15:01:19', '2026-04-26 15:01:50'),
+	(73, 'active_theme', '', NULL, '2026-04-26 15:01:19', '2026-04-26 15:01:50');
 
 -- Dump della struttura di tabella logeon_db.sys_logs
 DROP TABLE IF EXISTS `sys_logs`;
@@ -2948,19 +2217,19 @@ CREATE TABLE IF NOT EXISTS `sys_modules` (
   `date_updated` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `module_id` (`module_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=136 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.sys_modules: ~8 rows (circa)
 DELETE FROM `sys_modules`;
 INSERT INTO `sys_modules` (`id`, `module_id`, `name`, `vendor`, `version`, `status`, `install_path`, `checksum_sha256`, `last_error`, `date_installed`, `date_activated`, `date_deactivated`, `date_updated`) VALUES
-	(128, 'logeon.multi-currency', 'Logeon Multi Currency', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.multi-currency', NULL, NULL, '2026-04-24 09:56:01', '2026-04-25 11:50:52', '2026-04-25 11:50:53', '2026-04-25 11:50:53'),
-	(129, 'logeon.archetypes', 'Logeon Archetypes', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.archetypes', NULL, NULL, '2026-04-24 09:57:33', '2026-04-24 21:41:14', '2026-04-24 21:41:18', '2026-04-24 21:41:18'),
-	(130, 'logeon.social-status', 'Logeon Social Status', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.social-status', NULL, NULL, '2026-04-24 09:59:40', '2026-04-25 11:50:50', '2026-04-25 11:50:50', '2026-04-25 11:50:50'),
-	(131, 'logeon.factions', 'Logeon Factions', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.factions', NULL, NULL, '2026-04-24 10:15:42', '2026-04-25 11:50:51', '2026-04-25 11:50:51', '2026-04-25 11:50:51'),
-	(132, 'logeon.attributes', 'Logeon Attributes', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.attributes', NULL, NULL, '2026-04-24 10:18:32', '2026-04-25 11:50:51', '2026-04-25 11:50:52', '2026-04-25 11:50:52'),
-	(133, 'logeon.novelty', 'Logeon Novelty', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.novelty', NULL, NULL, '2026-04-24 10:20:43', '2026-04-25 11:50:54', '2026-04-25 11:50:54', '2026-04-25 11:50:54'),
-	(134, 'logeon.weather', 'Logeon Weather', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.weather', NULL, NULL, '2026-04-24 10:20:52', '2026-04-25 11:50:53', '2026-04-25 11:50:53', '2026-04-25 11:50:53'),
-	(135, 'logeon.quests', 'Logeon Quests', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.quests', NULL, NULL, '2026-04-24 10:21:41', '2026-04-25 11:50:54', '2026-04-25 11:50:55', '2026-04-25 11:50:55');
+	(1, 'logeon.multi-currency', 'Logeon Multi Currency', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.multi-currency', NULL, NULL, '2026-04-24 09:56:01', '2026-04-25 11:50:52', '2026-04-25 11:50:53', '2026-04-25 11:50:53'),
+	(2, 'logeon.archetypes', 'Logeon Archetypes', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.archetypes', NULL, NULL, '2026-04-24 09:57:33', '2026-04-24 21:41:14', '2026-04-24 21:41:18', '2026-04-24 21:41:18'),
+	(3, 'logeon.social-status', 'Logeon Social Status', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.social-status', NULL, NULL, '2026-04-24 09:59:40', '2026-04-25 11:50:50', '2026-04-25 11:50:50', '2026-04-25 11:50:50'),
+	(4, 'logeon.factions', 'Logeon Factions', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.factions', NULL, NULL, '2026-04-24 10:15:42', '2026-04-25 11:50:51', '2026-04-25 11:50:51', '2026-04-25 11:50:51'),
+	(5, 'logeon.attributes', 'Logeon Attributes', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.attributes', NULL, NULL, '2026-04-24 10:18:32', '2026-04-25 11:50:51', '2026-04-25 11:50:52', '2026-04-25 11:50:52'),
+	(6, 'logeon.novelty', 'Logeon Novelty', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.novelty', NULL, NULL, '2026-04-24 10:20:43', '2026-04-25 11:50:54', '2026-04-25 11:50:54', '2026-04-25 11:50:54'),
+	(7, 'logeon.weather', 'Logeon Weather', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.weather', NULL, NULL, '2026-04-24 10:20:52', '2026-04-25 11:50:53', '2026-04-25 11:50:53', '2026-04-25 11:50:53'),
+	(8, 'logeon.quests', 'Logeon Quests', 'Logeon', '0.1.0', 'inactive', 'C:\\xampp\\htdocs\\logeon-vNext/modules/logeon.quests', NULL, NULL, '2026-04-24 10:21:41', '2026-04-25 11:50:54', '2026-04-25 11:50:55', '2026-04-25 11:50:55');
 
 -- Dump della struttura di tabella logeon_db.sys_settings
 DROP TABLE IF EXISTS `sys_settings`;
@@ -2972,7 +2241,7 @@ CREATE TABLE IF NOT EXISTS `sys_settings` (
   `date_updated` timestamp NULL DEFAULT NULL ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_key` (`key`)
-) ENGINE=InnoDB AUTO_INCREMENT=47 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.sys_settings: ~7 rows (circa)
 DELETE FROM `sys_settings`;
@@ -3002,7 +2271,7 @@ CREATE TABLE IF NOT EXISTS `system_event_effects` (
   PRIMARY KEY (`id`),
   KEY `idx_system_event_effects_event` (`system_event_id`),
   KEY `idx_system_event_effects_type` (`effect_type`)
-) ENGINE=InnoDB AUTO_INCREMENT=86 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.system_event_effects: ~0 rows (circa)
 DELETE FROM `system_event_effects`;
@@ -3027,27 +2296,10 @@ CREATE TABLE IF NOT EXISTS `system_event_participations` (
   UNIQUE KEY `uq_system_event_participant_faction` (`system_event_id`,`faction_id`),
   KEY `idx_system_event_participations_event_status` (`system_event_id`,`status`),
   KEY `idx_system_event_participations_mode` (`participant_mode`)
-) ENGINE=InnoDB AUTO_INCREMENT=112 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.system_event_participations: ~0 rows (circa)
 DELETE FROM `system_event_participations`;
-
--- Dump della struttura di tabella logeon_db.system_event_quest_links
-DROP TABLE IF EXISTS `system_event_quest_links`;
-CREATE TABLE IF NOT EXISTS `system_event_quest_links` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `system_event_id` int(11) NOT NULL,
-  `quest_id` int(11) NOT NULL,
-  `link_type` enum('primary','secondary') NOT NULL DEFAULT 'primary',
-  `meta_json` longtext DEFAULT NULL,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_system_event_quest_link` (`system_event_id`,`quest_id`),
-  KEY `idx_system_event_quest_quest` (`quest_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.system_event_quest_links: ~0 rows (circa)
-DELETE FROM `system_event_quest_links`;
 
 -- Dump della struttura di tabella logeon_db.system_event_reward_logs
 DROP TABLE IF EXISTS `system_event_reward_logs`;
@@ -3066,7 +2318,7 @@ CREATE TABLE IF NOT EXISTS `system_event_reward_logs` (
   KEY `idx_system_event_reward_event` (`system_event_id`),
   KEY `idx_system_event_reward_character` (`character_id`),
   KEY `idx_system_event_reward_currency` (`currency_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=86 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.system_event_reward_logs: ~0 rows (circa)
 DELETE FROM `system_event_reward_logs`;
@@ -3101,7 +2353,7 @@ CREATE TABLE IF NOT EXISTS `system_events` (
   KEY `idx_system_events_next_run` (`next_run_at`),
   KEY `idx_system_events_last_activity` (`last_activity_at`),
   KEY `idx_system_events_home_feed` (`show_on_homepage_feed`,`status`,`visibility`)
-) ENGINE=InnoDB AUTO_INCREMENT=282 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dump dei dati della tabella logeon_db.system_events: ~0 rows (circa)
 DELETE FROM `system_events`;
@@ -3166,6 +2418,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `gender` tinyint(1) DEFAULT 1,
   `is_administrator` tinyint(1) DEFAULT 0,
   `is_superuser` tinyint(1) NOT NULL DEFAULT 0,
+  `superuser_role` varchar(32) DEFAULT NULL,
   `is_moderator` tinyint(1) NOT NULL DEFAULT 0,
   `is_master` tinyint(1) NOT NULL DEFAULT 0,
   `date_last_pass` timestamp NULL DEFAULT NULL,
@@ -3176,63 +2429,22 @@ CREATE TABLE IF NOT EXISTS `users` (
   `date_last_signin` timestamp NULL DEFAULT NULL,
   `date_last_signout` timestamp NULL DEFAULT NULL,
   `date_last_seed` timestamp NULL DEFAULT NULL,
-  `superuser_unique_guard` tinyint(4) GENERATED ALWAYS AS (case when `is_superuser` = 1 then 1 else NULL end) VIRTUAL,
+  `superuser_creator_guard` tinyint(4) GENERATED ALWAYS AS (case when `is_superuser` = 1 and `superuser_role` = 'creatore' then 1 else NULL end) VIRTUAL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `USER_EMAIL_UNIQUE` (`email`),
-  UNIQUE KEY `uq_users_superuser_unique_guard` (`superuser_unique_guard`),
+  UNIQUE KEY `uq_users_superuser_creator_guard` (`superuser_creator_guard`),
   UNIQUE KEY `uq_users_google_sub` (`google_sub`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump della struttura di tabella logeon_db.weather_overrides
-DROP TABLE IF EXISTS `weather_overrides`;
-CREATE TABLE IF NOT EXISTS `weather_overrides` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `scope_type` varchar(32) NOT NULL,
-  `scope_id` int(11) NOT NULL,
-  `weather_type_id` int(11) DEFAULT NULL,
-  `temperature_override` decimal(6,2) DEFAULT NULL,
-  `reason` varchar(500) DEFAULT NULL,
-  `created_by` int(11) DEFAULT NULL,
-  `starts_at` datetime DEFAULT NULL,
-  `expires_at` datetime DEFAULT NULL,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_weather_overrides_scope` (`scope_type`,`scope_id`,`is_active`),
-  KEY `idx_weather_overrides_time` (`starts_at`,`expires_at`,`is_active`),
-  KEY `idx_weather_overrides_weather` (`weather_type_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump dei dati della tabella logeon_db.weather_overrides: ~0 rows (circa)
-DELETE FROM `weather_overrides`;
 
--- Dump della struttura di tabella logeon_db.weather_types
-DROP TABLE IF EXISTS `weather_types`;
-CREATE TABLE IF NOT EXISTS `weather_types` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `slug` varchar(80) NOT NULL,
-  `description` text DEFAULT NULL,
-  `sort_order` int(11) NOT NULL DEFAULT 0,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `visual_group` varchar(32) DEFAULT NULL,
-  `is_precipitation` tinyint(1) NOT NULL DEFAULT 0,
-  `is_snow` tinyint(1) NOT NULL DEFAULT 0,
-  `is_storm` tinyint(1) NOT NULL DEFAULT 0,
-  `reduces_visibility` tinyint(1) NOT NULL DEFAULT 0,
-  `date_created` timestamp NOT NULL DEFAULT current_timestamp(),
-  `date_updated` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_weather_types_slug` (`slug`),
-  KEY `idx_weather_types_active_sort` (`is_active`,`sort_order`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Dump dei dati della tabella logeon_db.weather_types: ~0 rows (circa)
-DELETE FROM `weather_types`;
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
 /*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;
+
+
+
+
+

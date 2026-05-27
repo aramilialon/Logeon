@@ -1,4 +1,4 @@
-﻿const globalWindow = (typeof window !== 'undefined') ? window : globalThis;
+const globalWindow = (typeof window !== 'undefined') ? window : globalThis;
 
 const SHARED_FEATURES = [
     '/assets/js/app/features/admin/AdminImageUploader.js'
@@ -50,8 +50,10 @@ const PAGE_FEATURE_SCRIPTS = {
     'logs-sys': ['/assets/js/app/features/admin/LogsSys.js'],
     settings: ['/assets/js/app/features/admin/Settings.js'],
     'system-update': ['/assets/js/app/features/admin/SystemUpdate.js'],
+    media: ['/assets/js/app/features/admin/Media.js'],
     'narrative-tags': ['/assets/js/app/features/admin/NarrativeTags.js'],
     'message-reports': ['/assets/js/app/features/admin/MessageReports.js'],
+    'gdpr-requests': ['/assets/js/app/features/admin/GdprRequests.js'],
     news: ['/assets/js/app/features/admin/News.js'],
     'narrative-delegation-grants': ['/assets/js/app/features/admin/NarrativeDelegationGrants.js'],
     'narrative-npcs': ['/assets/js/app/features/admin/NarrativeNpcs.js'],
@@ -79,7 +81,7 @@ const PAGE_BUNDLE_SCRIPTS = {
     'guilds-locations': '/assets/js/dist/admin-governance.bundle.js',
     'guilds-events': '/assets/js/dist/admin-governance.bundle.js',
     settings: '/assets/js/dist/admin-governance.bundle.js',
-    'system-update': '/assets/js/dist/admin-core.bundle.js',
+    media: '/assets/js/dist/admin-governance.bundle.js',
     currencies: '/assets/js/dist/admin-economy-content.bundle.js',
     shops: '/assets/js/dist/admin-economy-content.bundle.js',
     'inventory-shop': '/assets/js/dist/admin-economy-content.bundle.js',
@@ -100,6 +102,7 @@ const PAGE_BUNDLE_SCRIPTS = {
     'system-events': '/assets/js/dist/admin-narrative.bundle.js',
     'narrative-tags': '/assets/js/dist/admin-narrative.bundle.js',
     'message-reports': '/assets/js/dist/admin-narrative.bundle.js',
+    'gdpr-requests': '/assets/js/dist/admin-governance.bundle.js',
     'logs-conflicts': '/assets/js/dist/admin-logs.bundle.js',
     'logs-currency': '/assets/js/dist/admin-logs.bundle.js',
     'logs-experience': '/assets/js/dist/admin-logs.bundle.js',
@@ -116,6 +119,32 @@ const PAGE_BUNDLE_SCRIPTS = {
 
 let resolved = false;
 let resolving = null;
+
+function appBundleVersion() {
+    if (typeof document !== 'undefined') {
+        const meta = document.querySelector('meta[name="app-bundle-version"]');
+        if (meta && typeof meta.getAttribute === 'function') {
+            const value = String(meta.getAttribute('content') || '').trim();
+            if (value) {
+                return value;
+            }
+        }
+    }
+
+    return String(globalWindow.__APP_BUNDLE_VERSION || '').trim();
+}
+
+function versionedSrc(src) {
+    const value = String(src || '').trim();
+    if (!value) {
+        return '';
+    }
+    if (value.indexOf('?') !== -1) {
+        return value;
+    }
+    const version = appBundleVersion();
+    return version ? (value + '?v=' + encodeURIComponent(version)) : value;
+}
 
 function normalizePageKey(value) {
     return String(value || '')
@@ -158,6 +187,17 @@ function getCurrentPageKey() {
 }
 
 function shouldUsePageBundles() {
+    const node = document.getElementById('admin-page');
+    if (node && typeof node.getAttribute === 'function') {
+        const value = String(node.getAttribute('data-app-use-page-bundles') || '').trim();
+        if (value === '1' || value.toLowerCase() === 'true') {
+            return true;
+        }
+        if (value === '0' || value.toLowerCase() === 'false') {
+            return false;
+        }
+    }
+
     return globalWindow.__APP_USE_PAGE_BUNDLES === true;
 }
 
@@ -209,7 +249,7 @@ function insertUniqueWithOrder(list, value, opts) {
 function loadSequence(srcs) {
     let chain = Promise.resolve();
     for (let i = 0; i < srcs.length; i += 1) {
-        const src = srcs[i];
+        const src = versionedSrc(srcs[i]);
         chain = chain.then(function () {
             return import(src).catch(function () {});
         });
@@ -235,7 +275,7 @@ export function loadForCurrentPage() {
             if (!bundleSrc) {
                 return loadSequence(uniqSrcs(PAGE_FEATURE_SCRIPTS[key] || []));
             }
-            return import(bundleSrc)
+            return import(versionedSrc(bundleSrc))
                 .then(function () {})
                 .catch(function () {
                     return loadSequence(uniqSrcs(PAGE_FEATURE_SCRIPTS[key] || []));
@@ -287,5 +327,4 @@ globalWindow.AdminFeatureLoader.loadForCurrentPage = loadForCurrentPage;
 globalWindow.AdminFeatureLoader.registerPageScripts = registerPageScripts;
 
 export default AdminFeatureLoaderApi;
-
 

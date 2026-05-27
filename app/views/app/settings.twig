@@ -26,11 +26,11 @@
                                             <input type="password" class="form-control" id="settings-old-password" autocomplete="current-password">
                                         </div>
                                         <div class="row g-3">
-                                            <div class="col-md-6">
+                                            <div class="col-12">
                                                 <label class="form-label">Nuova password</label>
                                                 <input type="password" class="form-control" id="settings-new-password" autocomplete="new-password">
                                             </div>
-                                            <div class="col-md-6">
+                                            <div class="col-12">
                                                 <label class="form-label">Conferma nuova password</label>
                                                 <input type="password" class="form-control" id="settings-new-password-confirm" autocomplete="new-password">
                                             </div>
@@ -54,7 +54,7 @@
                         </div>
                     </div>
 
-                    <div class="card">
+                    <div class="card mb-3">
                         <div class="card-header">
                             <h2 class="h6 mb-0">Preferenze</h2>
                         </div>
@@ -84,6 +84,64 @@
                             </div>
                             <div class="d-flex justify-content-end gap-2 mt-3">
                                 <button type="button" class="btn btn-primary" data-settings-save>Salva preferenze</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="h6 mb-0">Comunicazioni email</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label mb-2">Newsletter</label>
+                                <div>
+                                    <input type="hidden" name="newsletter_opt_in" id="settings-newsletter-opt-in" value="0" data-newsletter-opt-in>
+                                </div>
+                                <div class="form-text">Ricevi aggiornamenti, annunci e novita via email. Puoi cambiare preferenza in qualsiasi momento.</div>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-primary" data-mail-prefs-save>Salva</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h2 class="h6 mb-0">Privacy e diritti dati</h2>
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted mb-3">
+                                Da qui puoi aprire richieste privacy e scaricare una copia dei tuoi dati principali.
+                            </p>
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                <a class="btn btn-sm btn-outline-secondary" href="{{ APP.legal.privacy_policy_url|default('/privacy-policy') }}" target="_blank" rel="noopener">Privacy policy</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="{{ APP.legal.terms_of_service_url|default('/terms-of-service') }}" target="_blank" rel="noopener">Termini</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="{{ APP.legal.cookie_policy_url|default('/cookie-policy') }}" target="_blank" rel="noopener">Cookie policy</a>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                <button type="button" class="btn btn-outline-primary" data-privacy-request-export>Richiedi esportazione dati</button>
+                                <button type="button" class="btn btn-outline-danger" data-privacy-request-delete>Richiedi cancellazione account</button>
+                                <button type="button" class="btn btn-primary" data-privacy-export-now>Scarica dati ora (JSON)</button>
+                            </div>
+                            <label class="form-label">Nota richiesta (opzionale)</label>
+                            <textarea class="form-control mb-3" rows="2" maxlength="1000" data-privacy-request-note placeholder="Aggiungi eventuali dettagli utili per lo staff"></textarea>
+                            <div class="small text-muted mb-2">Storico richieste</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Tipo</th>
+                                            <th>Stato</th>
+                                            <th>Data</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody data-privacy-requests-body>
+                                        <tr>
+                                            <td colspan="3" class="text-muted">Nessuna richiesta presente.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

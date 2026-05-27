@@ -99,35 +99,37 @@ class LocationPositionTagService
     public function adminList(array $filters, int $limit, int $page, string $orderBy): array
     {
         $limit = max(1, min(100, $limit));
-        $page  = max(1, $page);
+        $page = max(1, $page);
         $offset = ($page - 1) * $limit;
 
-        $where  = ['1=1'];
+        $where = ['1=1'];
         $params = [];
 
         $locationId = isset($filters['location_id']) ? (int) $filters['location_id'] : 0;
         if ($locationId > 0) {
-            $where[]  = 'lpt.location_id = ?';
+            $where[] = 'lpt.location_id = ?';
             $params[] = $locationId;
         }
 
         $search = trim((string) ($filters['search'] ?? ''));
         if ($search !== '') {
-            $where[]  = 'lpt.name LIKE ?';
+            $where[] = 'lpt.name LIKE ?';
             $params[] = '%' . $search . '%';
         }
 
-        $isActive = $filters['is_active'] ?? '';
-        if ($isActive !== '' && $isActive !== null) {
-            $where[]  = 'lpt.is_active = ?';
+        if (array_key_exists('is_active', $filters) && $filters['is_active'] !== '') {
+            $isActive = $filters['is_active'];
+            $where[] = 'lpt.is_active = ?';
             $params[] = (int) $isActive;
         }
 
         $allowedOrder = ['lpt.id', 'lpt.name', 'lpt.location_id', 'lpt.is_active'];
-        $allowedDir   = ['ASC', 'DESC'];
-        $orderParts   = explode('|', $orderBy);
-        $orderCol     = in_array($orderParts[0] ?? '', $allowedOrder, true) ? $orderParts[0] : 'lpt.name';
-        $orderDir     = in_array(strtoupper($orderParts[1] ?? ''), $allowedDir, true) ? strtoupper($orderParts[1]) : 'ASC';
+        $allowedDir = ['ASC', 'DESC'];
+        $orderParts = explode('|', $orderBy);
+        $orderColCandidate = $orderParts[0];
+        $orderDirCandidate = strtoupper($orderParts[1] ?? 'ASC');
+        $orderCol = in_array($orderColCandidate, $allowedOrder, true) ? $orderColCandidate : 'lpt.name';
+        $orderDir = in_array($orderDirCandidate, $allowedDir, true) ? $orderDirCandidate : 'ASC';
 
         $whereClause = implode(' AND ', $where);
 
@@ -139,7 +141,7 @@ class LocationPositionTagService
         );
         $total = (int) ($totalRow->cnt ?? 0);
 
-        $rowParams   = array_merge($params, [$limit, $offset]);
+        $rowParams = array_merge($params, [$limit, $offset]);
         $rows = $this->fetchPrepared(
             'SELECT lpt.id, lpt.location_id, lpt.name, lpt.short_description, lpt.thumbnail,
                     lpt.is_active, lpt.created_at, lpt.updated_at,
@@ -153,23 +155,23 @@ class LocationPositionTagService
         );
 
         return [
-            'rows'  => $rows ?: [],
+            'rows' => $rows ?: [],
             'total' => $total,
-            'page'  => $page,
+            'page' => $page,
             'limit' => $limit,
         ];
     }
 
     public function adminCreate(array $data): array
     {
-        $locationId      = (int) ($data['location_id'] ?? 0);
+        $locationId = (int) ($data['location_id'] ?? 0);
         if ($locationId <= 0) {
             $this->failValidation('location_id obbligatorio', 'location_id_required');
         }
-        $name            = $this->normalizeName($data['name'] ?? '');
-        $shortDesc       = $this->normalizeShortDescription($data['short_description'] ?? null);
-        $thumbnail       = $this->normalizeThumbnail($data['thumbnail'] ?? null);
-        $isActive        = isset($data['is_active']) ? (int) (bool) $data['is_active'] : 1;
+        $name = $this->normalizeName($data['name'] ?? '');
+        $shortDesc = $this->normalizeShortDescription($data['short_description'] ?? null);
+        $thumbnail = $this->normalizeThumbnail($data['thumbnail'] ?? null);
+        $isActive = isset($data['is_active']) ? (int) (bool) $data['is_active'] : 1;
 
         $this->execPrepared(
             'INSERT INTO location_position_tags (location_id, name, short_description, thumbnail, is_active)
@@ -192,14 +194,14 @@ class LocationPositionTagService
         if ($locationId <= 0) {
             $this->failValidation('location_id obbligatorio', 'location_id_required');
         }
-        $name      = array_key_exists('name', $data) ? $this->normalizeName($data['name']) : (string) ($row['name'] ?? '');
+        $name = array_key_exists('name', $data) ? $this->normalizeName($data['name']) : (string) ($row['name'] ?? '');
         $shortDesc = array_key_exists('short_description', $data)
             ? $this->normalizeShortDescription($data['short_description'])
             : ($row['short_description'] ?? null);
         $thumbnail = array_key_exists('thumbnail', $data)
             ? $this->normalizeThumbnail($data['thumbnail'])
             : ($row['thumbnail'] ?? null);
-        $isActive  = array_key_exists('is_active', $data) ? (int) (bool) $data['is_active'] : (int) ($row['is_active'] ?? 1);
+        $isActive = array_key_exists('is_active', $data) ? (int) (bool) $data['is_active'] : (int) ($row['is_active'] ?? 1);
 
         $this->execPrepared(
             'UPDATE location_position_tags

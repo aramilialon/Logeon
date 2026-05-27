@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Core\AuthGuard;
 use Core\UploadManager;
@@ -11,6 +11,7 @@ $route->apiPost('/signin/character/select', 'Users@signinCharacterSelect');
 $route->apiPost('/signout', 'Users@signout');
 $route->apiPost('/forgot-password', 'Users@resetPassword');
 $route->apiPost('/reset-password', 'Users@resetPasswordConfirm');
+$route->apiPost('/privacy/cookie/consent', 'UserPrivacy@cookieConsent');
 
 $route->group('/message', function ($route) {
     $route->apiPost('/threads', 'Messages@threads');
@@ -64,6 +65,7 @@ $route->group('/location', function ($route) {
     $route->apiPost('/messages/list', 'LocationMessages@list');
     $route->apiPost('/messages/archive-range', 'LocationMessages@archiveRange');
     $route->apiPost('/messages/send', 'LocationMessages@send');
+    $route->apiPost('/messages/staff-notice', 'LocationMessages@staffNotice');
     $route->apiPost('/whispers/list', 'LocationMessages@whispers');
     $route->apiPost('/whispers/threads', 'LocationMessages@whispersThreads');
     $route->apiPost('/whispers/unread', 'LocationMessages@whispersUnread');
@@ -73,6 +75,13 @@ $route->group('/location', function ($route) {
     $route->apiPost('/drops/drop', 'LocationDrops@drop');
     $route->apiPost('/drops/pick', 'LocationDrops@pickup');
     $route->apiPost('/position-tags/list', 'LocationPositionTags@list');
+    $route->apiPost('/staff-notes/list', 'Locations@staffNotesList');
+    $route->apiPost('/staff-note/upsert', 'Locations@staffNoteUpsert');
+    $route->apiPost('/staff-note/delete', 'Locations@staffNoteDelete');
+    $route->apiPost('/staff-flags/list', 'Locations@staffFlagsList');
+    $route->apiPost('/staff-flag/upsert', 'Locations@staffFlagUpsert');
+    $route->apiPost('/staff-locations/list', 'Locations@staffLocationsList');
+    $route->apiPost('/staff-teleport', 'Locations@staffTeleport');
 });
 
 $route->group('/shop', function ($route) {
@@ -130,6 +139,14 @@ $route->group('/admin', function ($route) {
     $route->apiPost('/items/create', 'Items@create');
     $route->apiPost('/items/update', 'Items@update');
     $route->apiPost('/items/delete', 'Items@adminDelete');
+    $route->apiPost('/equipment-slots/list', 'EquipmentSlots@list');
+    $route->apiPost('/equipment-slots/create', 'EquipmentSlots@create');
+    $route->apiPost('/equipment-slots/update', 'EquipmentSlots@update');
+    $route->apiPost('/equipment-slots/delete', 'EquipmentSlots@delete');
+    $route->apiPost('/item-equipment-rules/list', 'ItemEquipmentRules@list');
+    $route->apiPost('/item-equipment-rules/create', 'ItemEquipmentRules@create');
+    $route->apiPost('/item-equipment-rules/update', 'ItemEquipmentRules@update');
+    $route->apiPost('/item-equipment-rules/delete', 'ItemEquipmentRules@delete');
 
     $route->apiPost('/categories/list', 'ItemsCategories@list');
     $route->apiPost('/categories/create', 'ItemsCategories@create');
@@ -267,6 +284,14 @@ $route->group('/admin', function ($route) {
     $route->apiPost('/settings/upload', 'Settings@updateUpload');
     $route->apiPost('/settings/get', 'Settings@adminGet');
     $route->apiPost('/settings/update', 'Settings@adminUpdate');
+    $route->apiPost('/settings/test-mail', 'Settings@testMail');
+    $route->apiPost('/gdpr/requests/list', 'UserPrivacy@adminList');
+    $route->apiPost('/gdpr/requests/update-status', 'UserPrivacy@adminUpdateStatus');
+    $route->apiPost('/gdpr/requests/execute', 'UserPrivacy@adminExecute');
+    $route->apiPost('/gdpr/requests/export-payload', 'UserPrivacy@adminExportPayload');
+    $route->apiPost('/gdpr/retention/run', 'UserPrivacy@adminRunRetention');
+    $route->apiPost('/privacy/instance-compliance-notice/status', 'UserPrivacy@adminInstanceComplianceNoticeStatus');
+    $route->apiPost('/privacy/instance-compliance-notice/acknowledge', 'UserPrivacy@adminInstanceComplianceNoticeAcknowledge');
     $route->apiPost('/system/update/status', 'SystemUpdate@status');
     $route->apiPost('/system/update/check', 'SystemUpdate@check');
     $route->apiPost('/system/update/preflight', 'SystemUpdate@preflight');
@@ -288,10 +313,13 @@ $route->group('/admin', function ($route) {
     $route->apiPost('/narrative-npcs/delete', 'NarrativeNpcs@adminDelete');
 
     $route->apiPost('/modules/list', 'Modules@list');
+    $route->apiPost('/modules/docs/list', 'Modules@docsList');
+    $route->apiPost('/modules/docs/get', 'Modules@docsGet');
     $route->apiPost('/modules/activate', 'Modules@activate');
     $route->apiPost('/modules/deactivate', 'Modules@deactivate');
     $route->apiPost('/modules/uninstall', 'Modules@uninstall');
     $route->apiPost('/modules/audit', 'Modules@audit');
+    $route->apiPost('/modules/capabilities', 'Modules@capabilities');
 
     $route->apiPost('/themes/list', 'Themes@list');
     $route->apiPost('/themes/activate', 'Themes@activate');
@@ -319,12 +347,57 @@ $route->group('/admin', function ($route) {
     $route->apiPost('/narrative-tags/entity/get', 'NarrativeTags@adminEntityTags');
     $route->apiPost('/narrative-tags/entity/sync', 'NarrativeTags@adminSyncTags');
     $route->apiPost('/narrative-tags/entity/search', 'NarrativeTags@adminSearchEntities');
+
+    $route->apiPost('/mail-templates/list', 'MailTemplates@adminList');
+    $route->apiPost('/mail-templates/get', 'MailTemplates@adminGet');
+    $route->apiPost('/mail-templates/create', 'MailTemplates@adminCreate');
+    $route->apiPost('/mail-templates/update', 'MailTemplates@adminUpdate');
+    $route->apiPost('/mail-templates/delete', 'MailTemplates@adminDelete');
+    $route->apiPost('/mail-templates/preview', 'MailTemplates@adminPreview');
+
+    $route->apiPost('/mail-lists/list', 'MailDistributionLists@adminList');
+    $route->apiPost('/mail-lists/create', 'MailDistributionLists@adminCreate');
+    $route->apiPost('/mail-lists/update', 'MailDistributionLists@adminUpdate');
+    $route->apiPost('/mail-lists/delete', 'MailDistributionLists@adminDelete');
+    $route->apiPost('/mail-lists/members/list', 'MailDistributionLists@adminMembersList');
+    $route->apiPost('/mail-lists/members/add', 'MailDistributionLists@adminMembersAdd');
+    $route->apiPost('/mail-lists/members/remove', 'MailDistributionLists@adminMembersRemove');
+    $route->apiPost('/mail-lists/members/add-bulk', 'MailDistributionLists@adminMembersAddBulk');
+    $route->apiPost('/mail-lists/users/search', 'MailDistributionLists@adminUsersSearch');
+
+    $route->apiPost('/mail-campaigns/list', 'MailCampaigns@adminList');
+    $route->apiPost('/mail-campaigns/get', 'MailCampaigns@adminGet');
+    $route->apiPost('/mail-campaigns/create', 'MailCampaigns@adminCreate');
+    $route->apiPost('/mail-campaigns/update', 'MailCampaigns@adminUpdate');
+    $route->apiPost('/mail-campaigns/delete', 'MailCampaigns@adminDelete');
+    $route->apiPost('/mail-campaigns/send-test', 'MailCampaigns@adminSendTest');
+    $route->apiPost('/mail-campaigns/send-now', 'MailCampaigns@adminSendNow');
+    $route->apiPost('/mail-campaigns/schedule', 'MailCampaigns@adminSchedule');
+    $route->apiPost('/mail-campaigns/cancel', 'MailCampaigns@adminCancel');
+    $route->apiPost('/mail-campaigns/queue-tick', 'MailCampaigns@adminQueueTick');
+    $route->apiPost('/mail-queue/list', 'MailCampaigns@adminQueueList');
+
+    $route->apiPost('/media/list', 'MediaManager@actionList');
+    $route->apiPost('/media/upload', 'MediaManager@actionUpload');
+    $route->apiPost('/media/folder/create', 'MediaManager@actionFolderCreate');
+    $route->apiPost('/media/folder/rename', 'MediaManager@actionFolderRename');
+    $route->apiPost('/media/folder/delete', 'MediaManager@actionFolderDelete');
+    $route->apiGet('/media/file/open', 'MediaManager@actionFileOpen');
+    $route->apiPost('/media/file/rename', 'MediaManager@actionFileRename');
+    $route->apiPost('/media/file/delete', 'MediaManager@actionFileDelete');
+    $route->apiPost('/media/file/bulk-delete', 'MediaManager@actionFileBulkDelete');
 });
 
 $route->group('/settings', function ($route) {
     $route->apiPost('/upload', 'Settings@upload');
     $route->apiPost('/password', 'Users@changePassword');
     $route->apiPost('/sessions/revoke', 'Users@revokeSessions');
+    $route->apiPost('/mail-preferences/get', 'UserMailPreferences@getPreferences');
+    $route->apiPost('/mail-preferences/update', 'UserMailPreferences@updatePreferences');
+    $route->apiPost('/privacy/context', 'UserPrivacy@context');
+    $route->apiPost('/privacy/requests/list', 'UserPrivacy@requestsList');
+    $route->apiPost('/privacy/requests/create', 'UserPrivacy@requestCreate');
+    $route->apiPost('/privacy/export', 'UserPrivacy@exportData');
 });
 
 $route->group('/events', function ($route) {
@@ -335,11 +408,11 @@ $route->group('/events', function ($route) {
 });
 
 $route->group('/chat-archives', function ($route) {
-    $route->apiPost('/list',       'ChatArchives@list');
-    $route->apiPost('/get',        'ChatArchives@get');
-    $route->apiPost('/create',     'ChatArchives@create');
-    $route->apiPost('/update',     'ChatArchives@update');
-    $route->apiPost('/delete',     'ChatArchives@delete');
+    $route->apiPost('/list', 'ChatArchives@list');
+    $route->apiPost('/get', 'ChatArchives@get');
+    $route->apiPost('/create', 'ChatArchives@create');
+    $route->apiPost('/update', 'ChatArchives@update');
+    $route->apiPost('/delete', 'ChatArchives@delete');
     $route->apiPost('/public/set', 'ChatArchives@setPublic');
     $route->apiPost('/diary/link', 'ChatArchives@linkDiary');
     $route->apiPost('/diary/search', 'ChatArchives@searchDiaryEvents');
@@ -381,6 +454,7 @@ $route->group('/inventory', function ($route) {
     $route->apiPost('/equipped', 'Inventory@equipped');
     $route->apiPost('/equip', 'Inventory@equip');
     $route->apiPost('/unequip', 'Inventory@unequip');
+    $route->apiPost('/transfer', 'Inventory@transfer');
     $route->apiPost('/destroy', 'Inventory@destroy');
     $route->apiPost('/swap', 'Inventory@swap');
     $route->apiPost('/maintenance', 'Inventory@maintainItem');
@@ -413,6 +487,10 @@ $route->group('/profile', function ($route) {
     $route->apiPost('/master-notes/update', 'Characters@updateMasterNotes');
     $route->apiPost('/health/update', 'Characters@updateHealth');
     $route->apiPost('/experience/assign', 'Characters@assignExperience');
+    $route->apiPost('/staff-items/search', 'Characters@staffSearchItems');
+    $route->apiPost('/staff-item/grant', 'Characters@staffGrantItem');
+    $route->apiPost('/staff-item/remove', 'Characters@staffRemoveItem');
+    $route->apiPost('/staff/restrict', 'Characters@staffSetRestriction');
 });
 $route->apiPost('/character/create', 'CharacterCreation@createCharacter');
 
@@ -502,7 +580,6 @@ $route->group('/system-events', function ($route) {
     $route->apiPost('/participation/leave', 'SystemEvents@participationLeave');
 });
 
-
 $route->group('/admin/system-events', function ($route) {
     $route->apiPost('/list', 'AdminSystemEvents@list');
     $route->apiPost('/get', 'AdminSystemEvents@get');
@@ -545,4 +622,3 @@ $route->group('/notifications', function ($route) {
     $route->apiPost('/respond', 'Notifications@respond');
     $route->apiPost('/unread-count', 'Notifications@unreadCount');
 });
-

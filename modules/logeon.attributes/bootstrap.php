@@ -36,7 +36,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'attributes-admin-dashboard-page',
-            'template' => 'admin/pages/character-attributes.twig',
+            'template' => 'attributes/admin/pages/character-attributes.twig',
             'after' => '',
             'before' => '',
             'data' => [],
@@ -58,22 +58,37 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         return $fragments;
     });
 
-    \Core\Hooks::add('app.module_endpoints', static function ($endpoints) {
-        if (!is_array($endpoints)) {
-            $endpoints = [];
+    \Core\Hooks::add('twig.slot.game.profile.metrics.cards', static function ($fragments) {
+        if (!is_array($fragments)) {
+            $fragments = [];
         }
-        $endpoints['equipmentSlotsList'] = '/admin/equipment-slots/list';
-        $endpoints['equipmentSlotsCreate'] = '/admin/equipment-slots/create';
-        $endpoints['equipmentSlotsUpdate'] = '/admin/equipment-slots/update';
-        $endpoints['equipmentSlotsDelete'] = '/admin/equipment-slots/delete';
-        $endpoints['itemEquipmentRulesList'] = '/admin/item-equipment-rules/list';
-        $endpoints['itemEquipmentRulesCreate'] = '/admin/item-equipment-rules/create';
-        $endpoints['itemEquipmentRulesUpdate'] = '/admin/item-equipment-rules/update';
-        $endpoints['itemEquipmentRulesDelete'] = '/admin/item-equipment-rules/delete';
-        return $endpoints;
+        $fragments[] = [
+            'id' => 'attributes-game-profile-card',
+            'template' => 'app/profile/attributes-card.twig',
+            'after' => '',
+            'before' => '',
+            'data' => [],
+        ];
+        return $fragments;
     });
 
     \Core\Hooks::add('attribute.provider', static function ($current) {
         return new \Modules\Logeon\Attributes\AttributesModuleProvider();
+    });
+
+    \Core\Hooks::add('capability.registry.capabilities', static function ($capabilities) {
+        if (!is_array($capabilities)) {
+            $capabilities = [];
+        }
+
+        $capabilities['character.attributes'] = static function (): bool {
+            try {
+                return (new \Modules\Logeon\Attributes\Services\CharacterAttributesFacadeService())->isEnabled();
+            } catch (\Throwable $e) {
+                return false;
+            }
+        };
+
+        return $capabilities;
     });
 };

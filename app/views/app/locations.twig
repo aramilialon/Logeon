@@ -23,9 +23,6 @@
             <div>
                 <h4 class="display-6 mb-1" name="map_name"></h4>
             </div>
-            <div>
-                <a class="btn btn-sm btn-outline-secondary" href="{% if map_parent_id %}/game/maps/{{ map_parent_id }}{% else %}/game/maps/{% endif %}"><i class="bi bi-arrow-left-short"></i> {% if map_parent_id %}Torna alla mappa padre{% else %}Torna alle mappe{% endif %}</a>
-            </div>
         </header>
         <section id="map-child-maps-section" class="col-12 mb-4 d-none">
             <div class="d-flex justify-content-between align-items-center mb-2">

@@ -39,7 +39,7 @@
                                         <div class="card-header">Statistiche principali</div>
                                         <div class="card-body">
                                             <div class="row row-cols-2 row-cols-md-3 g-2">
-                                                <div class="col"><div class="border rounded p-2"><small class="text-muted d-block">Rank</small><b data-role="admin-characters-profile-rank">-</b></div></div>
+                                                <div class="col"><div class="border rounded p-2"><small class="text-muted d-block">Grado</small><b data-role="admin-characters-profile-rank">-</b></div></div>
                                                 <div class="col"><div class="border rounded p-2"><small class="text-muted d-block">Esperienza</small><b data-role="admin-characters-profile-exp">-</b></div></div>
                                                 <div class="col"><div class="border rounded p-2"><small class="text-muted d-block">Salute</small><b data-role="admin-characters-profile-health">-</b></div></div>
                                                 <div class="col"><div class="border rounded p-2"><small class="text-muted d-block">Fama</small><b data-role="admin-characters-profile-fame">-</b></div></div>
@@ -105,7 +105,7 @@
                 <input type="hidden" id="admin-edit-char-id" value="">
 
                 <ul class="nav nav-tabs mb-3" id="admin-edit-tabs">
-                    <li class="nav-item"><button class="nav-link active" data-action="admin-edit-tab" data-tab="identity">Identità fisica</button></li>
+                    <li class="nav-item"><button class="nav-link active" data-action="admin-edit-tab" data-tab="identity">Identita fisica</button></li>
                     <li class="nav-item"><button class="nav-link" data-action="admin-edit-tab" data-tab="narrative">Narrativa</button></li>
                     <li class="nav-item"><button class="nav-link" data-action="admin-edit-tab" data-tab="stats">Statistiche</button></li>
                     <li class="nav-item"><button class="nav-link" data-action="admin-edit-tab" data-tab="economy">Economia</button></li>
@@ -113,7 +113,7 @@
                     {{ slot('admin.characters.edit.tabs') }}
                 </ul>
 
-                {# Tab: Identità fisica #}
+                {# Tab: Identita fisica #}
                 <div id="admin-edit-panel-identity">
                     <div class="row g-3">
                         <div class="col-md-6"><label class="form-label">Cognome</label><input type="text" class="form-control" name="ae_surname" maxlength="30"></div>
@@ -126,7 +126,7 @@
                         <div class="col-12"><label class="form-label">Segni particolari</label><input type="text" class="form-control" name="ae_particular_signs" maxlength="255"></div>
                     </div>
                     <div class="d-flex justify-content-end mt-3">
-                        <button type="button" class="btn btn-primary" data-action="admin-edit-save-identity">Salva identità</button>
+                        <button type="button" class="btn btn-primary" data-action="admin-edit-save-identity">Salva identita</button>
                     </div>
                 </div>
 
@@ -147,9 +147,9 @@
                     <div class="row g-3">
                         <div class="col-md-4"><label class="form-label">Salute attuale</label><input type="number" class="form-control" name="ae_health" step="1" min="0"></div>
                         <div class="col-md-4"><label class="form-label">Salute massima</label><input type="number" class="form-control" name="ae_health_max" step="0.01" min="0"></div>
-                        <div class="col-md-4"><label class="form-label">Rank</label><input type="number" class="form-control" name="ae_rank" step="1" min="1"></div>
-                        <div class="col-md-6"><label class="form-label">Esperienza (delta ±)</label><input type="number" class="form-control" name="ae_experience_delta" step="0.01" placeholder="es. 50 oppure -10"></div>
-                        <div class="col-md-6"><label class="form-label">Motivazione EXP</label><input type="text" class="form-control" name="ae_experience_reason" maxlength="255" placeholder="Motivazione (obbligatoria per delta ≠ 0)"></div>
+                        <div class="col-md-4"><label class="form-label">Grado</label><input type="number" class="form-control" name="ae_rank" step="1" min="1"></div>
+                        <div class="col-md-6"><label class="form-label">Esperienza (delta +/-)</label><input type="number" class="form-control" name="ae_experience_delta" step="0.01" placeholder="es. 50 oppure -10"></div>
+                        <div class="col-md-6"><label class="form-label">Motivazione esperienza</label><input type="text" class="form-control" name="ae_experience_reason" maxlength="255" placeholder="Motivazione (obbligatoria se il delta non e 0)"></div>
                     </div>
                     <div class="d-flex justify-content-end mt-3">
                         <button type="button" class="btn btn-primary" data-action="admin-edit-save-stats">Salva statistiche</button>
@@ -159,8 +159,8 @@
                 {# Tab: Economia #}
                 <div id="admin-edit-panel-economy" style="display:none;">
                     <div class="row g-3">
-                        <div class="col-md-4"><label class="form-label">Portafoglio (delta ±)</label><input type="number" class="form-control" name="ae_money_delta" step="1" placeholder="es. 100 oppure -50"></div>
-                        <div class="col-md-4"><label class="form-label">Banca (delta ±)</label><input type="number" class="form-control" name="ae_bank_delta" step="1" placeholder="es. 500 oppure -200"></div>
+                        <div class="col-md-4"><label class="form-label">Portafoglio (delta +/-)</label><input type="number" class="form-control" name="ae_money_delta" step="1" placeholder="es. 100 oppure -50"></div>
+                        <div class="col-md-4"><label class="form-label">Banca (delta +/-)</label><input type="number" class="form-control" name="ae_bank_delta" step="1" placeholder="es. 500 oppure -200"></div>
                         <div class="col-md-4"><label class="form-label">Fama (imposta a)</label><input type="number" class="form-control" name="ae_fame_set" step="0.01" min="0" placeholder="Lascia vuoto per non cambiare"></div>
                         <div class="col-md-6">
                             <label class="form-label">Stato sociale</label>

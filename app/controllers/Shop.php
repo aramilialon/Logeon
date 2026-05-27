@@ -86,7 +86,7 @@ class Shop
 
         $sellRatio = $this->shopService()->getSellRatio();
         $discount = $this->shopService()->getSocialDiscount($me);
-        $items = $this->shopService()->decorateCatalogItems($items, $discount, $sellRatio);
+        $items = $this->shopService()->decorateCatalogItems($items, $discount, $sellRatio, (int) $me, $shop);
 
         $categories = $this->shopService()->listCategories($shop->id);
 
@@ -153,5 +153,3 @@ class Shop
     }
 
 }
-
-

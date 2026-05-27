@@ -1,6 +1,6 @@
 # Indice Documentazione Logeon
 
-Ultimo aggiornamento: 2026-04-26
+Ultimo aggiornamento: 2026-05-17
 
 ## Scopo
 Indice unico della documentazione pubblica, pronta per pubblicazione su GitBook.
@@ -39,6 +39,8 @@ Usa come indice principale `docs/SUMMARY.md` e trascrivi solo le pagine elencate
 16. `docs/guida-creazione-moduli.md`
 17. `docs/guida-intensita-quest.md`
 18. `docs/changelog.md`
+19. `docs/guida-privacy-gdpr.md`
+20. `docs/guida-go-live-gdpr-per-istanze.md`
 
 ## Aggiornamenti recenti (2026-04-26 - PWA)
 1. supporto PWA installabile introdotto nel core con `manifest.webmanifest`, `service-worker.js` e configurazione opzionale in `configs/app.php`.

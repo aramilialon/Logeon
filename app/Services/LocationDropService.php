@@ -112,7 +112,8 @@ class LocationDropService
                 cii.is_equipped,
                 cii.durability,
                 cii.meta_json,
-                COALESCE(i.droppable, 1) AS droppable
+                COALESCE(i.droppable, 1) AS droppable,
+                i.name AS item_name
             FROM character_item_instances cii
             LEFT JOIN items i ON i.id = cii.item_id
             WHERE cii.id = ?
@@ -201,7 +202,8 @@ class LocationDropService
                 ii.durability,
                 ii.metadata_json,
                 COALESCE(i.stackable, i.is_stackable) AS item_is_stackable,
-                COALESCE(i.droppable, 1) AS droppable
+                COALESCE(i.droppable, 1) AS droppable,
+                i.name AS item_name
             FROM inventory_items ii
             LEFT JOIN items i ON i.id = ii.item_id
             WHERE ii.id = ?
@@ -263,9 +265,11 @@ class LocationDropService
         }
 
         return $this->firstPrepared(
-            'SELECT id, location_id, item_id, quantity, is_stackable, durability, meta_json
-            FROM location_item_drops
-            WHERE id = ?',
+            'SELECT d.id, d.location_id, d.item_id, d.quantity, d.is_stackable, d.durability, d.meta_json,
+                    i.name AS item_name
+             FROM location_item_drops d
+             LEFT JOIN items i ON i.id = d.item_id
+             WHERE d.id = ?',
             [$dropId],
         );
     }

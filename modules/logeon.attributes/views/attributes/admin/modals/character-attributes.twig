@@ -1,0 +1,310 @@
+<div class="modal fade" id="admin-character-attributes-settings-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-1">Impostazioni attributi</h5>
+                    <div class="small text-muted">Attiva o disattiva il sistema attributi core a livello runtime.</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">Runtime del sistema</h6>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label d-block mb-1">Sistema attributi attivo</label>
+                                <input type="hidden" id="admin-character-attributes-enabled" value="0">
+                                <div class="form-text mt-2">Quando il sistema e disattivo, il runtime core usa il fallback salute massima = 100.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" data-action="admin-character-attributes-save-settings">Salva impostazioni</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="admin-character-attributes-recompute-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-1">Ricalcolo attributi</h5>
+                    <div class="small text-muted">Esegui il ricalcolo su un singolo personaggio o su tutto il dataset.</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">Selezione del ricalcolo</h6>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-7">
+                                <label class="form-label mb-1">Personaggio specifico</label>
+                                <input type="text" class="form-control" id="admin-character-attributes-recompute-character-name" placeholder="Cerca personaggio..." autocomplete="off">
+                                <input type="hidden" id="admin-character-attributes-recompute-character-id" value="">
+                                <div class="list-group mt-2 d-none" id="admin-character-attributes-recompute-character-suggestions"></div>
+                                <div class="form-text">Compila questo campo solo se vuoi ricalcolare un personaggio preciso.</div>
+                            </div>
+                            <div class="col-12 col-md-5">
+                                <label class="form-label mb-1">Azioni disponibili</label>
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-outline-primary" data-action="admin-character-attributes-recompute-single">Ricalcola personaggio</button>
+                                    <button type="button" class="btn btn-outline-warning" data-action="admin-character-attributes-recompute-batch">Ricalcola tutti</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="admin-character-attribute-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-1">Definizione attributo</h5>
+                    <div class="small text-muted">Configura nome, comportamento numerico e visibilita runtime dell'attributo.</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <form id="admin-character-attribute-form" class="row g-3">
+                    <input type="hidden" name="id" value="">
+
+                    <div class="col-12">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title mb-3">Identita dell'attributo</h6>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Nome</label>
+                                        <input type="text" class="form-control" name="name" maxlength="120" required>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Slug</label>
+                                        <input type="text" class="form-control" name="slug" maxlength="80" placeholder="es: forza" required>
+                                        <div class="form-text">Usa uno slug stabile e leggibile, per esempio <code>forza</code> o <code>salute_massima</code>.</div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Descrizione</label>
+                                        <textarea class="form-control" name="description" rows="2"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-xl-6">
+                        <div class="card border-0 bg-light h-100">
+                            <div class="card-body">
+                                <h6 class="card-title mb-3">Classificazione e presentazione</h6>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Gruppo</label>
+                                        <select class="form-select" name="attribute_group">
+                                            <option value="primary">Primario</option>
+                                            <option value="secondary">Secondario</option>
+                                            <option value="narrative">Narrativo</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Tipo valore</label>
+                                        <select class="form-select" name="value_type">
+                                            <option value="number">Numero</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Posizione nell'elenco</label>
+                                        <input type="number" class="form-control" name="position" min="0" step="1" value="0">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Arrotondamento</label>
+                                        <select class="form-select" name="round_mode">
+                                            <option value="none">Nessuno</option>
+                                            <option value="floor">Per difetto</option>
+                                            <option value="ceil">Per eccesso</option>
+                                            <option value="round">Matematico</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-xl-6">
+                        <div class="card border-0 bg-light h-100">
+                            <div class="card-body">
+                                <h6 class="card-title mb-3">Limiti e valori base</h6>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Valore minimo</label>
+                                        <input type="number" class="form-control" name="min_value" step="0.01">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Valore massimo</label>
+                                        <input type="number" class="form-control" name="max_value" step="0.01">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Valore predefinito</label>
+                                        <input type="number" class="form-control" name="default_value" step="0.01">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Valore fallback</label>
+                                        <input type="number" class="form-control" name="fallback_value" step="0.01">
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-text">Il fallback viene usato quando non esiste ancora un valore persistito o una regola calcolabile.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title mb-3">Comportamento runtime</h6>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label d-block">Attributo attivo</label>
+                                        <input type="hidden" name="is_active" value="1">
+                                        <div class="form-text">Controlla se l'attributo partecipa al runtime del sistema.</div>
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label d-block">Attributo derivato</label>
+                                        <input type="hidden" name="is_derived" value="0">
+                                        <div class="form-text">Gli attributi derivati usano una regola di calcolo dedicata.</div>
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label d-block">Override manuale consentito</label>
+                                        <input type="hidden" name="allow_manual_override" value="0">
+                                        <div class="form-text">Permette allo staff di fissare manualmente il valore del personaggio.</div>
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label d-block">Mappa su HP max</label>
+                                        <input type="hidden" name="maps_to_core_health_max" value="0">
+                                        <div class="form-text">Usalo solo se questo attributo deve pilotare la salute massima core.</div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label d-block">Visibile nel profilo</label>
+                                        <input type="hidden" name="visible_in_profile" value="1">
+                                        <div class="form-text">Mostra l'attributo nella scheda personaggio quando pertinente.</div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label d-block">Visibile nella location</label>
+                                        <input type="hidden" name="visible_in_location" value="0">
+                                        <div class="form-text">Mostra l'attributo nelle viste rapide o contestuali della location.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-primary" data-action="admin-character-attribute-save">Salva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="admin-character-attribute-rule-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-1">Regola attributo derivato</h5>
+                    <div class="small text-muted">Editor sequenziale della formula, senza testo libero.</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="admin-character-attribute-rule-attribute-id" value="">
+
+                <div class="card border-0 bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title mb-1" data-role="admin-character-attribute-rule-title">Attributo</h6>
+                        <div class="small text-muted">Configura fallback, arrotondamento e sequenza dei passaggi di calcolo.</div>
+                    </div>
+                </div>
+
+                <div class="card border-0 bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">Impostazioni della regola</h6>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Valore fallback della regola</label>
+                                <input type="number" class="form-control" id="admin-character-attribute-rule-fallback" step="0.01">
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Arrotondamento della regola</label>
+                                <select class="form-select" id="admin-character-attribute-rule-round">
+                                    <option value="">Usa la definizione dell'attributo</option>
+                                    <option value="none">Nessuno</option>
+                                    <option value="floor">Per difetto</option>
+                                    <option value="ceil">Per eccesso</option>
+                                    <option value="round">Matematico</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label d-block">Stato della regola</label>
+                                <input type="hidden" id="admin-character-attribute-rule-active" value="1">
+                                <div class="form-text">Disattiva la regola se vuoi conservarla senza usarla nel calcolo.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                            <div>
+                                <h6 class="card-title mb-1">Passaggi della formula</h6>
+                                <div class="small text-muted">Costruisci la sequenza operativa nell'ordine desiderato.</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-action="admin-character-attribute-rule-add-step">
+                                <i class="bi bi-plus-lg me-1"></i>Aggiungi passo
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 90px;">Passo</th>
+                                        <th style="width: 140px;">Operatore</th>
+                                        <th style="width: 160px;">Tipo valore</th>
+                                        <th>Valore o attributo</th>
+                                        <th style="width: 70px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-character-attribute-rule-steps"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-danger" data-action="admin-character-attribute-rule-delete">Elimina regola</button>
+                <div class="d-flex gap-2 ms-auto">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary" data-action="admin-character-attribute-rule-save">Salva regola</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -638,17 +638,28 @@ var AdminNarrativeTags = {
                 });
             return;
         }
-        if (typeof globalWindow.$ === 'function' && typeof globalWindow.$.ajax === 'function') {
-            globalWindow.$.ajax({
-                url: url,
+        if (typeof globalWindow.fetch === 'function') {
+            globalWindow.fetch(url, {
                 method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ data: payload }),
-                success: function (response) { if (typeof onSuccess === 'function') { onSuccess(response); } },
-                error: function (err) {
-                    alert('Errore nella richiesta.');
-                    if (typeof onError === 'function') { onError(err); }
-                }
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ data: payload })
+            }).then(function (response) {
+                return response.text().then(function (text) {
+                    var parsed = {};
+                    try { parsed = text ? JSON.parse(text) : {}; } catch (error) { parsed = {}; }
+                    if (!response.ok) {
+                        throw parsed;
+                    }
+                    return parsed;
+                });
+            }).then(function (response) {
+                if (typeof onSuccess === 'function') { onSuccess(response); }
+            }).catch(function (err) {
+                alert('Errore nella richiesta.');
+                if (typeof onError === 'function') { onError(err); }
             });
         }
     },

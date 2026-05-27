@@ -23,6 +23,25 @@ class CoreAttributeProvider implements AttributeProviderInterface
         return false;
     }
 
+    public function getValue(int $characterId, string $attributeSlug): ?float
+    {
+        return null;
+    }
+
+    public function getBreakdown(int $characterId, string $attributeSlug): array
+    {
+        return [];
+    }
+
+    public function meetsRequirement(
+        int $characterId,
+        string $attributeSlug,
+        string $operator,
+        int|float $requiredValue,
+    ): bool {
+        return false;
+    }
+
     public function getAttributeModifier(int $characterId, string $attributeSlug): float
     {
         return 0.0;

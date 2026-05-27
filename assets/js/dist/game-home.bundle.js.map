@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../app/entries/game-home.entry.js"],
-  "sourcesContent": ["import '../features/game/NotificationsPage.js';\r\nimport '../features/game/NewsPage.js';\nimport '../features/game/MessagesModal.js';\nimport '../features/game/MessagesPage.js';\nimport '../features/game/NarrativeEventsPage.js';\nimport '../features/game/SystemEventsPage.js';\n"],
-  "mappings": "yKAAA,IAAAA,EAAAC,EAAA,KAAAC,IACAC,IACAC,IACAC,IACAC,IACAC",
-  "names": ["require_game_home_entry", "__commonJSMin", "init_NotificationsPage", "init_NewsPage", "init_MessagesModal", "init_MessagesPage", "init_NarrativeEventsPage", "init_SystemEventsPage"]
-}

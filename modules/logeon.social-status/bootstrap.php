@@ -36,7 +36,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'social-status-admin-dashboard-page',
-            'template' => 'admin/pages/social-status.twig',
+            'template' => 'social-status/admin/pages/social-status.twig',
             'after' => '',
             'before' => '',
             'data' => [],

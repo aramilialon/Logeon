@@ -36,4 +36,3 @@ class CoreSocialStatusProvider implements SocialStatusProviderInterface
         return null;
     }
 }
-

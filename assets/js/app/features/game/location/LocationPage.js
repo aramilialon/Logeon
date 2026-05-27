@@ -17,6 +17,9 @@ function GameLocationPage(extension) {
             locationPageModule: null,
             resizeBound: false,
             contextObserver: null,
+            composerResizeObserver: null,
+            composerMutationObserver: null,
+            layoutSyncRaf: null,
             utilityStorageKey: 'logeon.location.utility.collapsed',
             quickToolsStorageKey: 'logeon.location.quicktools.collapsed',
             getLocalDiceOptions: function () {
@@ -138,6 +141,53 @@ function GameLocationPage(extension) {
                 })) {
                     this.syncLayoutFallback();
                 }
+            },
+            scheduleLayoutSync: function () {
+                var self = this;
+                if (this.layoutSyncRaf !== null) {
+                    return;
+                }
+                this.layoutSyncRaf = globalWindow.requestAnimationFrame(function () {
+                    self.layoutSyncRaf = null;
+                    self.syncLayout();
+                });
+            },
+            bindChatComposerAutoLayout: function () {
+                var self = this;
+                var composer = $('#chat_action_character');
+                var textarea = composer.find('[name="chat_body"]');
+                var visibleStatesWrap = $('#location-chat-visible-states-wrap');
+
+                if (!composer.length) {
+                    return;
+                }
+
+                textarea.off('input.locationPageLayout').on('input.locationPageLayout', function () {
+                    self.scheduleLayoutSync();
+                });
+
+                if (visibleStatesWrap.length) {
+                    visibleStatesWrap.off('transitionend.locationPageLayout').on('transitionend.locationPageLayout', function () {
+                        self.scheduleLayoutSync();
+                    });
+                }
+
+                if (typeof globalWindow.ResizeObserver === 'function') {
+                    this.composerResizeObserver = new globalWindow.ResizeObserver(function () {
+                        self.scheduleLayoutSync();
+                    });
+                    this.composerResizeObserver.observe(composer[0]);
+                }
+
+                this.composerMutationObserver = new MutationObserver(function () {
+                    self.scheduleLayoutSync();
+                });
+                this.composerMutationObserver.observe(composer[0], {
+                    attributes: true,
+                    childList: true,
+                    subtree: true,
+                    attributeFilter: ['class', 'style']
+                });
             },
             bind: function () {
                 if (this.resizeBound === true) {
@@ -388,6 +438,7 @@ function GameLocationPage(extension) {
             init: function () {
                 this.bind();
                 this.ensureContextObserver();
+                this.bindChatComposerAutoLayout();
                 this.syncUtilityPanelMode();
                 this.syncQuickToolsMode();
                 this.syncLayout();
@@ -406,9 +457,23 @@ function GameLocationPage(extension) {
                 $(globalWindow).off('resize.locationPage');
                 $('#location-utility-toggle').off('click.locationPage');
                 $('#location-quick-tools-toggle').off('click.locationPage');
+                $('#chat_action_character [name="chat_body"]').off('input.locationPageLayout');
+                $('#location-chat-visible-states-wrap').off('transitionend.locationPageLayout');
                 if (this.contextObserver) {
                     this.contextObserver.disconnect();
                     this.contextObserver = null;
+                }
+                if (this.composerResizeObserver) {
+                    this.composerResizeObserver.disconnect();
+                    this.composerResizeObserver = null;
+                }
+                if (this.composerMutationObserver) {
+                    this.composerMutationObserver.disconnect();
+                    this.composerMutationObserver = null;
+                }
+                if (this.layoutSyncRaf !== null && typeof globalWindow.cancelAnimationFrame === 'function') {
+                    globalWindow.cancelAnimationFrame(this.layoutSyncRaf);
+                    this.layoutSyncRaf = null;
                 }
                 this.resizeBound = false;
                 return this;

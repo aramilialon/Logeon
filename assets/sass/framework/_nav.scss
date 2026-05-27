@@ -6,6 +6,17 @@
     backdrop-filter: none;
 }
 
+.ui-app-navbar-row,
+.ui-app-navbar-row.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 1040;
+}
+
+.ui-app-navbar-row > #appNavbar {
+    width: 100%;
+}
+
 #appNavbar .nav-link,
 #homeNavbar .nav-link {
     color: var(--lf-text-secondary);

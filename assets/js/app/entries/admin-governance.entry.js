@@ -15,3 +15,6 @@ import '../features/admin/LocationPositionTags.js';
 import '../features/admin/Maps.js';
 import '../features/admin/Modules.js';
 import '../features/admin/Settings.js';
+import '../features/admin/Media.js';
+import '../features/admin/GdprRequests.js';
+

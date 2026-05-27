@@ -71,6 +71,31 @@ class ShopService
         $this->db->executePrepared($sql, $params);
     }
 
+    private function rowToArray($row): array
+    {
+        if (is_object($row)) {
+            return (array) $row;
+        }
+
+        return is_array($row) ? $row : [];
+    }
+
+    private function applyArrayToObject($target, array $data)
+    {
+        if (!is_object($target)) {
+            $target = (object) [];
+        }
+
+        foreach ($data as $key => $value) {
+            if (!is_string($key) || $key === '') {
+                continue;
+            }
+            $target->{$key} = $value;
+        }
+
+        return $target;
+    }
+
     /**
      * Returns SQL SELECT and JOIN fragments for item-state name columns.
      * Reuses the same hook as InventoryService so a single module registration covers both:
@@ -222,6 +247,18 @@ class ShopService
 
         return $this->firstPrepared(
             "SELECT * FROM shops WHERE type = 'global' AND is_active = 1 ORDER BY id ASC LIMIT 1",
+        );
+    }
+
+    private function loadShopById(int $shopId)
+    {
+        if ($shopId <= 0) {
+            return null;
+        }
+
+        return $this->firstPrepared(
+            'SELECT * FROM shops WHERE id = ? AND is_active = 1 LIMIT 1',
+            [$shopId],
         );
     }
 
@@ -461,7 +498,11 @@ class ShopService
         );
     }
 
-    public function decorateCatalogItems($items, $discount, $sellRatio): array
+    /**
+     * Applies the core shop rules, then lets optional modules add contextual
+     * price/availability overlays without replacing the shop flow.
+     */
+    public function decorateCatalogItems($items, $discount, $sellRatio, int $characterId = 0, $shop = null): array
     {
         if (empty($items)) {
             return [];
@@ -553,6 +594,52 @@ class ShopService
             }
             $item->max_purchase = (int) $maxPurchase;
 
+            $hookPayload = Hooks::filter('shop.catalog.item', [
+                'character_id' => $characterId,
+                'shop' => $this->rowToArray($shop),
+                'item' => $this->rowToArray($item),
+                'discount_percent' => $discount,
+                'sell_ratio' => $sellRatio,
+                'is_visible' => true,
+                'is_available' => $item->max_purchase > 0,
+                'availability_reason' => '',
+                'price_explanation' => '',
+                'labels' => [],
+                'meta' => [],
+            ], $this->db);
+
+            if (is_array($hookPayload)) {
+                if (isset($hookPayload['item']) && is_array($hookPayload['item'])) {
+                    $item = $this->applyArrayToObject($item, $hookPayload['item']);
+                }
+
+                $item->is_visible = array_key_exists('is_visible', $hookPayload)
+                    ? (!empty($hookPayload['is_visible']) ? 1 : 0)
+                    : 1;
+                $item->is_available = array_key_exists('is_available', $hookPayload)
+                    ? (!empty($hookPayload['is_available']) ? 1 : 0)
+                    : (($item->max_purchase ?? 0) > 0 ? 1 : 0);
+                $item->availability_reason = trim((string) ($hookPayload['availability_reason'] ?? ''));
+                $item->price_explanation = trim((string) ($hookPayload['price_explanation'] ?? ''));
+                $item->runtime_labels = is_array($hookPayload['labels'] ?? null)
+                    ? array_values($hookPayload['labels'])
+                    : [];
+                $item->runtime_meta = is_array($hookPayload['meta'] ?? null)
+                    ? $hookPayload['meta']
+                    : [];
+            } else {
+                $item->is_visible = 1;
+                $item->is_available = (($item->max_purchase ?? 0) > 0) ? 1 : 0;
+                $item->availability_reason = '';
+                $item->price_explanation = '';
+                $item->runtime_labels = [];
+                $item->runtime_meta = [];
+            }
+
+            if (empty($item->is_visible)) {
+                continue;
+            }
+
             $dataset[] = $item;
         }
 
@@ -638,6 +725,7 @@ class ShopService
                 }
             }
 
+            $shop = $this->loadShopById((int) $shopItem->shop_id);
             $discount = $this->getSocialDiscount($characterId);
             $unitPrice = (int) $shopItem->price;
             $promoDiscount = (int) $shopItem->promo_discount;
@@ -654,13 +742,52 @@ class ShopService
                 }
             }
 
-            $total = $unitPrice * $qty;
             $currency = $this->resolveActiveCurrencyForPurchase($shopItem->currency_id);
             if (empty($currency)) {
                 $this->failValidation('Valuta non disponibile', 'currency_unavailable');
             }
 
             $currencyId = (int) $currency->id;
+            $purchaseHook = Hooks::filter('shop.purchase.resolve', [
+                'character_id' => $characterId,
+                'quantity' => $qty,
+                'shop' => $this->rowToArray($shop),
+                'shop_item' => $this->rowToArray($shopItem),
+                'base_unit_price' => (int) $shopItem->price,
+                'promo_discount_percent' => $promoDiscount,
+                'social_discount_percent' => $discount,
+                'unit_price' => $unitPrice,
+                'currency_id' => $currencyId,
+                'is_available' => true,
+                'max_quantity' => null,
+                'error_code' => 'shop_item_unavailable',
+                'error_message' => 'Oggetto non disponibile nel contesto attuale.',
+                'price_explanation' => '',
+                'labels' => [],
+                'meta' => [],
+            ], $this->db);
+            if (is_array($purchaseHook)) {
+                if (array_key_exists('is_available', $purchaseHook) && empty($purchaseHook['is_available'])) {
+                    $errorMessage = trim((string) ($purchaseHook['error_message'] ?? 'Oggetto non disponibile nel contesto attuale.'));
+                    $errorCode = trim((string) ($purchaseHook['error_code'] ?? 'shop_item_unavailable'));
+                    $this->failValidation($errorMessage !== '' ? $errorMessage : 'Oggetto non disponibile nel contesto attuale.', $errorCode !== '' ? $errorCode : 'shop_item_unavailable');
+                }
+
+                if (array_key_exists('max_quantity', $purchaseHook) && $purchaseHook['max_quantity'] !== null && $purchaseHook['max_quantity'] !== '') {
+                    $maxQuantity = max(0, (int) $purchaseHook['max_quantity']);
+                    if ($maxQuantity < 1 || $qty > $maxQuantity) {
+                        $errorMessage = trim((string) ($purchaseHook['error_message'] ?? 'Quantita non disponibile per il contesto attuale.'));
+                        $errorCode = trim((string) ($purchaseHook['error_code'] ?? 'quantity_invalid'));
+                        $this->failValidation($errorMessage !== '' ? $errorMessage : 'Quantita non disponibile per il contesto attuale.', $errorCode !== '' ? $errorCode : 'quantity_invalid');
+                    }
+                }
+
+                if (array_key_exists('unit_price', $purchaseHook)) {
+                    $unitPrice = max(0, (int) $purchaseHook['unit_price']);
+                }
+            }
+
+            $total = $unitPrice * $qty;
             $currencyIsDefault = ((int) $currency->is_default === 1);
             $balanceBefore = null;
             $balanceAfter = null;
@@ -793,6 +920,30 @@ class ShopService
             );
 
             if ($total > 0 && !empty($currencyId)) {
+                $logMeta = [
+                    'shop_id' => $shopItem->shop_id,
+                    'shop_item_id' => $shopItem->id,
+                    'item_id' => $shopItem->item_id,
+                    'quantity' => $qty,
+                    'base_unit_price' => (int) $shopItem->price,
+                    'unit_price' => $unitPrice,
+                    'total' => $total,
+                    'promo_discount_percent' => $promoDiscount,
+                    'social_discount_percent' => $discount,
+                ];
+                if (is_array($purchaseHook ?? null)) {
+                    $priceExplanation = trim((string) ($purchaseHook['price_explanation'] ?? ''));
+                    if ($priceExplanation !== '') {
+                        $logMeta['price_explanation'] = $priceExplanation;
+                    }
+                    if (!empty($purchaseHook['labels']) && is_array($purchaseHook['labels'])) {
+                        $logMeta['labels'] = array_values($purchaseHook['labels']);
+                    }
+                    if (!empty($purchaseHook['meta']) && is_array($purchaseHook['meta'])) {
+                        $logMeta['runtime_meta'] = $purchaseHook['meta'];
+                    }
+                }
+
                 CurrencyLogs::write($characterId, $currencyId, $account, -$total, $balanceBefore, $balanceAfter, 'shop_buy', [
                     'shop_id' => $shopItem->shop_id,
                     'shop_item_id' => $shopItem->id,
@@ -800,6 +951,7 @@ class ShopService
                     'quantity' => $qty,
                     'unit_price' => $unitPrice,
                     'total' => $total,
+                    'price_context' => $logMeta,
                 ]);
             }
 
@@ -969,6 +1121,39 @@ class ShopService
                 $this->failValidation('Prezzo di vendita non valido', 'sell_price_invalid');
             }
 
+            $shop = $this->resolveShop($data);
+            $sellHook = Hooks::filter('shop.sell.resolve', [
+                'character_id' => $characterId,
+                'quantity' => $qty,
+                'shop' => $this->rowToArray($shop),
+                'item' => $this->rowToArray($row),
+                'base_unit_price' => $basePrice,
+                'sell_ratio' => $sellRatio,
+                'unit_price' => $unitPrice,
+                'is_allowed' => true,
+                'error_code' => 'sell_price_invalid',
+                'error_message' => 'Vendita non disponibile nel contesto attuale.',
+                'price_explanation' => '',
+                'labels' => [],
+                'meta' => [],
+            ], $this->db);
+            if (is_array($sellHook)) {
+                if (array_key_exists('is_allowed', $sellHook) && empty($sellHook['is_allowed'])) {
+                    $errorMessage = trim((string) ($sellHook['error_message'] ?? 'Vendita non disponibile nel contesto attuale.'));
+                    $errorCode = trim((string) ($sellHook['error_code'] ?? 'sell_price_invalid'));
+                    $this->failValidation($errorMessage !== '' ? $errorMessage : 'Vendita non disponibile nel contesto attuale.', $errorCode !== '' ? $errorCode : 'sell_price_invalid');
+                }
+
+                if (array_key_exists('unit_price', $sellHook)) {
+                    $unitPrice = max(0, (int) $sellHook['unit_price']);
+                }
+                if ($unitPrice < 1) {
+                    $errorMessage = trim((string) ($sellHook['error_message'] ?? 'Prezzo di vendita non valido'));
+                    $errorCode = trim((string) ($sellHook['error_code'] ?? 'sell_price_invalid'));
+                    $this->failValidation($errorMessage !== '' ? $errorMessage : 'Prezzo di vendita non valido', $errorCode !== '' ? $errorCode : 'sell_price_invalid');
+                }
+            }
+
             $total = $unitPrice * $qty;
             $currencyId = CurrencyLogs::getDefaultCurrencyId();
             $moneyRow = $this->firstPrepared(
@@ -1095,7 +1280,6 @@ class ShopService
                 }
             }
 
-            $shop = $this->resolveShop($data);
             $shopId = (!empty($shop)) ? (int) $shop->id : null;
 
             $this->execPrepared(
@@ -1112,12 +1296,35 @@ class ShopService
 
             $moneyAfter = $moneyBefore + $total;
             if (!empty($currencyId) && $total > 0) {
+                $logMeta = [
+                    'shop_id' => $shopId,
+                    'item_id' => $row->item_id,
+                    'quantity' => $qty,
+                    'base_unit_price' => $basePrice,
+                    'unit_price' => $unitPrice,
+                    'total' => $total,
+                    'sell_ratio' => $sellRatio,
+                ];
+                if (is_array($sellHook ?? null)) {
+                    $priceExplanation = trim((string) ($sellHook['price_explanation'] ?? ''));
+                    if ($priceExplanation !== '') {
+                        $logMeta['price_explanation'] = $priceExplanation;
+                    }
+                    if (!empty($sellHook['labels']) && is_array($sellHook['labels'])) {
+                        $logMeta['labels'] = array_values($sellHook['labels']);
+                    }
+                    if (!empty($sellHook['meta']) && is_array($sellHook['meta'])) {
+                        $logMeta['runtime_meta'] = $sellHook['meta'];
+                    }
+                }
+
                 CurrencyLogs::write($characterId, $currencyId, 'money', $total, $moneyBefore, $moneyAfter, 'shop_sell', [
                     'shop_id' => $shopId,
                     'item_id' => $row->item_id,
                     'quantity' => $qty,
                     'unit_price' => $unitPrice,
                     'total' => $total,
+                    'price_context' => $logMeta,
                 ]);
             }
 

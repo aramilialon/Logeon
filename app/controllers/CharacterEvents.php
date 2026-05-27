@@ -10,7 +10,6 @@ use Core\Http\InputValidator;
 use Core\Http\RequestData;
 use Core\Http\ResponseEmitter;
 
-
 use Core\Logging\LoggerInterface;
 
 class CharacterEvents extends CharacterEvent
@@ -85,14 +84,15 @@ class CharacterEvents extends CharacterEvent
         return $guard->requireCharacter();
     }
 
-    private function isStaff()
+    private function isNarrativeStaff()
     {
-        return \Core\AppContext::authContext()->isStaff();
+        $auth = \Core\AppContext::authContext();
+        return $auth->isAdmin() || $auth->isMaster() || $auth->isSuperuser();
     }
 
     private function canManage($character_id, $currentCharacterId = null)
     {
-        if ($this->isStaff()) {
+        if ($this->isNarrativeStaff()) {
             return true;
         }
         if ($currentCharacterId === null) {
@@ -240,5 +240,3 @@ class CharacterEvents extends CharacterEvent
         ]));
     }
 }
-
-

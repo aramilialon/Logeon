@@ -10,7 +10,6 @@ use Core\Http\InputValidator;
 use Core\Http\RequestData;
 use Core\Http\ResponseEmitter;
 
-
 use Core\Logging\LoggerInterface;
 
 class Threads extends Thread
@@ -209,6 +208,7 @@ class Threads extends Thread
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
         $character_id = $this->requireCharacter();
+        $canModerateForum = \Core\AuthGuard::can('forum.admin');
 
         $data = $this->requestDataObject();
         $id = isset($data->id) ? (int) $data->id : 0;
@@ -216,7 +216,7 @@ class Threads extends Thread
             $this->failThreadInvalid();
         }
 
-        $this->threadService()->delete($id, (int) $character_id, \Core\AppContext::authContext()->isAdmin());
+        $this->threadService()->delete($id, (int) $character_id, $canModerateForum);
 
         ResponseEmitter::emit(ApiResponse::json([
             'success' => true,
@@ -229,5 +229,3 @@ class Threads extends Thread
     {
     }
 }
-
-

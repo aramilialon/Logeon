@@ -35,6 +35,8 @@ import '../../components/SlideShow.js';
 import '../../components/Uploader.js';
 import '../../components/TipTapEditor.js';
 
+import '../core/AppBootOverlay.js';
+import '../core/PwaRegistration.js';
 import '../core/system.header.js';
 import '../core/system.dialogs.js';
 import '../core/system.modals.js';

@@ -69,6 +69,8 @@ class Installer
 
         ResponseEmitter::emit(ApiResponse::json([
             'success' => true,
+            'app' => $appResult['data'] ?? [],
+            'db' => $dbResult['data'] ?? [],
         ]));
     }
 

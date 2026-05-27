@@ -1,5 +1,7 @@
-﻿import '../features/admin/AdminImageUploader.js';
+import '../features/admin/AdminImageUploader.js';
 import '../features/admin/AdminFilterLive.js';
+import '../features/admin/AdminUpdateNotice.js';
+import '../features/admin/AdminInstanceComplianceNotice.js';
 
 import '../core/Context.js';
 import '../core/ModuleRegistry.js';
@@ -44,8 +46,10 @@ import '../modules/admin/EquipmentSlotsModule.js';
 import '../modules/admin/ItemEquipmentRulesModule.js';
 import '../modules/admin/SettingsModule.js';
 import '../modules/admin/SystemUpdateModule.js';
+import '../modules/admin/MediaModule.js';
 import '../modules/admin/NarrativeTagsModule.js';
 import '../modules/admin/MessageReportsModule.js';
+import '../modules/admin/GdprRequestsModule.js';
 import '../modules/admin/NarrativeDelegationGrantsModule.js';
 import '../modules/admin/NarrativeNpcsModule.js';
 import '../modules/admin/LogsConflictsModule.js';
@@ -57,6 +61,14 @@ import '../modules/admin/LogsJobModule.js';
 import '../modules/admin/LogsLocationAccessModule.js';
 import '../modules/admin/LogsSysModule.js';
 import '../modules/admin/LogsNarrativeModule.js';
+import '../features/admin/MailTemplates.js';
+import '../features/admin/MailDistributionLists.js';
+import '../features/admin/MailCampaigns.js';
+import '../features/admin/MailLogs.js';
+import '../modules/admin/MailTemplatesModule.js';
+import '../modules/admin/MailDistributionListsModule.js';
+import '../modules/admin/MailCampaignsModule.js';
+import '../modules/admin/MailLogsModule.js';
 
 import '../core/admin.feature-loader.js';
 import '../core/admin.registry.js';

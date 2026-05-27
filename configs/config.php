@@ -1,9 +1,9 @@
 <?php
 
 const CONFIG = [
-    'debug' => false,
+    'debug' => true,
     'cache' => [
-        'enabled' => true,
+        'enabled' => false,
         'ttl' => 300,
         'dir' => __DIR__ . '/../tmp/cache',
     ],
@@ -85,6 +85,27 @@ const CONFIG = [
             'value' => '/dai ',
             'hint' => 'Dai monete a un personaggio in location. Es: /dai @Mario 50',
             'kind' => 'dai',
+        ],
+        [
+            'key' => '/off',
+            'value' => '/off ',
+            'hint' => 'Messaggio OFF-game a tutti i presenti in location (cooldown 60s)',
+            'kind' => 'off',
+        ],
+        [
+            'key' => '/img',
+            'value' => '/img https://',
+            'hint' => 'Invia un\'immagine in chat (solo staff). Es: /img https://esempio.com/img.jpg',
+            'kind' => 'img',
+            'staff_only' => true,
+        ],
+        [
+            'key' => '/musica',
+            'value' => '/musica https://',
+            'hint' => 'Musica ambientale location (solo staff). Es: /musica https://... oppure /musica stop',
+            'aliases' => ['/music'],
+            'kind' => 'music',
+            'staff_only' => true,
         ],
     ],
 ];

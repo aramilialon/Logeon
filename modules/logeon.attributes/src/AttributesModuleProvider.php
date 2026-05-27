@@ -51,37 +51,29 @@ class AttributesModuleProvider implements AttributeProviderInterface
         return $this->facade->isEnabled();
     }
 
+    public function getValue(int $characterId, string $attributeSlug): ?float
+    {
+        return $this->facade->getAttributeValue($characterId, $attributeSlug);
+    }
+
+    public function getBreakdown(int $characterId, string $attributeSlug): array
+    {
+        return $this->facade->getAttributeBreakdown($characterId, $attributeSlug);
+    }
+
+    public function meetsRequirement(
+        int $characterId,
+        string $attributeSlug,
+        string $operator,
+        int|float $requiredValue
+    ): bool {
+        return $this->facade->meetsRequirement($characterId, $attributeSlug, $operator, $requiredValue);
+    }
+
     public function getAttributeModifier(int $characterId, string $attributeSlug): float
     {
-        $attributeSlug = trim($attributeSlug);
-        if ($characterId <= 0 || $attributeSlug === '' || !$this->facade->isEnabled()) {
-            return 0.0;
-        }
-
-        try {
-            $payload = $this->facade->listCharacterValues($characterId);
-        } catch (\Throwable $e) {
-            return 0.0;
-        }
-
-        $rows = $payload['dataset'] ?? [];
-        if (!is_array($rows)) {
-            return 0.0;
-        }
-
-        foreach ($rows as $row) {
-            if (!is_object($row)) {
-                continue;
-            }
-
-            if (trim((string) ($row->slug ?? '')) !== $attributeSlug) {
-                continue;
-            }
-
-            return isset($row->effective_value) ? (float) $row->effective_value : 0.0;
-        }
-
-        return 0.0;
+        $value = $this->getValue($characterId, $attributeSlug);
+        return $value !== null ? $value : 0.0;
     }
 }
 

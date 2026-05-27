@@ -28,7 +28,23 @@
                             La password deve contenere almeno 10 caratteri, una maiuscola, una minuscola, un numero e un simbolo.
                         </div>
 
-                        <div class="d-grid gap-2 col-6 mx-auto my-5">
+                        <div class="form-check my-4">
+                            <input class="form-check-input" type="checkbox" name="accept_privacy" id="signup-accept-privacy">
+                            <label class="form-check-label small" for="signup-accept-privacy">
+                                Accetto la <a href="{{ APP.legal.privacy_policy_url|default('/privacy-policy') }}" target="_blank" rel="noopener">privacy policy</a>
+                                e i <a href="{{ APP.legal.terms_of_service_url|default('/terms-of-service') }}" target="_blank" rel="noopener">termini del servizio</a>
+                                <span class="text-danger">*</span>
+                            </label>
+                        </div>
+
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" name="newsletter_opt_in" id="signup-newsletter-opt-in">
+                            <label class="form-check-label small" for="signup-newsletter-opt-in">
+                                Acconsento a ricevere newsletter e comunicazioni facoltative
+                            </label>
+                        </div>
+
+                        <div class="d-grid gap-2 col-6 mx-auto my-4">
                             <button type="submit" class="btn btn-lg btn-primary btn-block btn-round">ISCRIVITI</button>
                         </div>
                     </form>

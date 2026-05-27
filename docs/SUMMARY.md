@@ -1,7 +1,6 @@
 # Summary
 
 * [Panoramica](README.md)
-* [Changelog](changelog.md)
 
 * **Installazione e avvio**
   * [Guida personalizzazione gioco](guida-personalizzazione-gioco.md)
@@ -21,7 +20,10 @@
 * **API e dominio di gioco**
   * [Contratti API backend](contratti-api-backend.md)
   * [Guida autenticazione e sessioni](guida-autenticazione-sessioni.md)
+  * [Guida privacy e GDPR](guida-privacy-gdpr.md)
+  * [Guida go-live GDPR per istanze](guida-go-live-gdpr-per-istanze.md)
   * [Matrice ruoli e permessi](matrice-ruoli-permessi.md)
+  * [Guida operativa conflitti](guida-conflitti-operativa.md)
   * [Guida intensita quest](guida-intensita-quest.md)
   * [Guida troubleshooting](guida-troubleshooting.md)
 

@@ -151,7 +151,7 @@ class JobService
                     ? SocialStatusProviderRegistry::getById((int) $row->min_socialstatus_id)
                     : null;
                 $row->required_status_name = $status->name ?? null;
-                $row->required_status_min  = $status->min ?? null;
+                $row->required_status_min = $status->min ?? null;
             }
         }
 
@@ -177,7 +177,7 @@ class JobService
                 ? SocialStatusProviderRegistry::getById((int) $row->min_socialstatus_id)
                 : null;
             $row->required_status_name = $status->name ?? null;
-            $row->required_status_min  = $status->min ?? null;
+            $row->required_status_min = $status->min ?? null;
         }
 
         return !empty($row) ? $row : null;

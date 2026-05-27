@@ -86,6 +86,7 @@ var EXTENSION_CONTROLLER_GLOBALS = [];
 var SHARED_CONTROLLER_EXTENSIONS = [];
 var PAGE_CONTROLLER_EXTENSIONS = {};
 var PAGE_CONTROLLER_GLOBALS = [
+    'Home',
     'Forum',
     'Threads',
     'Profile',
@@ -935,6 +936,14 @@ function initPageController() {
     }
 
     initRegisteredControllers(PAGE_CONTROLLER_EXTENSIONS[key] || []);
+
+    if (key === 'home') {
+        window.Home = createController({
+            factory: 'GameHomePage',
+            args: [{}]
+        }) || window.Home;
+        return;
+    }
 
     if (key === 'forum') {
         window.Forum = createController({

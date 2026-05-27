@@ -345,6 +345,7 @@
             this.setField('id', '');
             this.setField('sort_order', '0');
             this.setField('icon', '');
+            this.setField('image', '');
             if (this.switches.is_active    && typeof this.switches.is_active.setValue === 'function')    { this.switches.is_active.setValue('1'); }
             if (this.switches.is_selectable && typeof this.switches.is_selectable.setValue === 'function') { this.switches.is_selectable.setValue('1'); }
             this.toggleDelete(false);
@@ -363,6 +364,7 @@
             this.setField('lore_text',   row.lore_text || '');
             this.setField('sort_order',  String(row.sort_order || '0'));
             this.setField('icon',        row.icon || '');
+            this.setField('image',       row.image || '');
             if (this.switches.is_active    && typeof this.switches.is_active.setValue === 'function')    { this.switches.is_active.setValue(String(row.is_active || '0')); }
             if (this.switches.is_selectable && typeof this.switches.is_selectable.setValue === 'function') { this.switches.is_selectable.setValue(String(row.is_selectable || '0')); }
             this.toggleDelete(true);
@@ -401,6 +403,7 @@
                 description:   this.getField('description').trim(),
                 lore_text:     this.getField('lore_text').trim(),
                 icon:          this.getField('icon').trim(),
+                image:         this.getField('image').trim(),
                 sort_order:    parseInt(this.getField('sort_order'), 10) || 0,
                 is_active:     parseInt(this.getSwitchValue('is_active', '1'), 10) || 0,
                 is_selectable: parseInt(this.getSwitchValue('is_selectable', '1'), 10) || 0

@@ -143,3 +143,141 @@
 .admin-compare-flat {
     color: var(--lf-text-secondary);
 }
+
+#admin-page [data-admin-page="media"] .admin-media-dropzone {
+  border: 1px dashed rgba(128, 128, 128, 0.35);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: border-color var(--swd-transition-fast), background-color var(--swd-transition-fast);
+}
+
+#admin-page [data-admin-page="media"] .admin-media-dropzone.is-dragover,
+#admin-page [data-admin-page="media"] .admin-media-dropzone:hover {
+  border-color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.08);
+}
+
+#admin-page [data-admin-page="media"] .admin-media-folder-card {
+  border: 1px solid rgba(128, 128, 128, 0.16);
+}
+
+#admin-page [data-admin-page="media"] .admin-media-folder-card:hover {
+  border-color: rgba(var(--bs-primary-rgb), 0.35);
+}
+
+#admin-page [data-admin-page="media"] .admin-media-thumb {
+  width: 3rem;
+  min-width: 3rem;
+  height: 3rem;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(128, 128, 128, 0.18);
+}
+
+#admin-page [data-admin-page="media"] .admin-media-thumb--icon {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+#admin-page [data-admin-page="media"] .admin-media-preview-wrap {
+  min-height: 14rem;
+}
+
+#admin-page [data-admin-page="media"] .admin-media-col-check {
+  width: 3rem;
+}
+
+#admin-page [data-admin-page="media"] .admin-media-col-type {
+  width: 7rem;
+}
+
+#admin-page [data-admin-page="media"] .admin-media-col-size {
+  width: 7.5rem;
+}
+
+#admin-page [data-admin-page="media"] .admin-media-col-date {
+  width: 11rem;
+}
+
+#admin-page [data-admin-page="media"] .admin-media-col-author {
+  width: 9.5rem;
+}
+
+#admin-page [data-admin-page="media"] .admin-media-col-actions {
+  width: 10.5rem;
+}
+
+
+#admin-page [data-admin-page="media"] .admin-media-check {
+  padding-left: 0;
+}
+
+#admin-page [data-admin-page="media"] .admin-media-check .form-check-input {
+  position: static;
+  margin: 0;
+  float: none;
+}
+
+#admin-page [data-admin-page="modules"] .admin-module-doc-view {
+  min-height: 28rem;
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader {
+  color: var(--lf-text-primary);
+  line-height: 1.55;
+  font-size: 0.95rem;
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader h1,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader h2,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader h3,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader h4,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader h5,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader h6 {
+  margin-top: 1.15rem;
+  margin-bottom: 0.55rem;
+  line-height: 1.25;
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader p,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader ul,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader ol,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader blockquote,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader pre,
+#admin-page [data-admin-page="modules"] .admin-markdown-reader table {
+  margin-bottom: 0.8rem;
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader code {
+  background: var(--lf-surface-alt);
+  color: var(--lf-text-primary);
+  border: 1px solid var(--lf-border);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.84em;
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader pre {
+  background: var(--lf-surface-alt);
+  border: 1px solid var(--lf-border);
+  border-radius: 0.55rem;
+  padding: 0.75rem;
+  overflow: auto;
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader blockquote {
+  border-left: 3px solid var(--lf-primary);
+  padding: 0.25rem 0 0.25rem 0.75rem;
+  color: var(--lf-text-secondary);
+}
+
+#admin-page [data-admin-page="modules"] .admin-markdown-reader img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.45rem;
+}

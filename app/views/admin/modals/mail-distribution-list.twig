@@ -1,0 +1,101 @@
+<div class="modal fade" id="admin-mail-list-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="d-flex justify-content-end my-3 mx-4">
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <h4 class="display-6 text-center mt-3 mb-2">Lista di distribuzione</h4>
+                <hr class="my-4" />
+
+                <form id="admin-mail-list-form" class="row g-3">
+                    <input type="hidden" name="id" value="">
+
+                    <div class="col-12 col-md-8">
+                        <label class="form-label">Nome <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" maxlength="255" required>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select" name="type" data-action="admin-mail-list-type-change">
+                            <option value="manual">Manuale</option>
+                            <option value="dynamic">Dinamica</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Descrizione</label>
+                        <input type="text" class="form-control" name="description" maxlength="500">
+                    </div>
+
+                    <div class="col-12 d-none" id="admin-mail-list-segment-row">
+                        <label class="form-label">Segmento dinamico</label>
+                        <select class="form-select" name="segment_key">
+                            <option value="">— seleziona —</option>
+                            <option value="all_users">Tutti gli utenti</option>
+                            <option value="newsletter_opt_in">Utenti con consenso newsletter</option>
+                            <option value="staff">Staff</option>
+                            <option value="admin">Amministratori</option>
+                            <option value="active_characters">Personaggi attivi</option>
+                        </select>
+                    </div>
+                </form>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <button type="button" class="btn btn-outline-danger d-none" data-action="admin-mail-list-delete">Elimina</button>
+                    <button type="button" class="btn btn-primary" data-action="admin-mail-list-save">Salva</button>
+                </div>
+
+                <hr class="my-4 d-none" id="admin-mail-list-members-section">
+                <div class="d-none" id="admin-mail-list-members-panel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">Destinatari manuali</h6>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-mail-list-member-add-open">
+                                <i class="bi bi-plus-lg me-1"></i>Email manuale
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-action="admin-mail-list-user-picker-open">
+                                <i class="bi bi-people me-1"></i>Aggiungi utenti
+                            </button>
+                        </div>
+                    </div>
+
+                    <form id="admin-mail-list-member-form" class="row g-2 align-items-end mb-3 d-none">
+                        <div class="col-12 col-md-5">
+                            <input type="text" class="form-control form-control-sm" name="email" placeholder="email@esempio.com" maxlength="255">
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <input type="text" class="form-control form-control-sm" name="display_name" placeholder="Nome visualizzato" maxlength="255">
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-sm btn-primary" data-action="admin-mail-list-member-add">Aggiungi</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" data-action="admin-mail-list-member-add-cancel">Annulla</button>
+                        </div>
+                    </form>
+
+                    <div id="admin-mail-list-user-picker" class="border rounded p-3 mb-3 d-none">
+                        <div class="row g-2 align-items-center mb-2">
+                            <div class="col">
+                                <input type="text" class="form-control form-control-sm" id="admin-mail-list-user-search" placeholder="Cerca per nome personaggio o email..." autocomplete="off">
+                            </div>
+                            <div class="col-auto">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-mail-list-user-search">Cerca</button>
+                            </div>
+                        </div>
+                        <div id="admin-mail-list-user-results" class="border rounded p-2 mb-2" data-user-results-box style="background-color: rgba(var(--bs-secondary-rgb), 0.08); max-height: 18rem; overflow-y: auto;">
+                            <div class="text-muted small text-center py-2">Digita per cercare utenti.</div>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-mail-list-user-picker-cancel">Annulla</button>
+                            <button type="button" class="btn btn-sm btn-primary" data-action="admin-mail-list-user-picker-add">
+                                <i class="bi bi-person-check me-1"></i>Aggiungi selezionati
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="grid-admin-mail-list-members"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -67,19 +67,24 @@ function buildBagGridConfig() {
                 format: function (response) {
                     var image = (response.item_image && response.item_image !== '') ? response.item_image : '/assets/imgs/defaults-images/default-location.png';
                     var name = response.item_name || 'Senza nome';
-                    var description = response.item_description || '';
                     var qty = (response.quantity != null) ? response.quantity : 1;
-                    var equipped = (parseInt(response.is_equipped, 10) === 1) ? '<span class="badge text-bg-success ms-2">Equipaggiato</span>' : '';
-                    var actions = [];
+                    var equipped = (parseInt(response.is_equipped, 10) === 1) ? '<span class="badge text-bg-success">Equipaggiato</span>' : '';
                     var instanceId = response.character_item_instance_id || null;
                     var stackId = response.character_item_id || null;
-                    var canDrop = (parseInt(response.droppable, 10) === 1);
-                    var safeName = escapeHtml(name);
                     var rarityName = (response.rarity_name || '').toString().trim();
                     var rarityColor = (response.rarity_color || '').toString().trim();
                     var rarityBadge = '';
                     var narrativeBadges = buildNarrativeBadges(response);
                     var narrativeHtml = '';
+                    var itemKey = '';
+
+                    var normalizedInstanceId = parseInt(instanceId, 10);
+                    var normalizedStackId = parseInt(stackId, 10);
+                    if (!isNaN(normalizedInstanceId) && normalizedInstanceId > 0) {
+                        itemKey = 'instance-' + normalizedInstanceId;
+                    } else if (!isNaN(normalizedStackId) && normalizedStackId > 0) {
+                        itemKey = 'stack-' + normalizedStackId;
+                    }
 
                     if (rarityName !== '') {
                         var badgeStyle = '';
@@ -89,38 +94,24 @@ function buildBagGridConfig() {
                         rarityBadge = '<span class="badge ms-2"' + badgeStyle + '>' + escapeHtml(rarityName) + '</span>';
                     }
                     if (narrativeBadges.length) {
-                        narrativeHtml = '<div class="d-flex flex-wrap gap-1 mt-2">' + narrativeBadges.join(' ') + '</div>';
+                        narrativeHtml = '<div class="bag-card-item__narrative">' + narrativeBadges.join(' ') + '</div>';
                     }
-
-                    if (instanceId && parseInt(response.is_equipped, 10) !== 1) {
-                        if (canDrop) {
-                            actions.push('<button type="button" class="btn btn-sm btn-outline-danger" data-action="drop" data-source="instance" data-instance-id="' + instanceId + '" data-item-name="' + safeName + '">Lascia</button>');
-                        }
-                        actions.push('<button type="button" class="btn btn-sm btn-outline-dark" data-action="destroy" data-source="instance" data-instance-id="' + instanceId + '" data-item-name="' + safeName + '" data-quantity="1">Distruggi</button>');
-                    } else if (stackId) {
-                        if (canDrop) {
-                            actions.push('<button type="button" class="btn btn-sm btn-outline-danger" data-action="drop" data-source="stack" data-character-item-id="' + stackId + '" data-quantity="' + qty + '" data-item-name="' + safeName + '">Lascia</button>');
-                        }
-                        actions.push('<button type="button" class="btn btn-sm btn-outline-dark" data-action="destroy" data-source="stack" data-character-item-id="' + stackId + '" data-quantity="' + qty + '" data-item-name="' + safeName + '">Distruggi</button>');
-                    }
-
-                    var actionsBlock = actions.length ? '<div class="d-inline-flex align-items-center justify-content-end flex-wrap gap-2">' + actions.join('') + '</div>' : '';
                     return ''
-                        + '<div class="card mb-2">'
-                        + '  <div class="card-body d-flex gap-3 align-items-center flex-wrap">'
-                        + '    <img class="rounded" width="64" height="64" src="' + image + '" alt="">'
-                        + '    <div class="flex-grow-1">'
-                        + '      <div class="d-flex align-items-center flex-wrap gap-2">'
-                        + '        <h6 class="mb-0">' + escapeHtml(name) + '</h6>'
+                        + '<div class="bag-card-item" data-bag-item-key="' + escapeHtml(itemKey) + '" tabindex="0" role="button" aria-pressed="false">'
+                        + '  <div class="bag-card-item__body">'
+                        + '    <div class="bag-card-item__media-wrap">'
+                        + '      <img class="bag-card-item__image" src="' + image + '" alt="">'
+                        + '    </div>'
+                        + '    <div class="bag-card-item__content">'
+                        + '      <div class="bag-card-item__topline">'
+                        + '        <h6 class="mb-0 bag-card-item__name">' + escapeHtml(name) + '</h6>'
+                        + '        <span class="badge text-bg-dark bag-card-item__qty">x' + qty + '</span>'
+                        + '      </div>'
+                        + '      <div class="bag-card-item__badges">'
                         +          equipped
                         +          rarityBadge
                         + '      </div>'
-                        + '      <div class="text-muted small">' + escapeHtml(description) + '</div>'
                         +        narrativeHtml
-                        + '    </div>'
-                        + '    <div class="text-end d-flex flex-column align-items-end gap-2">'
-                        + '      <span class="badge text-bg-dark">x' + qty + '</span>'
-                        +        (actionsBlock ? actionsBlock : '')
                         + '    </div>'
                         + '  </div>'
                         + '</div>';
@@ -177,6 +168,14 @@ function createInventoryModule() {
 
         drop: function (payload) {
             return this.request('/location/drops/drop', 'dropItem', payload || {});
+        },
+
+        charactersSearch: function (payload) {
+            return this.request('/list/characters/search', 'searchCharacters', payload || {});
+        },
+
+        transfer: function (payload) {
+            return this.request('/inventory/transfer', 'transferInventoryItem', payload || {});
         },
 
         useItem: function (payload) {

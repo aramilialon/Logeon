@@ -279,7 +279,7 @@ class CharacterAttributesValueService extends CharacterAttributesBaseService
                 }
 
                 $source = isset($sources[$attributeId]) ? trim((string) $sources[$attributeId]) : 'derived';
-                if (!in_array($source, ['base', 'default', 'override', 'derived', 'fallback'], true)) {
+                if (!in_array($source, ['base', 'default', 'override', 'derived', 'fallback', 'external'], true)) {
                     $source = 'derived';
                 }
 

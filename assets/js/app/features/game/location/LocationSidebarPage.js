@@ -47,10 +47,23 @@ function GameLocationSidebarPage(extension) {
             combatTaxonomy: {},
             combatState: null,
             combatSelectedConflictId: 0,
+            staffTargetCharacterId: 0,
+            staffTargetUserId: 0,
+            staffTargetRestricted: 0,
+            staffSelectedItemId: 0,
+            staffTargetProfile: null,
+            staffBulkSelection: {},
+            staffNarrativeCatalog: [],
+            staffLocationsCatalog: [],
+            staffFlagsIndex: {},
+            staffActionFeed: [],
 
             init: function () {
-                this.location_id = parseInt($('[name="location_id"]').val(), 10);
-                this.character_id = parseInt($('[name="character_id"]').val(), 10);
+                var root = $('#location-page');
+                var locationInput = root.find('[name="location_id"]').first();
+                var characterInput = root.find('[name="character_id"]').first();
+                this.location_id = parseInt(locationInput.val(), 10);
+                this.character_id = parseInt(characterInput.val(), 10);
                 this.isStaff = $('[data-requires-staff]').length > 0;
                 this.combatEnabled = $('#location-conflicts-pane-combat').length > 0;
                 if (!this.character_id || !$('#chat-utils').length) {
@@ -90,6 +103,158 @@ function GameLocationSidebarPage(extension) {
                     self.bagCategoryActive = String($(this).attr('data-bag-category'));
                     self.renderBagTabs();
                     self.renderBagItems();
+                });
+                $('#location-utils-modal').off('shown.bs.modal.locationStaffTools').on('shown.bs.modal.locationStaffTools', function () {
+                    self.refreshStaffCharacters();
+                    self.loadStaffNarrativeStateCatalog();
+                    self.loadStaffLocationNotes();
+                    self.loadStaffLocationFlags();
+                    self.loadStaffLocationsCatalog();
+                    self.renderStaffActionFeed();
+                });
+                $('#location-utils-modal').off('change.locationStaffTarget').on('change.locationStaffTarget', '[data-staff-character-select]', function () {
+                    self.onStaffTargetChanged();
+                });
+                $('#location-utils-modal').off('click.locationStaffTools').on('click.locationStaffTools', '[data-action]', function (event) {
+                    var action = String($(this).attr('data-action') || '').trim();
+                    if (action.indexOf('location-staff-') !== 0) {
+                        return;
+                    }
+                    event.preventDefault();
+                    if (action === 'location-staff-refresh-characters') {
+                        self.refreshStaffCharacters();
+                        return;
+                    }
+                    if (action === 'location-staff-select-all') {
+                        self.staffSelectAllTargets();
+                        return;
+                    }
+                    if (action === 'location-staff-select-none') {
+                        self.staffClearTargets();
+                        return;
+                    }
+                    if (action === 'location-staff-select-current') {
+                        self.staffSelectCurrentTargetOnly();
+                        return;
+                    }
+                    if (action === 'location-staff-update-health') {
+                        self.staffUpdateHealth();
+                        return;
+                    }
+                    if (action === 'location-staff-assign-exp') {
+                        self.staffAssignExperience();
+                        return;
+                    }
+                    if (action === 'location-staff-grant-item') {
+                        self.staffGrantItem();
+                        return;
+                    }
+                    if (action === 'location-staff-remove-item') {
+                        self.staffRemoveItem();
+                        return;
+                    }
+                    if (action === 'location-staff-restrict-user') {
+                        var value = self.toInt($(this).attr('data-restrict-value'), 0);
+                        self.staffSetRestriction(value === 1 ? 1 : 0);
+                        return;
+                    }
+                    if (action === 'location-staff-restriction-save') {
+                        self.staffSaveScopedRestrictions();
+                        return;
+                    }
+                    if (action === 'location-staff-send-macro') {
+                        self.staffSendMacroMessage();
+                        return;
+                    }
+                    if (action === 'location-staff-state-apply') {
+                        self.staffApplyNarrativeStateBulk();
+                        return;
+                    }
+                    if (action === 'location-staff-state-remove') {
+                        self.staffRemoveNarrativeStateBulk();
+                        return;
+                    }
+                    if (action === 'location-staff-state-toggle-advanced') {
+                        self.toggleStaffStateAdvancedOptions($(this));
+                        return;
+                    }
+                    if (action === 'location-staff-note-save') {
+                        self.staffSaveLocationNote();
+                        return;
+                    }
+                    if (action === 'location-staff-note-delete') {
+                        var noteId = self.toInt($(this).attr('data-note-id'), 0);
+                        self.staffDeleteLocationNote(noteId);
+                        return;
+                    }
+                    if (action === 'location-staff-flag-save') {
+                        self.staffSaveCharacterFlag();
+                        return;
+                    }
+                    if (action === 'location-staff-teleport') {
+                        self.staffTeleportCharacter();
+                    }
+                });
+                $('#location-utils-modal').off('change.locationStaffBulkTarget').on('change.locationStaffBulkTarget', '[data-staff-bulk-target]', function () {
+                    self.onStaffBulkTargetToggled($(this));
+                });
+                $('#location-utils-modal').off('input.locationStaffStateQuery').on('input.locationStaffStateQuery', '[data-staff-state-query]', function () {
+                    var query = String($(this).val() || '').trim();
+                    self.staffSetSelectedStateId(0);
+                    self.renderStaffStateSelectedLabel(null);
+                    if (query.length < 2) {
+                        self.renderStaffStateSuggestions([]);
+                        return;
+                    }
+                    self.renderStaffStateSuggestions(self.filterStaffStatesByQuery(query));
+                });
+                $('#location-utils-modal').off('click.locationStaffStateSuggestion').on('click.locationStaffStateSuggestion', '[data-action="location-staff-select-state"]', function (event) {
+                    event.preventDefault();
+                    var stateId = self.toInt($(this).attr('data-state-id'), 0);
+                    if (stateId <= 0) {
+                        return;
+                    }
+                    var row = self.getStaffStateById(stateId);
+                    self.selectStaffState(row);
+                });
+                $(document).off('click.locationStaffStateDismiss').on('click.locationStaffStateDismiss', function (e) {
+                    if (!$(e.target).closest('[data-staff-state-query], [data-staff-state-suggestions]').length) {
+                        self.renderStaffStateSuggestions([]);
+                    }
+                });
+                $('#location-utils-modal').off('change.locationStaffStateDurationMode').on('change.locationStaffStateDurationMode', '[data-staff-state-duration-mode]', function () {
+                    self.updateStaffDurationModeUi();
+                });
+                $('#location-utils-modal').off('input.locationStaffItemSearch').on('input.locationStaffItemSearch', '[data-staff-item-query]', function () {
+                    var query = String($(this).val() || '').trim();
+                    self.staffSelectedItemId = 0;
+                    self.renderStaffItemSelectedLabel('', 0);
+                    if (query.length < 2) {
+                        self.renderStaffItemSuggestions([]);
+                        return;
+                    }
+                    self.callProfile('staffSearchItems', { query: query, limit: 12 }, function (response) {
+                        self.renderStaffItemSuggestions(response && response.dataset ? response.dataset : []);
+                    }, function () {
+                        self.renderStaffItemSuggestions([]);
+                    });
+                });
+                $('#location-utils-modal').off('click.locationStaffItemSuggestion').on('click.locationStaffItemSuggestion', '[data-action="location-staff-select-item"]', function (event) {
+                    event.preventDefault();
+                    var itemId = self.toInt($(this).attr('data-item-id'), 0);
+                    if (itemId <= 0) {
+                        return;
+                    }
+                    var itemName = String($(this).attr('data-item-name') || '');
+                    self.staffSelectedItemId = itemId;
+                    $('[data-staff-item-query]').val(itemName);
+                    self.renderStaffItemSelectedLabel(itemName, itemId);
+                    self.renderStaffItemSuggestions([]);
+                });
+                $(document).off('click.locationStaffItemDismiss').on('click.locationStaffItemDismiss', function (e) {
+                    if (!$(e.target).closest('[data-staff-item-query], [data-staff-item-suggestions]').length) {
+                        self.renderStaffItemSuggestions([]);
+                    }
                 });
                 $('#location-scene-launcher-modal').off('shown.bs.modal.locationSceneLauncher').on('shown.bs.modal.locationSceneLauncher', function () {
                     self.refreshSceneLauncher();
@@ -344,6 +509,16 @@ function GameLocationSidebarPage(extension) {
                         self.setCombatConflictId(detailConflictId);
                         return;
                     }
+                    if (action === 'location-conflict-resolve') {
+                        var resolveConflictId = self.toInt(trigger.attr('data-conflict-id'), 0);
+                        self.resolveConflictFromDetail(resolveConflictId);
+                        return;
+                    }
+                    if (action === 'location-conflict-close') {
+                        var closeConflictId = self.toInt(trigger.attr('data-conflict-id'), 0);
+                        self.closeConflictFromDetail(closeConflictId);
+                        return;
+                    }
                     if (action === 'location-combat-load') {
                         self.loadCombatState(self.getSelectedCombatConflictId(), true);
                         return;
@@ -395,6 +570,17 @@ function GameLocationSidebarPage(extension) {
             },
             unbind: function () {
                 $('#location-bag-categories').off('click.locationBagTab');
+                $('#location-utils-modal').off('shown.bs.modal.locationStaffTools');
+                $('#location-utils-modal').off('change.locationStaffTarget');
+                $('#location-utils-modal').off('click.locationStaffTools');
+                $('#location-utils-modal').off('change.locationStaffBulkTarget');
+                $('#location-utils-modal').off('input.locationStaffStateQuery');
+                $('#location-utils-modal').off('click.locationStaffStateSuggestion');
+                $('#location-utils-modal').off('change.locationStaffStateDurationMode');
+                $('#location-utils-modal').off('input.locationStaffItemSearch');
+                $('#location-utils-modal').off('click.locationStaffItemSuggestion');
+                $(document).off('click.locationStaffItemDismiss');
+                $(document).off('click.locationStaffStateDismiss');
                 $('#location-scene-launcher-modal').off('shown.bs.modal.locationSceneLauncher');
                 $('#location-scene-launcher-modal').off('click.locationSceneLauncher');
                 $('#location-npcs-panel').off('click.locationNpcsPanel');
@@ -459,6 +645,19 @@ function GameLocationSidebarPage(extension) {
                     return fallback;
                 }
                 return num;
+            },
+            extractApiErrorMessage: function (error, fallback) {
+                var message = '';
+                if (error && typeof error.message === 'string' && error.message.trim() !== '' && error.message !== 'request_failed') {
+                    message = error.message.trim();
+                }
+                if (error && error.response && typeof error.response.error === 'string' && error.response.error.trim() !== '') {
+                    message = error.response.error.trim();
+                }
+                if (message === '') {
+                    message = String(fallback || 'Operazione non riuscita.');
+                }
+                return message;
             },
             toMetricNumber: function (value, fallback) {
                 var text = String(value == null ? '' : value).trim().replace(',', '.');
@@ -695,29 +894,45 @@ function GameLocationSidebarPage(extension) {
             apiPost: function (url, payload, onSuccess, onError) {
                 var meta = document.querySelector('meta[name="csrf-token"]');
                 var csrfToken = meta ? (meta.getAttribute('content') || '') : '';
-                var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+                var headers = {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'Accept': 'application/json'
+                };
                 if (csrfToken) {
                     headers['X-CSRF-Token'] = csrfToken;
                 }
-                $.ajax({
-                    url: String(url || ''),
-                    type: 'POST',
-                    dataType: 'json',
-                    headers: headers,
-                    data: {
-                        data: JSON.stringify(payload || {})
+                if (typeof window.fetch !== 'function') {
+                    if (typeof onError === 'function') {
+                        onError(new Error('request_unavailable'));
                     }
-                }).done(function (response) {
+                    return;
+                }
+
+                var body = new URLSearchParams();
+                body.set('data', JSON.stringify(payload || {}));
+
+                window.fetch(String(url || ''), {
+                    method: 'POST',
+                    headers: headers,
+                    body: body.toString()
+                }).then(function (response) {
+                    return response.text().then(function (text) {
+                        var parsed = {};
+                        try { parsed = text ? JSON.parse(text) : {}; } catch (error) { parsed = {}; }
+                        if (!response.ok) {
+                            var requestError = new Error('request_failed');
+                            requestError.response = parsed;
+                            requestError.error_code = parsed && parsed.error_code ? String(parsed.error_code) : '';
+                            throw requestError;
+                        }
+                        return parsed;
+                    });
+                }).then(function (response) {
                     if (typeof onSuccess === 'function') {
                         onSuccess(response || {});
                     }
-                }).fail(function (xhr) {
-                    var error = new Error('request_failed');
-                    error.xhr = xhr || null;
-                    error.response = (xhr && xhr.responseJSON) ? xhr.responseJSON : null;
-                    error.error_code = error.response && error.response.error_code
-                        ? String(error.response.error_code)
-                        : '';
+                }).catch(function (error) {
                     if (typeof onError === 'function') {
                         onError(error);
                     }
@@ -731,7 +946,12 @@ function GameLocationSidebarPage(extension) {
                     conflict_proposal_forbidden: 'Non puoi rispondere a questa proposta.',
                     conflict_overlap_detected: 'E presente un conflitto in sovrapposizione nella location.',
                     conflict_not_found: 'Conflitto non trovato.',
+                    conflict_read_forbidden: 'Non puoi visualizzare questo conflitto.',
                     conflict_write_forbidden: 'Non puoi modificare questo conflitto.',
+                    conflict_resolution_required: 'Inserisci almeno un testo di risoluzione.',
+                    conflict_master_supervision_required: 'Questo passaggio richiede la supervisione di master/staff.',
+                    conflict_deferred_review_required: 'L esito deve passare in revisione staff.',
+                    conflict_close_counterparty_required: 'La chiusura richiede conferma controparte o revisione staff.',
                     combat_feature_not_enabled: 'Funzionalita combattimento non attiva nel tier corrente.',
                     combat_context_not_found: 'Nessun contesto combattimento avviato per questo conflitto.',
                     combat_staff_only: 'Questa azione e riservata allo staff.',
@@ -1132,6 +1352,143 @@ function GameLocationSidebarPage(extension) {
                 if (r === 'other') { return 'Altro'; }
                 return r !== '' ? this.escapeHtml(role) : 'Attore';
             },
+            getConflictFeedRowById: function (conflictId) {
+                var id = this.toInt(conflictId, 0);
+                if (id <= 0) {
+                    return null;
+                }
+                var feed = this.conflictsFeed || {};
+                var pools = [];
+                if (Array.isArray(feed.active)) {
+                    pools = pools.concat(feed.active);
+                }
+                if (Array.isArray(feed.proposals)) {
+                    pools = pools.concat(feed.proposals);
+                }
+                for (var i = 0; i < pools.length; i++) {
+                    var row = pools[i] || {};
+                    if (this.toInt(row.id, 0) === id) {
+                        return row;
+                    }
+                }
+                return null;
+            },
+            canViewerManageConflict: function (conflictId) {
+                if (this.isStaff) {
+                    return true;
+                }
+                var row = this.getConflictFeedRowById(conflictId);
+                if (!row) {
+                    return false;
+                }
+                return this.toInt(row.viewer_can_manage, 0) === 1;
+            },
+            canViewerResolveConflict: function (conflictId) {
+                if (this.isStaff) {
+                    return true;
+                }
+                var row = this.getConflictFeedRowById(conflictId);
+                if (!row) {
+                    return false;
+                }
+                return this.toInt(row.viewer_can_resolve, 0) === 1;
+            },
+            canViewerCloseConflict: function (conflictId) {
+                if (this.isStaff) {
+                    return true;
+                }
+                var row = this.getConflictFeedRowById(conflictId);
+                if (!row) {
+                    return false;
+                }
+                return this.toInt(row.viewer_can_close, 0) === 1;
+            },
+            resolveConflictFromDetail: function (conflictId) {
+                var id = this.toInt(conflictId, 0);
+                if (id <= 0) {
+                    return;
+                }
+                if (!this.canViewerResolveConflict(id)) {
+                    this.showConflictError({ error_code: 'conflict_write_forbidden' }, 'Non puoi risolvere questo conflitto.');
+                    return;
+                }
+
+                var self = this;
+                var body = '<p class="mb-1">Conflitto <b>#' + this.escapeHtml(String(id)) + '</b></p>'
+                    + '<p class="mb-2">Inserisci il testo di risoluzione per chiudere l\'esito del conflitto.</p>'
+                    + '<label class="form-label">Risoluzione</label>'
+                    + '<textarea class="form-control" name="conflict-resolution-summary" rows="4" maxlength="2000" placeholder="Es: I partecipanti concordano la risoluzione narrativa..."></textarea>';
+                var dialog = Dialog('warning', {
+                    title: 'Risolvi conflitto',
+                    body: body
+                }, function () {
+                    var confirmModal = (typeof getGeneralConfirmModal === 'function')
+                        ? getGeneralConfirmModal()
+                        : $('#general-confirm-modal');
+                    if (!confirmModal || !confirmModal.length) {
+                        self.showConflictError(null, 'Modale di conferma non disponibile.');
+                        return;
+                    }
+                    var summary = String(confirmModal.find('[name="conflict-resolution-summary"]').val() || '').trim();
+                    if (summary === '') {
+                        self.showConflictError({ error_code: 'conflict_resolution_required' }, 'Inserisci almeno un testo di risoluzione.');
+                        return;
+                    }
+
+                    hideGeneralConfirmDialog();
+                    self.apiPost('/conflicts/resolve', {
+                        conflict_id: id,
+                        outcome_summary: summary
+                    }, function () {
+                        if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                            globalWindow.Toast.show({
+                                body: 'Conflitto risolto.',
+                                type: 'success'
+                            });
+                        }
+                        self.loadConflictsFeed({ keepOnError: true, skipIfBusy: false });
+                        self.loadConflictDetail(id);
+                    }, function (error) {
+                        self.showConflictError(error, 'Risoluzione conflitto non riuscita.');
+                    });
+                });
+                dialog.show();
+            },
+            closeConflictFromDetail: function (conflictId) {
+                var id = this.toInt(conflictId, 0);
+                if (id <= 0) {
+                    return;
+                }
+                if (!this.canViewerCloseConflict(id)) {
+                    this.showConflictError({ error_code: 'conflict_write_forbidden' }, 'Non puoi chiudere questo conflitto.');
+                    return;
+                }
+
+                var self = this;
+                var body = '<p class="mb-1">Conflitto <b>#' + this.escapeHtml(String(id)) + '</b></p>'
+                    + '<p class="mb-0">Confermi la chiusura?</p>';
+                var dialog = Dialog('warning', {
+                    title: 'Conferma chiusura',
+                    body: body
+                }, function () {
+                    hideGeneralConfirmDialog();
+                    self.apiPost('/conflicts/close', {
+                        conflict_id: id
+                    }, function () {
+                        if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                            globalWindow.Toast.show({
+                                body: 'Conflitto chiuso.',
+                                type: 'success'
+                            });
+                        }
+                        self.loadConflictsFeed({ keepOnError: true, skipIfBusy: false });
+                        self.loadConflictDetail(id);
+                    }, function (error) {
+                        self.showConflictError(error, 'Chiusura conflitto non riuscita.');
+                    });
+                });
+                dialog.show();
+            },
             renderConflictDetail: function (detail) {
                 var empty = $('#location-conflicts-modal-detail-empty');
                 var box = $('#location-conflicts-modal-detail');
@@ -1181,15 +1538,35 @@ function GameLocationSidebarPage(extension) {
                     actionsHtml = lines.join('');
                 }
 
+                var conflictId = this.toInt(conflict.id, 0);
+                var managementHtml = '';
+                var canResolve = conflictId > 0 && this.canViewerResolveConflict(conflictId);
+                var canClose = conflictId > 0 && this.canViewerCloseConflict(conflictId);
+                if (canResolve || canClose) {
+                    var buttons = '';
+                    if (canResolve) {
+                        buttons += '<button type="button" class="btn btn-sm btn-outline-primary" data-action="location-conflict-resolve" data-conflict-id="' + conflictId + '">Risolvi</button>';
+                    }
+                    if (canClose) {
+                        buttons += '<button type="button" class="btn btn-sm btn-outline-warning" data-action="location-conflict-close" data-conflict-id="' + conflictId + '">Chiudi</button>';
+                    }
+                    managementHtml = ''
+                        + '<hr class="my-2">'
+                        + '<div class="d-flex flex-wrap gap-2">'
+                        + buttons
+                        + '</div>';
+                }
+
                 box.html(
                     '<div class="row g-2">'
-                    + '<div class="col-12 col-md-4"><div class="small text-muted">Conflitto</div><div><b>#' + this.escapeHtml(String(this.toInt(conflict.id, 0))) + '</b> ' + this.conflictStatusBadge(conflict.status) + '</div></div>'
+                    + '<div class="col-12 col-md-4"><div class="small text-muted">Conflitto</div><div><b>#' + this.escapeHtml(String(conflictId)) + '</b> ' + this.conflictStatusBadge(conflict.status) + '</div></div>'
                     + '<div class="col-12 col-md-4"><div class="small text-muted">Modalita</div><div>' + this.conflictModeLabel(conflict.resolution_mode) + '</div></div>'
                     + '<div class="col-12 col-md-4"><div class="small text-muted">Autorita</div><div>' + this.conflictAuthLabel(conflict.resolution_authority) + '</div></div>'
                     + '</div>'
                     + '<hr class="my-2">'
                     + '<div><h6 class="mb-1">Partecipanti</h6>' + participantsHtml + '</div>'
                     + '<div><h6 class="mb-1">Ultime azioni</h6>' + actionsHtml + '</div>'
+                    + managementHtml
                 );
                 box.removeClass('d-none');
                 empty.addClass('d-none');
@@ -2541,16 +2918,1383 @@ function GameLocationSidebarPage(extension) {
                     }
 
                     self.locationCharacters = out;
+                    self.renderStaffCharacterOptions();
                     document.dispatchEvent(new CustomEvent('location:characters.loaded', { detail: { characters: out } }));
                 }, function () {
                     self.locationCharacters = [];
+                    self.renderStaffCharacterOptions();
                     document.dispatchEvent(new CustomEvent('location:characters.loaded', { detail: { characters: [] } }));
                 });
 
                 if (!started) {
                     this.locationCharacters = [];
+                    this.renderStaffCharacterOptions();
                     document.dispatchEvent(new CustomEvent('location:characters.loaded', { detail: { characters: [] } }));
                 }
+            },
+            hasStaffToolsPane: function () {
+                return $('[data-location-staff-tools]').length > 0;
+            },
+            refreshStaffCharacters: function () {
+                if (!this.hasStaffToolsPane()) {
+                    return;
+                }
+                this.loadLocationCharacters();
+                this.loadStaffLocationFlags();
+                if (this.locationCharacters.length > 0) {
+                    this.renderStaffCharacterOptions();
+                }
+            },
+            renderStaffCharacterOptions: function () {
+                if (!this.hasStaffToolsPane()) {
+                    return;
+                }
+                var select = $('[data-staff-character-select]');
+                if (!select.length) {
+                    return;
+                }
+
+                var previous = this.toInt(select.val(), 0);
+                if (previous <= 0) {
+                    previous = this.staffTargetCharacterId;
+                }
+
+                select.empty();
+                select.append('<option value="">Seleziona un personaggio nella location...</option>');
+                for (var i = 0; i < this.locationCharacters.length; i++) {
+                    var character = this.locationCharacters[i] || {};
+                    var id = this.toInt(character.id, 0);
+                    if (id <= 0) {
+                        continue;
+                    }
+                    var label = String(character.label || ('Personaggio #' + id));
+                    select.append('<option value="' + id + '">' + this.escapeHtml(label) + '</option>');
+                }
+
+                var hasPrevious = previous > 0 && select.find('option[value="' + previous + '"]').length > 0;
+                if (hasPrevious) {
+                    select.val(String(previous));
+                    this.staffTargetCharacterId = previous;
+                } else {
+                    this.staffTargetCharacterId = 0;
+                    if (this.locationCharacters.length > 0) {
+                        var first = this.toInt(this.locationCharacters[0].id, 0);
+                        if (first > 0) {
+                            this.staffTargetCharacterId = first;
+                            select.val(String(first));
+                        }
+                    }
+                }
+
+                this.syncStaffBulkSelectionWithCharacters();
+                this.renderStaffBulkTargetList();
+                this.onStaffTargetChanged();
+            },
+            syncStaffBulkSelectionWithCharacters: function () {
+                var available = {};
+                for (var i = 0; i < this.locationCharacters.length; i++) {
+                    var id = this.toInt((this.locationCharacters[i] || {}).id, 0);
+                    if (id > 0) {
+                        available[id] = 1;
+                    }
+                }
+
+                var cleaned = {};
+                var hasAny = false;
+                var keys = Object.keys(this.staffBulkSelection || {});
+                for (var k = 0; k < keys.length; k++) {
+                    var idKey = this.toInt(keys[k], 0);
+                    if (idKey > 0 && available[idKey] === 1 && this.staffBulkSelection[keys[k]] === 1) {
+                        cleaned[idKey] = 1;
+                        hasAny = true;
+                    }
+                }
+                this.staffBulkSelection = cleaned;
+
+                if (!hasAny && this.staffTargetCharacterId > 0 && available[this.staffTargetCharacterId] === 1) {
+                    this.staffBulkSelection[this.staffTargetCharacterId] = 1;
+                }
+            },
+            renderStaffBulkTargetList: function () {
+                var container = $('[data-staff-bulk-list]');
+                if (!container.length) {
+                    return;
+                }
+
+                if (!Array.isArray(this.locationCharacters) || this.locationCharacters.length === 0) {
+                    container.html('<div class="text-muted small py-2">Nessun personaggio disponibile.</div>');
+                    this.renderStaffBulkCount();
+                    return;
+                }
+
+                var html = '';
+                for (var i = 0; i < this.locationCharacters.length; i++) {
+                    var row = this.locationCharacters[i] || {};
+                    var id = this.toInt(row.id, 0);
+                    if (id <= 0) {
+                        continue;
+                    }
+                    var label = String(row.label || ('Personaggio #' + id));
+                    var checked = this.staffBulkSelection[id] === 1 ? ' checked' : '';
+                    html += '<label class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-2">'
+                        + '<input class="form-check-input m-0 position-static flex-shrink-0" type="checkbox" data-staff-bulk-target value="' + id + '"' + checked + '>'
+                        + '<span class="small">' + this.escapeHtml(label) + '</span>'
+                        + '</label>';
+                }
+
+                if (html === '') {
+                    html = '<div class="text-muted small py-2">Nessun personaggio disponibile.</div>';
+                }
+                container.html(html);
+                this.renderStaffBulkCount();
+            },
+            renderStaffBulkCount: function () {
+                var count = this.getStaffSelectedTargetIds().length;
+                var badge = $('[data-staff-bulk-count]');
+                if (!badge.length) {
+                    return;
+                }
+                badge.text(count + (count === 1 ? ' selezionato' : ' selezionati'));
+            },
+            onStaffBulkTargetToggled: function (checkbox) {
+                var id = this.toInt(checkbox.val(), 0);
+                if (id <= 0) {
+                    return;
+                }
+                if (checkbox.is(':checked')) {
+                    this.staffBulkSelection[id] = 1;
+                } else {
+                    delete this.staffBulkSelection[id];
+                }
+                this.renderStaffBulkCount();
+            },
+            staffSelectAllTargets: function () {
+                var next = {};
+                for (var i = 0; i < this.locationCharacters.length; i++) {
+                    var id = this.toInt((this.locationCharacters[i] || {}).id, 0);
+                    if (id > 0) {
+                        next[id] = 1;
+                    }
+                }
+                this.staffBulkSelection = next;
+                this.renderStaffBulkTargetList();
+            },
+            staffClearTargets: function () {
+                this.staffBulkSelection = {};
+                this.renderStaffBulkTargetList();
+            },
+            staffSelectCurrentTargetOnly: function () {
+                this.staffBulkSelection = {};
+                if (this.staffTargetCharacterId > 0) {
+                    this.staffBulkSelection[this.staffTargetCharacterId] = 1;
+                }
+                this.renderStaffBulkTargetList();
+            },
+            getStaffSelectedTargetIds: function () {
+                var ids = [];
+                var keys = Object.keys(this.staffBulkSelection || {});
+                for (var i = 0; i < keys.length; i++) {
+                    var id = this.toInt(keys[i], 0);
+                    if (id > 0 && this.staffBulkSelection[keys[i]] === 1) {
+                        ids.push(id);
+                    }
+                }
+                if (ids.length === 0 && this.staffTargetCharacterId > 0) {
+                    ids.push(this.staffTargetCharacterId);
+                }
+                return ids;
+            },
+            requireStaffTargetIds: function () {
+                var ids = this.getStaffSelectedTargetIds();
+                if (ids.length <= 0) {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Seleziona almeno un personaggio target.', type: 'warning' });
+                    }
+                    return [];
+                }
+                return ids;
+            },
+            onStaffTargetChanged: function () {
+                if (!this.hasStaffToolsPane()) {
+                    return;
+                }
+                var self = this;
+                var select = $('[data-staff-character-select]');
+                var targetCharacterId = this.toInt(select.val(), 0);
+                this.staffTargetCharacterId = targetCharacterId;
+                this.staffTargetUserId = 0;
+                this.staffTargetRestricted = 0;
+                this.staffTargetProfile = null;
+                if (targetCharacterId > 0 && Object.keys(this.staffBulkSelection || {}).length <= 0) {
+                    this.staffBulkSelection[targetCharacterId] = 1;
+                    this.renderStaffBulkTargetList();
+                }
+
+                var summary = $('[data-staff-target-summary]');
+                if (targetCharacterId <= 0) {
+                    summary.text('Nessun personaggio selezionato.');
+                    $('[data-staff-health]').val('');
+                    $('[data-staff-health-max]').val('');
+                    this.staffFillScopedRestrictionInputs(null);
+                    return;
+                }
+
+                summary.text('Caricamento dettagli personaggio...');
+                this.callProfile('getProfile', targetCharacterId, function (response) {
+                    var profile = response && response.dataset ? response.dataset : null;
+                    if (!profile) {
+                        summary.text('Impossibile caricare i dettagli del personaggio.');
+                        return;
+                    }
+
+                    self.staffTargetProfile = profile;
+                    self.staffTargetUserId = self.toInt(profile.user_id, 0);
+                    $('[data-staff-health]').val(profile.health != null ? String(profile.health) : '');
+                    $('[data-staff-health-max]').val(profile.health_max != null ? String(profile.health_max) : '');
+
+                    var fullName = String(((profile.name || '') + ' ' + (profile.surname || '')).trim());
+                    if (fullName === '') {
+                        fullName = 'Personaggio #' + targetCharacterId;
+                    }
+                    var hpCurrent = (profile.health != null) ? String(profile.health) : '-';
+                    var hpMax = (profile.health_max != null) ? String(profile.health_max) : '-';
+                    var exp = (profile.experience != null) ? String(profile.experience) : '0';
+                    summary.html(
+                        '<b>' + self.escapeHtml(fullName) + '</b>'
+                        + ' · HP ' + self.escapeHtml(hpCurrent) + '/' + self.escapeHtml(hpMax)
+                        + ' · XP ' + self.escapeHtml(exp)
+                    );
+
+                    if ($('[data-action="location-staff-restrict-user"]').length > 0) {
+                        self.staffFillScopedRestrictionInputs(null);
+                        self.callProfile('staffSetRestriction', {
+                            character_id: targetCharacterId,
+                            mode: 'get',
+                        }, function (restrictionResponse) {
+                            var dataset = restrictionResponse && restrictionResponse.dataset ? restrictionResponse.dataset : {};
+                            self.staffTargetRestricted = self.toInt(dataset.is_restricted, 0) === 1 ? 1 : 0;
+                            self.staffFillScopedRestrictionInputs(dataset);
+                        }, function () {});
+                    }
+
+                    self.prefillStaffFlagForCurrentTarget();
+                }, function () {
+                    summary.text('Impossibile caricare i dettagli del personaggio.');
+                });
+            },
+            renderStaffItemSuggestions: function (items) {
+                if (!this.hasStaffToolsPane()) {
+                    return;
+                }
+                var list = $('[data-staff-item-suggestions]');
+                if (!list.length) {
+                    return;
+                }
+
+                var rows = Array.isArray(items) ? items : [];
+                if (rows.length <= 0) {
+                    list.addClass('d-none').empty();
+                    return;
+                }
+
+                var html = '';
+                for (var i = 0; i < rows.length; i++) {
+                    var item = rows[i] || {};
+                    var id = this.toInt(item.id, 0);
+                    if (id <= 0) {
+                        continue;
+                    }
+                    var name = String(item.name || ('Oggetto #' + id));
+                    var type = String(item.type || item.item_kind || 'generico');
+                    html += '<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-action="location-staff-select-item" data-item-id="' + id + '" data-item-name="' + this.escapeHtml(name) + '">'
+                        + '<span>' + this.escapeHtml(name) + '</span>'
+                        + '<span class="small text-muted">' + this.escapeHtml(type) + '</span>'
+                        + '</button>';
+                }
+
+                if (html === '') {
+                    list.addClass('d-none').empty();
+                    return;
+                }
+
+                list.html(html).removeClass('d-none');
+            },
+            renderStaffItemSelectedLabel: function (itemName, itemId) {
+                var label = $('[data-staff-item-selected]');
+                if (!label.length) {
+                    return;
+                }
+                var id = this.toInt(itemId, 0);
+                var name = String(itemName || '').trim();
+                if (id <= 0 || name === '') {
+                    label.text('Nessun oggetto selezionato.');
+                    return;
+                }
+                label.html('<b>' + this.escapeHtml(name) + '</b> (ID #' + id + ')');
+            },
+            requireStaffTargetCharacterId: function () {
+                var targetCharacterId = this.toInt($('[data-staff-character-select]').val(), 0);
+                if (targetCharacterId <= 0) {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Seleziona prima un personaggio.', type: 'warning' });
+                    }
+                    return 0;
+                }
+                return targetCharacterId;
+            },
+            staffFeedTime: function () {
+                try {
+                    return new Intl.DateTimeFormat('it-IT', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    }).format(new Date());
+                } catch (error) {
+                    return '--:--:--';
+                }
+            },
+            pushStaffActionFeed: function (summary, detail) {
+                var entry = {
+                    at: this.staffFeedTime(),
+                    summary: String(summary || '').trim(),
+                    detail: String(detail || '').trim()
+                };
+                if (entry.summary === '') {
+                    return;
+                }
+                this.staffActionFeed.unshift(entry);
+                if (this.staffActionFeed.length > 30) {
+                    this.staffActionFeed = this.staffActionFeed.slice(0, 30);
+                }
+                this.renderStaffActionFeed();
+            },
+            renderStaffActionFeed: function () {
+                var wrap = $('[data-staff-action-feed]');
+                if (!wrap.length) {
+                    return;
+                }
+                if (!Array.isArray(this.staffActionFeed) || this.staffActionFeed.length === 0) {
+                    wrap.html('<div class="text-muted">Nessuna azione registrata.</div>');
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < this.staffActionFeed.length; i++) {
+                    var row = this.staffActionFeed[i] || {};
+                    html += '<div class="border rounded p-2 mb-2">'
+                        + '<div class="d-flex justify-content-between align-items-start gap-2">'
+                        + '<span class="fw-semibold small">' + this.escapeHtml(String(row.summary || '')) + '</span>'
+                        + '<span class="text-muted small">' + this.escapeHtml(String(row.at || '--:--:--')) + '</span>'
+                        + '</div>'
+                        + (row.detail ? '<div class="small text-muted mt-1">' + this.escapeHtml(String(row.detail || '')) + '</div>' : '')
+                        + '</div>';
+                }
+                wrap.html(html);
+            },
+            staffFillScopedRestrictionInputs: function (dataset) {
+                var data = dataset || {};
+                var chat = this.toInt(data.restrict_chat, 0) === 1;
+                var whisper = this.toInt(data.restrict_whisper, 0) === 1;
+                var commands = this.toInt(data.restrict_commands, 0) === 1;
+                $('[data-staff-restrict-chat]').prop('checked', chat);
+                $('[data-staff-restrict-whisper]').prop('checked', whisper);
+                $('[data-staff-restrict-commands]').prop('checked', commands);
+            },
+            staffSaveScopedRestrictions: function () {
+                var targetCharacterId = this.requireStaffTargetCharacterId();
+                if (targetCharacterId <= 0) {
+                    return;
+                }
+                var self = this;
+                this.callProfile('staffSetRestriction', {
+                    character_id: targetCharacterId,
+                    restrict_chat: $('[data-staff-restrict-chat]').is(':checked') ? 1 : 0,
+                    restrict_whisper: $('[data-staff-restrict-whisper]').is(':checked') ? 1 : 0,
+                    restrict_commands: $('[data-staff-restrict-commands]').is(':checked') ? 1 : 0
+                }, function (response) {
+                    var dataset = response && response.dataset ? response.dataset : {};
+                    self.staffFillScopedRestrictionInputs(dataset);
+                    self.pushStaffActionFeed(
+                        'Restrizioni mirate aggiornate',
+                        'Chat: ' + (self.toInt(dataset.restrict_chat, 0) === 1 ? 'off' : 'on')
+                        + ', Sussurri: ' + (self.toInt(dataset.restrict_whisper, 0) === 1 ? 'off' : 'on')
+                        + ', Comandi: ' + (self.toInt(dataset.restrict_commands, 0) === 1 ? 'off' : 'on')
+                    );
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Restrizioni mirate aggiornate.', type: 'success' });
+                    }
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante il salvataggio restrizioni.', type: 'error' });
+                    }
+                });
+            },
+            formatStaffMacroMessage: function () {
+                var mode = String($('[data-staff-macro-template]').val() || 'master').trim().toLowerCase();
+                var title = String($('[data-staff-macro-title]').val() || '').trim();
+                var body = String($('[data-staff-macro-body]').val() || '').trim();
+                if (body === '') {
+                    return null;
+                }
+                var prefix = 'Intervento master';
+                if (mode === 'esito') {
+                    prefix = 'Esito azione';
+                } else if (mode === 'avviso') {
+                    prefix = 'Avviso scena';
+                } else if (mode === 'chiusura') {
+                    prefix = 'Chiusura scena';
+                }
+                return {
+                    mode: mode,
+                    title: title !== '' ? title : prefix,
+                    body: body
+                };
+            },
+            staffSendMacroMessage: function () {
+                var macro = this.formatStaffMacroMessage();
+                if (!macro || String(macro.body || '').trim() === '') {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Scrivi un testo prima di inviare il messaggio.', type: 'warning' });
+                    }
+                    return;
+                }
+                var self = this;
+                this.staffPostChatNotice({
+                    title: String(macro.title || 'Intervento master'),
+                    message: String(macro.body || ''),
+                    visibility: 'public',
+                    kind: 'macro_' + String(macro.mode || 'master')
+                }, function (response) {
+                    $('[data-staff-macro-body]').val('');
+                    $('[data-staff-macro-title]').val('');
+                    self.pushStaffActionFeed('Messaggio sistema inviato', String(macro.body || '').substring(0, 160));
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Messaggio di sistema inviato in chat.', type: 'success' });
+                    }
+                }, function (error) {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({
+                            body: self.extractApiErrorMessage(error, 'Errore durante invio messaggio macro.'),
+                            type: 'error'
+                        });
+                    }
+                });
+            },
+            getStaffCharacterLabelById: function (characterId) {
+                var id = this.toInt(characterId, 0);
+                if (id <= 0) {
+                    return 'Personaggio sconosciuto';
+                }
+                for (var i = 0; i < this.locationCharacters.length; i++) {
+                    var row = this.locationCharacters[i] || {};
+                    if (this.toInt(row.id, 0) === id) {
+                        return String(row.label || ('Personaggio #' + id));
+                    }
+                }
+                return 'Personaggio #' + id;
+            },
+            getStaffTargetsLabel: function (targetIds) {
+                var ids = Array.isArray(targetIds) ? targetIds : [];
+                var labels = [];
+                for (var i = 0; i < ids.length; i++) {
+                    labels.push(this.getStaffCharacterLabelById(ids[i]));
+                }
+                if (labels.length <= 0) {
+                    return 'nessun target';
+                }
+                if (labels.length === 1) {
+                    return labels[0];
+                }
+                if (labels.length === 2) {
+                    return labels[0] + ' e ' + labels[1];
+                }
+                return labels.slice(0, 2).join(', ') + ' e altri ' + (labels.length - 2);
+            },
+            buildNarrativePublicStateNotice: function (action, stateName, targetIds) {
+                var verb = String(action || '').trim().toLowerCase();
+                var state = String(stateName || 'Effetto').trim();
+                var count = Array.isArray(targetIds) ? targetIds.length : 0;
+                if (count <= 0) {
+                    count = 1;
+                }
+
+                if (verb === 'apply') {
+                    if (count === 1) {
+                        return 'Un nuovo effetto narrativo prende forma: "' + state + '".';
+                    }
+                    return 'Nuovi effetti narrativi attraversano la scena: "' + state + '".';
+                }
+
+                if (count === 1) {
+                    return 'L\'effetto narrativo "' + state + '" si dissolve.';
+                }
+                return 'Gli effetti narrativi "' + state + '" svaniscono dalla scena.';
+            },
+            getStaffStateById: function (stateId) {
+                var id = this.toInt(stateId, 0);
+                if (id <= 0) {
+                    return null;
+                }
+                var rows = Array.isArray(this.staffNarrativeCatalog) ? this.staffNarrativeCatalog : [];
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    if (this.toInt(row.id, 0) === id) {
+                        return row;
+                    }
+                }
+                return null;
+            },
+            staffPostChatNotice: function (payload, onSuccess, onError) {
+                var data = payload || {};
+                var self = this;
+                this.apiPost('/location/messages/staff-notice', {
+                    location_id: this.location_id,
+                    title: String(data.title || '').trim(),
+                    message: String(data.message || '').trim(),
+                    visibility: String(data.visibility || 'staff').trim().toLowerCase(),
+                    kind: String(data.kind || 'generic').trim().toLowerCase(),
+                    state_name: String(data.state_name || '').trim(),
+                    state_action: String(data.state_action || '').trim().toLowerCase(),
+                    target_count: this.toInt(data.target_count, 0)
+                }, function (response) {
+                    var row = response && response.dataset ? response.dataset : null;
+                    if (row && globalWindow.LocationChat && typeof globalWindow.LocationChat.appendMessages === 'function') {
+                        globalWindow.LocationChat.appendMessages([row]);
+                    } else if (globalWindow.LocationChat && typeof globalWindow.LocationChat.load === 'function') {
+                        globalWindow.LocationChat.load(true);
+                    } else {
+                        self.loadProfile({ keepOnError: true, skipIfBusy: true });
+                    }
+                    if (typeof onSuccess === 'function') {
+                        onSuccess(response);
+                    }
+                }, function (error) {
+                    if (typeof onError === 'function') {
+                        onError(error);
+                    }
+                });
+            },
+            runStaffActionForTargets: function (targetIds, runSingle, done) {
+                var ids = Array.isArray(targetIds) ? targetIds : [];
+                var index = 0;
+                var ok = 0;
+                var fail = 0;
+                var firstError = '';
+                var self = this;
+
+                var next = function () {
+                    if (index >= ids.length) {
+                        if (typeof done === 'function') {
+                            done({ ok: ok, fail: fail, total: ids.length, firstError: firstError });
+                        }
+                        return;
+                    }
+                    var targetId = self.toInt(ids[index], 0);
+                    index += 1;
+                    if (targetId <= 0) {
+                        fail += 1;
+                        next();
+                        return;
+                    }
+                    runSingle(targetId, function (success, errorMessage) {
+                        if (success) {
+                            ok += 1;
+                        } else {
+                            fail += 1;
+                            if (!firstError && typeof errorMessage === 'string' && errorMessage.trim() !== '') {
+                                firstError = errorMessage.trim();
+                            }
+                        }
+                        next();
+                    });
+                };
+                next();
+            },
+            loadStaffNarrativeStateCatalog: function () {
+                var self = this;
+                this.callProfile('narrativeStatesCatalog', { include_hidden: 1 }, function (response) {
+                    self.staffNarrativeCatalog = response && response.dataset ? response.dataset : [];
+                    self.renderStaffStateSuggestions([]);
+                    self.renderStaffStateSelectedLabel(null);
+                    self.updateStaffDurationModeUi();
+                }, function () {
+                    self.staffNarrativeCatalog = [];
+                    self.renderStaffStateSuggestions([]);
+                    self.renderStaffStateSelectedLabel(null);
+                });
+            },
+            staffSetSelectedStateId: function (stateId) {
+                $('[data-staff-state-select]').val(String(this.toInt(stateId, 0)));
+            },
+            renderStaffStateSelectedLabel: function (stateRow) {
+                var label = $('[data-staff-state-selected]');
+                if (!label.length) {
+                    return;
+                }
+                var row = stateRow || null;
+                if (!row || this.toInt(row.id, 0) <= 0) {
+                    label.text('Nessuno stato selezionato.');
+                    return;
+                }
+
+                var name = String(row.name || ('Stato #' + this.toInt(row.id, 0)));
+                var code = String(row.code || '').trim();
+                var category = String(row.category || '').trim();
+                var chunks = ['<b>' + this.escapeHtml(name) + '</b>'];
+                if (code !== '') {
+                    chunks.push('codice: ' + this.escapeHtml(code));
+                }
+                if (category !== '') {
+                    chunks.push('categoria: ' + this.escapeHtml(category));
+                }
+
+                label.html(chunks.join(' · '));
+            },
+            filterStaffStatesByQuery: function (query) {
+                var q = String(query || '').trim().toLowerCase();
+                var rows = Array.isArray(this.staffNarrativeCatalog) ? this.staffNarrativeCatalog : [];
+                if (q === '') {
+                    return [];
+                }
+
+                var filtered = [];
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var id = this.toInt(row.id, 0);
+                    if (id <= 0) {
+                        continue;
+                    }
+                    var name = String(row.name || '');
+                    var code = String(row.code || '');
+                    var category = String(row.category || '');
+                    var hay = (name + ' ' + code + ' ' + category).toLowerCase();
+                    if (hay.indexOf(q) === -1) {
+                        continue;
+                    }
+                    filtered.push(row);
+                    if (filtered.length >= 15) {
+                        break;
+                    }
+                }
+
+                return filtered;
+            },
+            renderStaffStateSuggestions: function (states) {
+                var list = $('[data-staff-state-suggestions]');
+                if (!list.length) {
+                    return;
+                }
+                var rows = Array.isArray(states) ? states : [];
+                if (rows.length <= 0) {
+                    list.addClass('d-none').empty();
+                    return;
+                }
+
+                var html = '';
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var id = this.toInt(row.id, 0);
+                    if (id <= 0) {
+                        continue;
+                    }
+                    var name = String(row.name || ('Stato #' + id));
+                    var code = String(row.code || '').trim();
+                    var category = String(row.category || '').trim();
+                    var right = code !== '' ? code : (category !== '' ? category : ('ID ' + id));
+                    html += '<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"'
+                        + ' data-action="location-staff-select-state" data-state-id="' + id + '">'
+                        + '<span>' + this.escapeHtml(name) + '</span>'
+                        + '<span class="small text-muted">' + this.escapeHtml(right) + '</span>'
+                        + '</button>';
+                }
+
+                if (html === '') {
+                    list.addClass('d-none').empty();
+                    return;
+                }
+                list.html(html).removeClass('d-none');
+            },
+            selectStaffState: function (stateRow) {
+                var row = stateRow || null;
+                var id = row ? this.toInt(row.id, 0) : 0;
+                if (id <= 0) {
+                    this.staffSetSelectedStateId(0);
+                    this.renderStaffStateSelectedLabel(null);
+                    return;
+                }
+
+                var name = String(row.name || ('Stato #' + id));
+                var code = String(row.code || '').trim();
+                $('[data-staff-state-query]').val(code !== '' ? (name + ' [' + code + ']') : name);
+                this.staffSetSelectedStateId(id);
+                this.renderStaffStateSelectedLabel(row);
+                this.renderStaffStateSuggestions([]);
+            },
+            updateStaffDurationModeUi: function () {
+                var mode = String($('[data-staff-state-duration-mode]').val() || 'permanent').trim().toLowerCase();
+                var wrap = $('[data-staff-state-duration-value-wrap]');
+                var input = $('[data-staff-state-duration-value]');
+                if (!wrap.length || !input.length) {
+                    return;
+                }
+                var needsValue = (mode === 'turn' || mode === 'minute' || mode === 'hour' || mode === 'day');
+                wrap.toggleClass('d-none', !needsValue);
+                if (!needsValue) {
+                    input.val('1');
+                }
+            },
+            toggleStaffStateAdvancedOptions: function (button) {
+                var wrap = $('[data-staff-state-advanced-wrap]');
+                if (!wrap.length) {
+                    return;
+                }
+                var nextVisible = wrap.hasClass('d-none');
+                wrap.toggleClass('d-none', !nextVisible);
+                if (button && button.length) {
+                    button.text(nextVisible ? 'Nascondi opzioni avanzate' : 'Mostra opzioni avanzate');
+                }
+            },
+            getStaffStatePayloadBase: function () {
+                var stateId = this.toInt($('[data-staff-state-select]').val(), 0);
+                if (stateId <= 0) {
+                    return null;
+                }
+                return {
+                    state_id: stateId,
+                    target_type: 'character',
+                    scene_id: this.location_id
+                };
+            },
+            staffApplyNarrativeStateBulk: function () {
+                var base = this.getStaffStatePayloadBase();
+                if (!base) {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Seleziona uno stato narrativo.', type: 'warning' });
+                    }
+                    return;
+                }
+                var targets = this.requireStaffTargetIds();
+                if (targets.length <= 0) {
+                    return;
+                }
+                var intensity = parseFloat(String($('[data-staff-state-intensity]').val() || '1').replace(',', '.'));
+                if (isNaN(intensity) || intensity <= 0) {
+                    intensity = 1;
+                }
+                var durationMode = String($('[data-staff-state-duration-mode]').val() || 'permanent').trim().toLowerCase();
+                var durationValue = 0;
+                var durationUnit = 'scene';
+                if (durationMode === 'scene') {
+                    durationValue = 1;
+                    durationUnit = 'scene';
+                } else if (durationMode === 'turn') {
+                    durationValue = Math.max(1, this.toInt($('[data-staff-state-duration-value]').val(), 1));
+                    durationUnit = 'turn';
+                } else if (durationMode === 'minute') {
+                    durationValue = Math.max(1, this.toInt($('[data-staff-state-duration-value]').val(), 1));
+                    durationUnit = 'minute';
+                } else if (durationMode === 'hour') {
+                    durationValue = Math.max(1, this.toInt($('[data-staff-state-duration-value]').val(), 1));
+                    durationUnit = 'hour';
+                } else if (durationMode === 'day') {
+                    durationValue = Math.max(1, this.toInt($('[data-staff-state-duration-value]').val(), 1));
+                    durationUnit = 'day';
+                }
+                var selectedState = this.getStaffStateById(base.state_id);
+                var stateName = selectedState && selectedState.name ? String(selectedState.name) : ('Stato #' + base.state_id);
+                var statePublicVisible = selectedState && this.toInt(selectedState.visible_to_players, 0) === 1;
+                var targetsLabel = this.getStaffTargetsLabel(targets);
+                var self = this;
+                this.runStaffActionForTargets(targets, function (targetId, done) {
+                    self.callProfile('narrativeStateApply', {
+                        state_id: base.state_id,
+                        target_type: 'character',
+                        target_id: targetId,
+                        scene_id: self.location_id,
+                        intensity: intensity,
+                        duration_value: durationValue,
+                        duration_unit: durationUnit
+                    }, function () {
+                        done(true);
+                    }, function (error) {
+                        done(false, self.extractApiErrorMessage(error, 'Applicazione stato non riuscita.'));
+                    });
+                }, function (result) {
+                    self.pushStaffActionFeed(
+                        'Stato narrativo applicato',
+                        result.ok + '/' + result.total + ' target completati'
+                    );
+                    if (result.ok > 0) {
+                        self.staffPostChatNotice({
+                            title: 'Registro staff: stato applicato',
+                            message: 'Applicato "' + stateName + '" su ' + result.ok + '/' + result.total + ' target (' + targetsLabel + ').',
+                            visibility: 'staff',
+                            kind: 'state_apply',
+                            state_name: stateName,
+                            state_action: 'apply',
+                            target_count: result.ok
+                        });
+                        if (statePublicVisible) {
+                            self.staffPostChatNotice({
+                                title: 'Aggiornamento narrativo',
+                                message: self.buildNarrativePublicStateNotice('apply', stateName, targets),
+                                visibility: 'public',
+                                kind: 'state_apply_public',
+                                state_name: stateName,
+                                state_action: 'apply',
+                                target_count: result.ok
+                            });
+                        }
+                    }
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({
+                            body: 'Stato applicato: ' + result.ok + ' ok, ' + result.fail + ' errori.'
+                                + (result.firstError ? (' Dettaglio: ' + result.firstError) : ''),
+                            type: result.fail > 0 ? 'warning' : 'success'
+                        });
+                    }
+                });
+            },
+            staffRemoveNarrativeStateBulk: function () {
+                var base = this.getStaffStatePayloadBase();
+                if (!base) {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Seleziona uno stato narrativo.', type: 'warning' });
+                    }
+                    return;
+                }
+                var reason = String($('[data-staff-state-remove-reason]').val() || 'manual_remove').trim();
+                if (reason === '') {
+                    reason = 'manual_remove';
+                }
+                var selectedState = this.getStaffStateById(base.state_id);
+                var stateName = selectedState && selectedState.name ? String(selectedState.name) : ('Stato #' + base.state_id);
+                var statePublicVisible = selectedState && this.toInt(selectedState.visible_to_players, 0) === 1;
+                var targets = this.requireStaffTargetIds();
+                if (targets.length <= 0) {
+                    return;
+                }
+                var targetsLabel = this.getStaffTargetsLabel(targets);
+                var self = this;
+                this.runStaffActionForTargets(targets, function (targetId, done) {
+                    self.callProfile('narrativeStateRemove', {
+                        state_id: base.state_id,
+                        target_type: 'character',
+                        target_id: targetId,
+                        scene_id: self.location_id,
+                        reason: reason,
+                        ignore_missing: 1
+                    }, function (response) {
+                        var dataset = response && response.dataset ? response.dataset : {};
+                        var status = String(dataset.status || '').trim().toLowerCase();
+                        var removedCount = self.toInt(dataset.removed_count, 0);
+                        if (removedCount > 0 || status === 'noop') {
+                            done(true);
+                            return;
+                        }
+                        done(false, 'Nessuno stato attivo da rimuovere per uno o piu target.');
+                    }, function (error) {
+                        done(false, self.extractApiErrorMessage(error, 'Rimozione stato non riuscita.'));
+                    });
+                }, function (result) {
+                    self.pushStaffActionFeed(
+                        'Stato narrativo rimosso',
+                        result.ok + '/' + result.total + ' target completati'
+                    );
+                    if (result.ok > 0) {
+                        self.staffPostChatNotice({
+                            title: 'Registro staff: stato rimosso',
+                            message: 'Rimosso "' + stateName + '" da ' + result.ok + '/' + result.total + ' target (' + targetsLabel + '). Motivo: ' + reason + '.',
+                            visibility: 'staff',
+                            kind: 'state_remove',
+                            state_name: stateName,
+                            state_action: 'remove',
+                            target_count: result.ok
+                        });
+                        if (statePublicVisible) {
+                            self.staffPostChatNotice({
+                                title: 'Aggiornamento narrativo',
+                                message: self.buildNarrativePublicStateNotice('remove', stateName, targets),
+                                visibility: 'public',
+                                kind: 'state_remove_public',
+                                state_name: stateName,
+                                state_action: 'remove',
+                                target_count: result.ok
+                            });
+                        }
+                    }
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({
+                            body: 'Stato rimosso: ' + result.ok + ' ok, ' + result.fail + ' errori.'
+                                + (result.firstError ? (' Dettaglio: ' + result.firstError) : ''),
+                            type: result.fail > 0 ? 'warning' : 'success'
+                        });
+                    }
+                });
+            },
+            loadStaffLocationNotes: function () {
+                var self = this;
+                this.apiPost('/location/staff-notes/list', { location_id: this.location_id }, function (response) {
+                    self.renderStaffLocationNotes(response && response.dataset ? response.dataset : []);
+                }, function () {
+                    self.renderStaffLocationNotes([]);
+                });
+            },
+            renderStaffLocationNotes: function (rows) {
+                var wrap = $('[data-staff-notes-list]');
+                if (!wrap.length) {
+                    return;
+                }
+                var list = Array.isArray(rows) ? rows : [];
+                if (list.length <= 0) {
+                    wrap.html('<div class="text-muted">Nessuna nota presente.</div>');
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < list.length; i++) {
+                    var note = list[i] || {};
+                    var id = this.toInt(note.id, 0);
+                    if (id <= 0) {
+                        continue;
+                    }
+                    var author = String(((note.author_name || '') + ' ' + (note.author_surname || '')).trim());
+                    if (author === '') {
+                        author = 'Staff';
+                    }
+                    var priority = String(note.priority || 'normal');
+                    var badge = 'secondary';
+                    if (priority === 'high') {
+                        badge = 'danger';
+                    } else if (priority === 'low') {
+                        badge = 'info';
+                    }
+                    html += '<div class="border rounded p-2 mb-2">'
+                        + '<div class="d-flex justify-content-between align-items-start gap-2">'
+                        + '<span class="small fw-semibold">' + this.escapeHtml(author) + '</span>'
+                        + '<div class="d-flex align-items-center gap-2">'
+                        + '<span class="badge text-bg-' + badge + '">' + this.escapeHtml(priority) + '</span>'
+                        + '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" data-action="location-staff-note-delete" data-note-id="' + id + '"><i class="bi bi-trash"></i></button>'
+                        + '</div>'
+                        + '</div>'
+                        + '<div class="small mt-1">' + this.escapeHtml(String(note.note_text || '')) + '</div>'
+                        + '</div>';
+                }
+                wrap.html(html !== '' ? html : '<div class="text-muted">Nessuna nota presente.</div>');
+            },
+            staffSaveLocationNote: function () {
+                var text = String($('[data-staff-note-text]').val() || '').trim();
+                if (text === '') {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Inserisci prima il testo della nota.', type: 'warning' });
+                    }
+                    return;
+                }
+                var priority = String($('[data-staff-note-priority]').val() || 'normal').trim().toLowerCase();
+                var self = this;
+                this.apiPost('/location/staff-note/upsert', {
+                    location_id: this.location_id,
+                    note_text: text,
+                    priority: priority
+                }, function () {
+                    var preview = text.length > 140 ? (text.substring(0, 137) + '...') : text;
+                    $('[data-staff-note-text]').val('');
+                    self.loadStaffLocationNotes();
+                    self.pushStaffActionFeed('Nota privata salvata', 'Priorita: ' + priority);
+                    self.staffPostChatNotice({
+                        title: 'Registro staff: nota location',
+                        message: 'Nota staff salvata (priorita: ' + priority + '). Dettaglio: ' + preview,
+                        visibility: 'staff',
+                        kind: 'staff_note_location'
+                    });
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Nota staff salvata.', type: 'success' });
+                    }
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante il salvataggio della nota.', type: 'error' });
+                    }
+                });
+            },
+            staffDeleteLocationNote: function (noteId) {
+                var id = this.toInt(noteId, 0);
+                if (id <= 0) {
+                    return;
+                }
+                var self = this;
+                this.apiPost('/location/staff-note/delete', { id: id }, function () {
+                    self.loadStaffLocationNotes();
+                    self.pushStaffActionFeed('Nota privata rimossa', 'ID #' + id);
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante la rimozione della nota.', type: 'error' });
+                    }
+                });
+            },
+            loadStaffLocationFlags: function () {
+                var self = this;
+                this.apiPost('/location/staff-flags/list', { location_id: this.location_id }, function (response) {
+                    var rows = response && response.dataset ? response.dataset : [];
+                    self.staffFlagsIndex = {};
+                    for (var i = 0; i < rows.length; i++) {
+                        var row = rows[i] || {};
+                        var characterId = self.toInt(row.character_id, 0);
+                        if (characterId > 0) {
+                            self.staffFlagsIndex[characterId] = row;
+                        }
+                    }
+                    self.renderStaffFlagsList(rows);
+                    self.prefillStaffFlagForCurrentTarget();
+                }, function () {
+                    self.staffFlagsIndex = {};
+                    self.renderStaffFlagsList([]);
+                });
+            },
+            renderStaffFlagsList: function (rows) {
+                var wrap = $('[data-staff-flags-list]');
+                if (!wrap.length) {
+                    return;
+                }
+                var list = Array.isArray(rows) ? rows : [];
+                if (list.length <= 0) {
+                    wrap.html('<div class="text-muted">Nessun flag presente.</div>');
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < list.length; i++) {
+                    var row = list[i] || {};
+                    var name = String(((row.name || '') + ' ' + (row.surname || '')).trim());
+                    if (name === '') {
+                        name = 'Personaggio #' + this.toInt(row.character_id, 0);
+                    }
+                    var flag = String(row.flag || 'none');
+                    var note = String(row.note_text || '').trim();
+                    html += '<div class="border rounded p-2 mb-2">'
+                        + '<div class="d-flex justify-content-between align-items-start gap-2">'
+                        + '<span class="small fw-semibold">' + this.escapeHtml(name) + '</span>'
+                        + '<span class="badge text-bg-' + this.staffFlagBadge(flag) + '">' + this.escapeHtml(flag) + '</span>'
+                        + '</div>'
+                        + (note !== '' ? '<div class="small text-muted mt-1">' + this.escapeHtml(note) + '</div>' : '')
+                        + '</div>';
+                }
+                wrap.html(html);
+            },
+            staffFlagBadge: function (flag) {
+                var key = String(flag || '').toLowerCase();
+                if (key === 'critical') {
+                    return 'danger';
+                }
+                if (key === 'urgent') {
+                    return 'warning';
+                }
+                if (key === 'monitor') {
+                    return 'info';
+                }
+                return 'secondary';
+            },
+            prefillStaffFlagForCurrentTarget: function () {
+                var targetId = this.toInt(this.staffTargetCharacterId, 0);
+                var row = targetId > 0 ? this.staffFlagsIndex[targetId] : null;
+                $('[data-staff-flag-select]').val(String((row && row.flag) ? row.flag : 'none'));
+                $('[data-staff-flag-note]').val(String((row && row.note_text) ? row.note_text : ''));
+            },
+            staffSaveCharacterFlag: function () {
+                var targetCharacterId = this.requireStaffTargetCharacterId();
+                if (targetCharacterId <= 0) {
+                    return;
+                }
+                var flag = String($('[data-staff-flag-select]').val() || 'none').trim().toLowerCase();
+                var note = String($('[data-staff-flag-note]').val() || '').trim();
+                var targetLabel = this.getStaffCharacterLabelById(targetCharacterId);
+                var self = this;
+                this.apiPost('/location/staff-flag/upsert', {
+                    location_id: this.location_id,
+                    character_id: targetCharacterId,
+                    flag: flag,
+                    note_text: note
+                }, function () {
+                    var notePreview = note.length > 140 ? (note.substring(0, 137) + '...') : note;
+                    self.loadStaffLocationFlags();
+                    self.pushStaffActionFeed('Flag urgenza aggiornato', 'Target #' + targetCharacterId + ' -> ' + flag);
+                    self.staffPostChatNotice({
+                        title: 'Registro staff: flag urgenza',
+                        message: 'Target: ' + targetLabel + '. Nuovo flag: ' + flag + '.',
+                        visibility: 'staff',
+                        kind: 'flag_update'
+                    });
+                    if (note !== '') {
+                        self.staffPostChatNotice({
+                            title: 'Registro staff: nota giocatore',
+                            message: 'Nota staff su ' + targetLabel + ': ' + notePreview,
+                            visibility: 'staff',
+                            kind: 'staff_note_player'
+                        });
+                    }
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Flag aggiornato.', type: 'success' });
+                    }
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante salvataggio flag.', type: 'error' });
+                    }
+                });
+            },
+            loadStaffLocationsCatalog: function () {
+                var self = this;
+                this.apiPost('/location/staff-locations/list', {}, function (response) {
+                    self.staffLocationsCatalog = response && response.dataset ? response.dataset : [];
+                    self.renderStaffLocationsOptions();
+                }, function () {
+                    self.staffLocationsCatalog = [];
+                    self.renderStaffLocationsOptions();
+                });
+            },
+            renderStaffLocationsOptions: function () {
+                var select = $('[data-staff-teleport-location]');
+                if (!select.length) {
+                    return;
+                }
+                var previous = this.toInt(select.val(), 0);
+                var html = '<option value="">Seleziona location di destinazione...</option>';
+                var rows = Array.isArray(this.staffLocationsCatalog) ? this.staffLocationsCatalog : [];
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var id = this.toInt(row.id, 0);
+                    if (id <= 0) {
+                        continue;
+                    }
+                    var map = String(row.map_name || '').trim();
+                    var label = String(row.name || ('Location #' + id));
+                    if (map !== '') {
+                        label = map + ' - ' + label;
+                    }
+                    html += '<option value="' + id + '">' + this.escapeHtml(label) + '</option>';
+                }
+                select.html(html);
+                if (previous > 0 && select.find('option[value="' + previous + '"]').length > 0) {
+                    select.val(String(previous));
+                }
+            },
+            staffTeleportCharacter: function () {
+                var targetCharacterId = this.requireStaffTargetCharacterId();
+                if (targetCharacterId <= 0) {
+                    return;
+                }
+                var targetLocationId = this.toInt($('[data-staff-teleport-location]').val(), 0);
+                if (targetLocationId <= 0) {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Seleziona una location di destinazione.', type: 'warning' });
+                    }
+                    return;
+                }
+                var reason = String($('[data-staff-teleport-reason]').val() || '').trim();
+                if (reason === '') {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Inserisci una motivazione per il teletrasporto.', type: 'warning' });
+                    }
+                    return;
+                }
+                var self = this;
+                this.apiPost('/location/staff-teleport', {
+                    character_id: targetCharacterId,
+                    target_location_id: targetLocationId,
+                    reason: reason
+                }, function (response) {
+                    var data = response && response.dataset ? response.dataset : {};
+                    var destination = String(data.location_name || ('Location #' + targetLocationId));
+                    self.pushStaffActionFeed('Teletrasporto eseguito', 'Target #' + targetCharacterId + ' -> ' + destination);
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Teletrasporto completato: ' + destination + '.', type: 'success' });
+                    }
+                    self.loadLocationCharacters();
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante il teletrasporto.', type: 'error' });
+                    }
+                });
+            },
+            staffUpdateHealth: function () {
+                var targetCharacterId = this.requireStaffTargetCharacterId();
+                if (targetCharacterId <= 0) {
+                    return;
+                }
+                var healthRaw = String($('[data-staff-health]').val() || '').trim();
+                if (healthRaw === '') {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Inserisci la salute attuale.', type: 'warning' });
+                    }
+                    return;
+                }
+                var payload = {
+                    character_id: targetCharacterId,
+                    health: healthRaw,
+                };
+                var healthMaxRaw = String($('[data-staff-health-max]').val() || '').trim();
+                if (healthMaxRaw !== '') {
+                    payload.health_max = healthMaxRaw;
+                }
+                var self = this;
+                this.callProfile('updateHealth', payload, function () {
+                    var beforeHp = self.staffTargetProfile && self.staffTargetProfile.health != null ? String(self.staffTargetProfile.health) : '-';
+                    var beforeHpMax = self.staffTargetProfile && self.staffTargetProfile.health_max != null ? String(self.staffTargetProfile.health_max) : '-';
+                    var afterHp = String(payload.health);
+                    var afterHpMax = payload.health_max !== undefined ? String(payload.health_max) : beforeHpMax;
+                    self.pushStaffActionFeed('Salute aggiornata', 'HP ' + beforeHp + '/' + beforeHpMax + ' -> ' + afterHp + '/' + afterHpMax);
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Salute aggiornata.', type: 'success' });
+                    }
+                    self.onStaffTargetChanged();
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante l\'aggiornamento salute.', type: 'error' });
+                    }
+                });
+            },
+            staffAssignExperience: function () {
+                var targetCharacterId = this.requireStaffTargetCharacterId();
+                if (targetCharacterId <= 0) {
+                    return;
+                }
+                var deltaRaw = String($('[data-staff-exp-delta]').val() || '').trim();
+                var reason = String($('[data-staff-exp-reason]').val() || '').trim();
+                if (deltaRaw === '') {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Inserisci il valore esperienza.', type: 'warning' });
+                    }
+                    return;
+                }
+                if (reason === '') {
+                    reason = 'Assegnazione staff dalla location';
+                }
+                var delta = this.toInt(deltaRaw, 0);
+                var self = this;
+                this.callProfile('assignExperience', {
+                    character_id: targetCharacterId,
+                    delta: delta,
+                    reason: reason,
+                }, function () {
+                    self.pushStaffActionFeed('Esperienza assegnata', 'Delta ' + delta + ' (' + reason + ')');
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Esperienza aggiornata.', type: 'success' });
+                    }
+                    self.onStaffTargetChanged();
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante l\'assegnazione esperienza.', type: 'error' });
+                    }
+                });
+            },
+            getStaffSelectedItem: function () {
+                var itemId = this.toInt(this.staffSelectedItemId, 0);
+                if (itemId <= 0) {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Seleziona prima un oggetto.', type: 'warning' });
+                    }
+                    return { itemId: 0, quantity: 0 };
+                }
+                var qty = this.toInt($('[data-staff-item-qty]').val(), 1);
+                if (qty < 1) {
+                    qty = 1;
+                } else if (qty > 9999) {
+                    qty = 9999;
+                }
+                return { itemId: itemId, quantity: qty };
+            },
+            staffGrantItem: function () {
+                var targets = this.requireStaffTargetIds();
+                if (targets.length <= 0) {
+                    return;
+                }
+                var item = this.getStaffSelectedItem();
+                if (item.itemId <= 0) {
+                    return;
+                }
+                var self = this;
+                this.runStaffActionForTargets(targets, function (targetId, done) {
+                    self.callProfile('staffGrantItem', {
+                        character_id: targetId,
+                        item_id: item.itemId,
+                        quantity: item.quantity,
+                        location_id: self.location_id,
+                    }, function () {
+                        done(true);
+                    }, function () {
+                        done(false);
+                    });
+                }, function (result) {
+                    self.pushStaffActionFeed(
+                        'Oggetto assegnato (silente)',
+                        result.ok + '/' + result.total + ' target completati'
+                    );
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({
+                            body: 'Aggiunta oggetto: ' + result.ok + ' ok, ' + result.fail + ' errori.',
+                            type: result.fail > 0 ? 'warning' : 'success'
+                        });
+                    }
+                });
+            },
+            staffRemoveItem: function () {
+                var targets = this.requireStaffTargetIds();
+                if (targets.length <= 0) {
+                    return;
+                }
+                var item = this.getStaffSelectedItem();
+                if (item.itemId <= 0) {
+                    return;
+                }
+                var self = this;
+                this.runStaffActionForTargets(targets, function (targetId, done) {
+                    self.callProfile('staffRemoveItem', {
+                        character_id: targetId,
+                        item_id: item.itemId,
+                        quantity: item.quantity,
+                    }, function () {
+                        done(true);
+                    }, function () {
+                        done(false);
+                    });
+                }, function (result) {
+                    self.pushStaffActionFeed(
+                        'Oggetto rimosso (silente)',
+                        result.ok + '/' + result.total + ' target completati'
+                    );
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({
+                            body: 'Rimozione oggetto: ' + result.ok + ' ok, ' + result.fail + ' errori.',
+                            type: result.fail > 0 ? 'warning' : 'success'
+                        });
+                    }
+                });
+            },
+            staffSetRestriction: function (isRestricted) {
+                var targetCharacterId = this.requireStaffTargetCharacterId();
+                if (targetCharacterId <= 0) {
+                    return;
+                }
+                var self = this;
+                this.callProfile('staffSetRestriction', {
+                    character_id: targetCharacterId,
+                    is_restricted: isRestricted ? 1 : 0,
+                }, function (response) {
+                    var dataset = response && response.dataset ? response.dataset : {};
+                    self.staffTargetRestricted = self.toInt(dataset.is_restricted, 0) === 1 ? 1 : 0;
+                    self.staffFillScopedRestrictionInputs(dataset);
+                    self.pushStaffActionFeed(
+                        'Restrizione globale utente',
+                        self.staffTargetRestricted === 1 ? 'Utente ristretto' : 'Utente sbloccato'
+                    );
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({
+                            body: self.staffTargetRestricted === 1
+                                ? 'Utente ristretto correttamente.'
+                                : 'Restrizione rimossa correttamente.',
+                            type: 'success',
+                        });
+                    }
+                }, function () {
+                    if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+                        globalWindow.Toast.show({ body: 'Errore durante aggiornamento restrizione.', type: 'error' });
+                    }
+                });
             },
             resolveAbilityTargetType: function (ability) {
                 var target = String((ability && ability.target_type) || 'self').toLowerCase();

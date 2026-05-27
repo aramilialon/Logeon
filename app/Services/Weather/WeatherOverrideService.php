@@ -394,4 +394,3 @@ class WeatherOverrideService
         return array_values($options);
     }
 }
-

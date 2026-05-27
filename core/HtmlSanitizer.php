@@ -9,28 +9,59 @@ class HtmlSanitizer
     private static function defaultAllowedTags(): array
     {
         return [
-            'p' => [],
+            'p' => ['style'],
             'br' => [],
             'strong' => [],
             'b' => [],
             'em' => [],
             'i' => [],
             'u' => [],
+            's' => [],
+            'code' => [],
+            'pre' => [],
             'ul' => [],
             'ol' => [],
             'li' => [],
-            'blockquote' => [],
-            'h1' => [],
-            'h2' => [],
-            'h3' => [],
-            'h4' => [],
-            'h5' => [],
-            'h6' => [],
+            'blockquote' => ['style'],
+            'h1' => ['style'],
+            'h2' => ['style'],
+            'h3' => ['style'],
+            'h4' => ['style'],
+            'h5' => ['style'],
+            'h6' => ['style'],
             'hr' => [],
             'a' => ['href', 'title', 'target', 'rel'],
-            'img' => ['src', 'alt', 'title'],
-            'span' => ['class'],
-            'div' => ['class'],
+            'img' => ['src', 'alt', 'title', 'style'],
+            'span' => ['class', 'style'],
+            'div' => ['class', 'style'],
+        ];
+    }
+
+    private static function defaultAllowedStyleProperties(): array
+    {
+        return [
+            'background-color',
+            'border-radius',
+            'color',
+            'display',
+            'float',
+            'font-style',
+            'font-weight',
+            'height',
+            'margin',
+            'margin-bottom',
+            'margin-inline',
+            'margin-left',
+            'margin-right',
+            'margin-top',
+            'max-height',
+            'max-width',
+            'min-height',
+            'min-width',
+            'object-fit',
+            'text-align',
+            'text-decoration',
+            'width',
         ];
     }
 
@@ -171,6 +202,15 @@ class HtmlSanitizer
                 }
                 continue;
             }
+
+            if ($name === 'style') {
+                $safeStyle = self::sanitizeStyle($value, $tag, $options);
+                if ($safeStyle === '') {
+                    $toRemove[] = $name;
+                } else {
+                    $node->setAttribute($name, $safeStyle);
+                }
+            }
         }
 
         foreach ($toRemove as $attrName) {
@@ -217,6 +257,234 @@ class HtmlSanitizer
         return '';
     }
 
+    private static function sanitizeStyle(string $style, string $tag, array $options = []): string
+    {
+        $style = trim($style);
+        if ($style === '') {
+            return '';
+        }
+
+        $allowed = self::normalizeAllowedStyleProperties($options);
+        $declarations = preg_split('/\s*;\s*/', $style) ?: [];
+        $safeDeclarations = [];
+
+        foreach ($declarations as $declaration) {
+            $declaration = trim((string) $declaration);
+            if ($declaration === '' || strpos($declaration, ':') === false) {
+                continue;
+            }
+
+            [$property, $value] = explode(':', $declaration, 2);
+            $property = strtolower(trim((string) $property));
+            if ($property === '' || !in_array($property, $allowed, true)) {
+                continue;
+            }
+
+            $safeValue = self::sanitizeStyleValue($property, $value, $tag);
+            if ($safeValue === '') {
+                continue;
+            }
+
+            $safeDeclarations[] = $property . ': ' . $safeValue;
+        }
+
+        return implode('; ', $safeDeclarations);
+    }
+
+    private static function normalizeAllowedStyleProperties(array $options = []): array
+    {
+        $allowed = self::defaultAllowedStyleProperties();
+        if (!empty($options['allowed_style_properties']) && is_array($options['allowed_style_properties'])) {
+            $allowed = [];
+            foreach ($options['allowed_style_properties'] as $property) {
+                $property = strtolower(trim((string) $property));
+                if ($property !== '') {
+                    $allowed[] = $property;
+                }
+            }
+        }
+
+        return array_values(array_unique($allowed));
+    }
+
+    private static function sanitizeStyleValue(string $property, string $value, string $tag = ''): string
+    {
+        $value = trim($value);
+        if ($value === '' || preg_match('/(?:expression|javascript:|behavior:|url\s*\()/i', $value)) {
+            return '';
+        }
+
+        switch ($property) {
+            case 'text-align':
+                $value = strtolower($value);
+                return in_array($value, ['left', 'center', 'right', 'justify', 'start', 'end'], true) ? $value : '';
+            case 'float':
+                $value = strtolower($value);
+                return in_array($value, ['left', 'right', 'none'], true) ? $value : '';
+            case 'display':
+                $value = strtolower($value);
+                return in_array($value, ['block', 'inline', 'inline-block', 'none'], true) ? $value : '';
+            case 'font-style':
+                $value = strtolower($value);
+                return in_array($value, ['normal', 'italic', 'oblique'], true) ? $value : '';
+            case 'font-weight':
+                $value = strtolower($value);
+                return preg_match('/^(normal|bold|bolder|lighter|[1-9]00)$/', $value) ? $value : '';
+            case 'text-decoration':
+                $value = strtolower(preg_replace('/\s+/', ' ', $value) ?? '');
+                if ($value === '') {
+                    return '';
+                }
+                $parts = explode(' ', $value);
+                foreach ($parts as $part) {
+                    if (!in_array($part, ['underline', 'line-through', 'overline', 'none'], true)) {
+                        return '';
+                    }
+                }
+                return implode(' ', array_values(array_unique($parts)));
+            case 'color':
+            case 'background-color':
+                return self::sanitizeCssColor($value);
+            case 'width':
+            case 'height':
+            case 'max-width':
+            case 'max-height':
+            case 'min-width':
+            case 'min-height':
+            case 'margin-top':
+            case 'margin-bottom':
+            case 'margin-left':
+            case 'margin-right':
+                return self::sanitizeCssLength($value);
+            case 'margin':
+            case 'margin-inline':
+                return self::sanitizeCssSpacingShorthand($value);
+            case 'border-radius':
+                return self::sanitizeCssBorderRadius($value);
+            case 'object-fit':
+                $value = strtolower($value);
+                return in_array($value, ['fill', 'contain', 'cover', 'none', 'scale-down'], true) ? $value : '';
+        }
+
+        return '';
+    }
+
+    private static function sanitizeCssColor(string $value): string
+    {
+        $value = trim(strtolower($value));
+        if ($value === '') {
+            return '';
+        }
+
+        if (in_array($value, ['transparent', 'currentcolor', 'inherit', 'initial', 'unset'], true)) {
+            return $value;
+        }
+
+        if (preg_match('/^#[0-9a-f]{3,8}$/i', $value)) {
+            return $value;
+        }
+
+        if (preg_match('/^(?:rgb|rgba|hsl|hsla)\(\s*[-0-9.%\s,]+\)$/i', $value)) {
+            return $value;
+        }
+
+        return preg_match('/^[a-z][a-z\-]{0,30}$/', $value) ? $value : '';
+    }
+
+    private static function sanitizeCssLength(string $value): string
+    {
+        $value = trim(strtolower($value));
+        if ($value === '') {
+            return '';
+        }
+
+        if (in_array($value, ['auto', 'inherit', 'initial', 'unset'], true)) {
+            return $value;
+        }
+
+        if ($value === '0') {
+            return '0';
+        }
+
+        return preg_match('/^-?(?:\d+|\d*\.\d+)(?:px|%|em|rem|vw|vh)$/', $value) ? $value : '';
+    }
+
+    private static function sanitizeCssSpacingShorthand(string $value): string
+    {
+        $value = trim(strtolower($value));
+        if ($value === '') {
+            return '';
+        }
+
+        $parts = preg_split('/\s+/', $value) ?: [];
+        if (count($parts) < 1 || count($parts) > 4) {
+            return '';
+        }
+
+        $safeParts = [];
+        foreach ($parts as $part) {
+            $safePart = self::sanitizeCssSpacingValue($part);
+            if ($safePart === '') {
+                return '';
+            }
+            $safeParts[] = $safePart;
+        }
+
+        return implode(' ', $safeParts);
+    }
+
+    private static function sanitizeCssSpacingValue(string $value): string
+    {
+        $value = trim(strtolower($value));
+        if ($value === '') {
+            return '';
+        }
+
+        if (in_array($value, ['auto', 'inherit', 'initial', 'unset'], true)) {
+            return $value;
+        }
+
+        if ($value === '0') {
+            return '0';
+        }
+
+        return preg_match('/^-?(?:\d+|\d*\.\d+)(?:px|%|em|rem|vw|vh)$/', $value) ? $value : '';
+    }
+
+    private static function sanitizeCssBorderRadius(string $value): string
+    {
+        $value = trim(strtolower($value));
+        if ($value === '') {
+            return '';
+        }
+
+        $parts = preg_split('/\s+/', $value) ?: [];
+        if (count($parts) < 1 || count($parts) > 4) {
+            return '';
+        }
+
+        $safeParts = [];
+        foreach ($parts as $part) {
+            if (in_array($part, ['inherit', 'initial', 'unset'], true)) {
+                $safeParts[] = $part;
+                continue;
+            }
+
+            if ($part === '0') {
+                $safeParts[] = '0';
+                continue;
+            }
+
+            if (!preg_match('/^(?:\d+|\d*\.\d+)(?:px|%|em|rem)$/', $part)) {
+                return '';
+            }
+
+            $safeParts[] = $part;
+        }
+
+        return implode(' ', $safeParts);
+    }
+
     private static function fallbackSanitize($html, $allowed): string
     {
         $tagList = '';
@@ -226,7 +494,15 @@ class HtmlSanitizer
 
         $clean = strip_tags($html, $tagList);
         $clean = preg_replace('/\s+on[a-z]+\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $clean);
-        $clean = preg_replace('/\s+style\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $clean);
+        $clean = preg_replace_callback(
+            '/\s+style\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))/i',
+            static function (array $matches): string {
+                $value = $matches[2] ?? $matches[3] ?? $matches[4] ?? '';
+                $safe = self::sanitizeStyle((string) $value, '');
+                return $safe === '' ? '' : ' style="' . htmlspecialchars($safe, ENT_QUOTES, 'UTF-8') . '"';
+            },
+            $clean,
+        );
         $clean = preg_replace('/javascript:/i', '', $clean);
 
         return trim((string) $clean);

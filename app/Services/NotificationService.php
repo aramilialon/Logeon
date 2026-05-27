@@ -93,8 +93,18 @@ class NotificationService
             return 'notify_invites';
         }
 
-        if ($topic === 'news_publish' || $sourceType === 'news') {
-            return 'notify_news';
+        $resolved = null;
+        if (class_exists('\\Core\\Hooks')) {
+            $resolved = \Core\Hooks::filter(
+                'notifications.preference_column',
+                null,
+                $topic,
+                $sourceType,
+            );
+        }
+
+        if (is_string($resolved) && preg_match('/^[A-Za-z0-9_]+$/', $resolved) === 1) {
+            return $resolved;
         }
 
         return null;

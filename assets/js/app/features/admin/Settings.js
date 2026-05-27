@@ -9,7 +9,8 @@ var AdminSettings = {
     switches: {},
     uploaders: {},
 
-    soundTypes: ['dm', 'notifications', 'whispers', 'global'],
+    soundTypes: ['chat', 'dm', 'notifications', 'whispers', 'global'],
+    soundMaxDurationSeconds: 5,
 
     audioMimeTypes: {
         'audio/mpeg': 'MP3', 'audio/mp3': 'MP3', 'audio/ogg': 'OGG',
@@ -40,6 +41,7 @@ var AdminSettings = {
         this.refreshNarrativeDelegationLevelVisibility();
         this.refreshPwaConfigVisibility();
         this.refreshPwaCacheVisibility();
+        this.refreshSmtpConfigVisibility();
         this.bind();
         this.load();
         this.buildSounds();
@@ -138,6 +140,23 @@ var AdminSettings = {
             defaultValue: '0'
         });
 
+        this.switches.smtp_enabled = sw(jq('#s-smtp-enabled'), {
+            preset: 'enableddisabled',
+            trueValue: '1',
+            falseValue: '0',
+            defaultValue: '0'
+        });
+
+        var smtpEnabledInput = this.form ? this.form.elements['smtp_enabled'] : null;
+        if (smtpEnabledInput) {
+            var selfSmtp = this;
+            globalWindow.$(smtpEnabledInput)
+                .off('change.adminSettingsSmtp')
+                .on('change.adminSettingsSmtp', function () {
+                    selfSmtp.refreshSmtpConfigVisibility();
+                });
+        }
+
         var ndEnabledInput = this.form ? this.form.elements['narrative_delegation_enabled'] : null;
         if (ndEnabledInput) {
             var self3 = this;
@@ -228,6 +247,16 @@ var AdminSettings = {
         return this;
     },
 
+    refreshSmtpConfigVisibility: function () {
+        if (!this.form) { return this; }
+        var wrapper = document.getElementById('admin-settings-smtp-config');
+        if (!wrapper) { return this; }
+        var input = this.form.elements['smtp_enabled'];
+        var enabled = input ? (String(input.value || '0') === '1') : false;
+        wrapper.style.display = enabled ? '' : 'none';
+        return this;
+    },
+
     refreshMultiCharacterConfigVisibility: function () {
         if (!this.form) {
             return this;
@@ -257,6 +286,9 @@ var AdminSettings = {
             if (action === 'admin-settings-reload') {
                 e.preventDefault();
                 self.load();
+            } else if (action === 'admin-settings-test-mail') {
+                e.preventDefault();
+                self.testMail();
             }
         });
 
@@ -363,6 +395,27 @@ var AdminSettings = {
         });
     },
 
+    getDocsViewModeFieldNames: function () {
+        if (!this.form) {
+            return [];
+        }
+
+        var names = [];
+        var seen = {};
+        var nodes = this.form.querySelectorAll('select[name$="_view_mode"], input[name$="_view_mode"]');
+
+        for (var i = 0; i < nodes.length; i++) {
+            var name = String(nodes[i].getAttribute('name') || '').trim();
+            if (!name || seen[name]) {
+                continue;
+            }
+            seen[name] = true;
+            names.push(name);
+        }
+
+        return names;
+    },
+
     populateForm: function (d) {
         var fields = [
             'upload_max_mb',
@@ -372,6 +425,8 @@ var AdminSettings = {
             'inventory_stack_max',
             'location_chat_history_hours',
             'location_whisper_retention_hours',
+            'location_chat_max_chars',
+            'default_dice_faces',
             'availability_idle_minutes',
             'location_invite_expiry_hours',
             'location_invite_max_active',
@@ -409,7 +464,17 @@ var AdminSettings = {
             'storyboard_view_mode',
             'rules_view_mode',
             'how_to_play_view_mode',
-            'archetypes_view_mode'
+            'character_delete_days',
+            'smtp_host',
+            'smtp_port',
+            'smtp_encryption',
+            'smtp_username',
+            'smtp_from_email',
+            'smtp_from_name',
+            'mail_smtp_timeout',
+            'mail_batch_size',
+            'mail_rate_per_minute',
+            'mail_retry_attempts'
         ];
 
         for (var i = 0; i < fields.length; i++) {
@@ -419,8 +484,20 @@ var AdminSettings = {
             if (el) { el.value = d[key]; }
         }
 
+        var docsViewModeFields = this.getDocsViewModeFieldNames();
+        for (var k = 0; k < docsViewModeFields.length; k++) {
+            var docsKey = docsViewModeFields[k];
+            if (d[docsKey] === undefined) { continue; }
+            var docsEl = this.form.elements[docsKey];
+            if (docsEl) { docsEl.value = d[docsKey]; }
+        }
+
+        // Password SMTP: non sovrascrivere il campo con il placeholder restituito dal server
+        var smtpPwField = this.form.elements['smtp_password'];
+        if (smtpPwField) { smtpPwField.value = ''; smtpPwField.placeholder = d.smtp_password === '********' ? 'Lascia vuoto per non modificarla' : 'Nessuna password impostata'; }
+
         // Campi gestiti da SwitchGroup
-        var switchKeys = ['onlines_auto_toast', 'presence_resume_last_position_on_signin', 'auth_google_enabled', 'multi_character_enabled', 'narrative_delegation_enabled', 'pwa_enabled', 'pwa_cache_enabled'];
+        var switchKeys = ['onlines_auto_toast', 'presence_resume_last_position_on_signin', 'auth_google_enabled', 'multi_character_enabled', 'narrative_delegation_enabled', 'pwa_enabled', 'pwa_cache_enabled', 'smtp_enabled'];
         for (var j = 0; j < switchKeys.length; j++) {
             var sKey = switchKeys[j];
             if (d[sKey] === undefined) { continue; }
@@ -437,6 +514,7 @@ var AdminSettings = {
         this.refreshNarrativeDelegationLevelVisibility();
         this.refreshPwaConfigVisibility();
         this.refreshPwaCacheVisibility();
+        this.refreshSmtpConfigVisibility();
     },
 
     collectPayload: function () {
@@ -451,6 +529,8 @@ var AdminSettings = {
             'inventory_stack_max',
             'location_chat_history_hours',
             'location_whisper_retention_hours',
+            'location_chat_max_chars',
+            'default_dice_faces',
             'availability_idle_minutes',
             'onlines_auto_toast',
             'presence_resume_last_position_on_signin',
@@ -474,7 +554,14 @@ var AdminSettings = {
             'pwa_enabled',
             'pwa_cache_enabled',
             'narrative_delegation_enabled',
-            'narrative_delegation_level'
+            'narrative_delegation_level',
+            'smtp_enabled',
+            'smtp_port',
+            'mail_smtp_timeout',
+            'mail_batch_size',
+            'mail_rate_per_minute',
+            'mail_retry_attempts',
+            'character_delete_days'
         ];
 
         for (var i = 0; i < numericFields.length; i++) {
@@ -501,11 +588,15 @@ var AdminSettings = {
             'pwa_icon_192_path',
             'pwa_icon_512_path',
             'pwa_icon_maskable_path',
-            'pwa_cache_version',
             'storyboard_view_mode',
             'rules_view_mode',
             'how_to_play_view_mode',
-            'archetypes_view_mode'
+            'smtp_host',
+            'smtp_encryption',
+            'smtp_username',
+            'smtp_password',
+            'smtp_from_email',
+            'smtp_from_name'
         ];
         for (var j = 0; j < stringFields.length; j++) {
             var skey = stringFields[j];
@@ -514,7 +605,33 @@ var AdminSettings = {
             }
         }
 
+        var docsFields = this.getDocsViewModeFieldNames();
+        for (var x = 0; x < docsFields.length; x++) {
+            var docsName = docsFields[x];
+            if (els[docsName]) {
+                payload[docsName] = String(els[docsName].value || '').trim();
+            }
+        }
+
         return payload;
+    },
+
+    testMail: function () {
+        var self = this;
+        var toInput = document.getElementById('s-smtp-test-to');
+        var to = toInput ? String(toInput.value || '').trim() : '';
+        if (!to) {
+            self.showAlert('warning', 'Inserisci un indirizzo email destinatario per il test.');
+            return;
+        }
+        self.showAlert('info', 'Invio email di test in corso...');
+        this.post('/admin/settings/test-mail', { to: to }, function (res) {
+            var method = res && res.method ? res.method : '';
+            self.showAlert('success', 'Email di test inviata' + (method ? ' via ' + method : '') + '. Controlla la casella di ' + to + '.');
+            self.notifyToast('success', 'Email di test inviata correttamente.');
+        }, function (err) {
+            self.showAlert('danger', 'Invio non riuscito: ' + self.err(err));
+        });
     },
 
     buildSounds: function () {
@@ -564,6 +681,79 @@ var AdminSettings = {
         });
     },
 
+    validateSoundFileDuration: function (nativeFile, maxSeconds) {
+        return new Promise(function (resolve) {
+            if (!nativeFile || typeof globalWindow.URL === 'undefined' || typeof globalWindow.URL.createObjectURL !== 'function') {
+                resolve({ ok: false, duration: 0, reason: 'unsupported' });
+                return;
+            }
+
+            var objectUrl = '';
+            try {
+                objectUrl = globalWindow.URL.createObjectURL(nativeFile);
+            } catch (error) {
+                resolve({ ok: false, duration: 0, reason: 'url_error' });
+                return;
+            }
+
+            var audio = new Audio();
+            var cleaned = false;
+            var timeoutId = null;
+
+            var cleanup = function () {
+                if (cleaned) { return; }
+                cleaned = true;
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+                try {
+                    audio.removeAttribute('src');
+                    audio.load();
+                } catch (e) {}
+                try {
+                    globalWindow.URL.revokeObjectURL(objectUrl);
+                } catch (e2) {}
+            };
+
+            audio.preload = 'metadata';
+
+            audio.onloadedmetadata = function () {
+                var duration = Number(audio.duration || 0);
+                cleanup();
+                if (!isFinite(duration) || duration <= 0) {
+                    resolve({ ok: false, duration: 0, reason: 'invalid_duration' });
+                    return;
+                }
+                resolve({ ok: duration <= maxSeconds, duration: duration, reason: (duration <= maxSeconds ? 'ok' : 'too_long') });
+            };
+
+            audio.onerror = function () {
+                cleanup();
+                resolve({ ok: false, duration: 0, reason: 'decode_error' });
+            };
+
+            timeoutId = setTimeout(function () {
+                cleanup();
+                resolve({ ok: false, duration: 0, reason: 'timeout' });
+            }, 10000);
+
+            audio.src = objectUrl;
+        });
+    },
+
+    removeUploaderFile: function (uploadTarget, file) {
+        var uploader = this.uploaders[uploadTarget];
+        if (!uploader || !file || !Array.isArray(uploader.files)) {
+            return;
+        }
+
+        var index = uploader.files.indexOf(file);
+        if (index >= 0 && typeof uploader.removeFile === 'function') {
+            uploader.removeFile(index);
+        }
+    },
+
     buildSoundUploader: function (uploadTarget, options) {
         var self = this;
         if (this.uploaders[uploadTarget]) {
@@ -580,6 +770,40 @@ var AdminSettings = {
             target: uploadTarget,
             allowed_mime: this.audioMimeTypes,
             newFile: function (file) {
+                var maxSeconds = parseInt(self.soundMaxDurationSeconds, 10) || 5;
+                file._soundDurationCheck = self.validateSoundFileDuration(file.file, maxSeconds);
+                var originalOnAnalyzeComplete = file.onAnalyzeComplete;
+                file.onAnalyzeComplete = function () {
+                    var currentFile = this;
+                    var proceedUpload = function () {
+                        if (typeof originalOnAnalyzeComplete === 'function') {
+                            originalOnAnalyzeComplete.call(currentFile);
+                        }
+                    };
+
+                    file._soundDurationCheck.then(function (check) {
+                        if (check && check.ok === true) {
+                            proceedUpload();
+                            return;
+                        }
+
+                        var durationText = '';
+                        if (check && typeof check.duration === 'number' && check.duration > 0) {
+                            durationText = ' (durata rilevata: ' + check.duration.toFixed(1) + 's)';
+                        }
+
+                        self.removeUploaderFile(uploadTarget, currentFile);
+                        self.resetSoundUploadProgress(uploadTarget);
+                        self.setSoundUploadActionMode(uploadTarget, '');
+                        self.showAlert('warning', 'Audio non valido: durata massima consentita ' + maxSeconds + ' secondi.' + durationText + ' Carica un suono piu breve.');
+                    }).catch(function () {
+                        self.removeUploaderFile(uploadTarget, currentFile);
+                        self.resetSoundUploadProgress(uploadTarget);
+                        self.setSoundUploadActionMode(uploadTarget, '');
+                        self.showAlert('warning', 'Impossibile validare la durata del file audio. Carica un file di durata massima ' + maxSeconds + ' secondi.');
+                    });
+                };
+
                 file.onProgress = function () {
                     self.updateSoundUploadProgress(uploadTarget, this);
                 };
@@ -760,19 +984,28 @@ var AdminSettings = {
             return;
         }
 
-        if (typeof globalWindow.$ === 'function') {
-            globalWindow.$.ajax({
-                url: url,
+        if (typeof globalWindow.fetch === 'function') {
+            globalWindow.fetch(url, {
                 method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(data),
-                success: function (r) { if (typeof ok === 'function') ok(r || {}); },
-                error: function (xhr) {
-                    var e = {};
-                    try { e = JSON.parse(xhr.responseText); } catch (ex) { e = { message: xhr.statusText }; }
-                    if (typeof fail === 'function') fail(e);
-                    else self.showAlert('danger', self.err(e));
-                }
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(data)
+            }).then(function (response) {
+                return response.text().then(function (text) {
+                    var parsed = {};
+                    try { parsed = text ? JSON.parse(text) : {}; } catch (error) { parsed = { message: response.statusText }; }
+                    if (!response.ok) {
+                        throw parsed;
+                    }
+                    return parsed;
+                });
+            }).then(function (r) {
+                if (typeof ok === 'function') ok(r || {});
+            }).catch(function (e) {
+                if (typeof fail === 'function') fail(e);
+                else self.showAlert('danger', self.err(e));
             });
             return;
         }

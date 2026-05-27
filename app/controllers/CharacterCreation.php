@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Services\CapabilityRegistry;
 use App\Services\CharacterCreationService;
 use Core\Http\ApiResponse;
 use Core\Http\AppError;
@@ -56,6 +57,10 @@ class CharacterCreation
     {
         if (is_object($this->archetypeProvider)) {
             return $this->archetypeProvider;
+        }
+
+        if (!CapabilityRegistry::has('character.archetypes')) {
+            return null;
         }
 
         if (!class_exists('\\Core\\Hooks')) {

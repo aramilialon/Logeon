@@ -29,6 +29,22 @@ function createSettingsModule() {
             return this.request('/settings/sessions/revoke', 'revokeSessions', payload || {});
         },
 
+        getPrivacyContext: function (payload) {
+            return this.request('/settings/privacy/context', 'privacyContext', payload || {});
+        },
+
+        listPrivacyRequests: function (payload) {
+            return this.request('/settings/privacy/requests/list', 'privacyRequestsList', payload || {});
+        },
+
+        createPrivacyRequest: function (payload) {
+            return this.request('/settings/privacy/requests/create', 'privacyRequestCreate', payload || {});
+        },
+
+        exportPrivacyData: function (payload) {
+            return this.request('/settings/privacy/export', 'privacyExport', payload || {});
+        },
+
         requestNameChange: function (payload) {
             return this.request('/profile/name-request', 'requestNameChange', payload || {});
         },

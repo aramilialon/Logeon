@@ -1,22 +1,83 @@
 const globalWindow = (typeof window !== 'undefined') ? window : globalThis;
 
 var KEYS = {
+    chat:          'lf_sound_chat',
     dm:            'lf_sound_dm',
     notifications: 'lf_sound_notifications',
     whispers:      'lf_sound_whispers',
     global:        'lf_sound_global'
 };
 
-var played = {
-    dm:            false,
-    notifications: false,
-    whispers:      false,
-    global:        false
+var REMINDER_TYPES = {
+    dm: true,
+    notifications: true,
+    whispers: true,
+    global: true
 };
 
-var pending = {};
-var debounceTimer = null;
-var DEBOUNCE_MS = 300;
+var REMINDER_BASE_TYPES = ['dm', 'notifications', 'whispers'];
+
+var activeAlerts = {
+    dm: false,
+    notifications: false,
+    whispers: false,
+    global: false
+};
+
+var lastPlayedAt = {};
+var reminderTimers = {};
+var REPEATABLE_COOLDOWN_MS = 750;
+var REMINDER_INTERVAL_MS = 120000;
+var batchPending = {};
+var batchTimer = null;
+var BATCH_DEBOUNCE_MS = 300;
+var MAX_PLAYBACK_MS = 5000;
+
+function isBadgeActive(selector) {
+    var nodes = document.querySelectorAll(selector);
+    if (!nodes || nodes.length === 0) {
+        return false;
+    }
+
+    for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        if (!node || node.classList.contains('d-none')) {
+            continue;
+        }
+        var value = parseInt(String(node.textContent || '0').trim(), 10);
+        if (!isNaN(value) && value > 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function isAttentionActive(type) {
+    if (type === 'dm') {
+        return isBadgeActive('[data-feed-badge="messages"]');
+    }
+    if (type === 'notifications') {
+        return isBadgeActive('[data-feed-badge="notifications"]');
+    }
+    if (type === 'whispers') {
+        return isBadgeActive('[data-role="whispers-unread-badge"]');
+    }
+    if (type === 'global') {
+        var activeBase = 0;
+        for (var i = 0; i < REMINDER_BASE_TYPES.length; i++) {
+            if (isAttentionActive(REMINDER_BASE_TYPES[i])) {
+                activeBase++;
+            }
+        }
+        return activeBase >= 2;
+    }
+    return false;
+}
+
+function hasGlobalConfigured() {
+    return getUrl('global') !== '';
+}
 
 function getUrl(type) {
     if (!KEYS[type]) { return ''; }
@@ -43,6 +104,26 @@ function playUrl(url) {
     if (!url || url === '') { return; }
     try {
         var audio = new Audio(url);
+        var stopTimer = null;
+        var stopPlayback = function () {
+            if (stopTimer) {
+                clearTimeout(stopTimer);
+                stopTimer = null;
+            }
+            try {
+                audio.pause();
+                audio.currentTime = 0;
+            } catch (e) {}
+        };
+
+        audio.addEventListener('ended', function () {
+            if (stopTimer) {
+                clearTimeout(stopTimer);
+                stopTimer = null;
+            }
+        }, { once: true });
+
+        stopTimer = setTimeout(stopPlayback, MAX_PLAYBACK_MS);
         var p = audio.play();
         if (p && typeof p.catch === 'function') {
             p.catch(function () {});
@@ -50,48 +131,94 @@ function playUrl(url) {
     } catch (e) {}
 }
 
-function flushPending() {
-    debounceTimer = null;
-    var pendingTypes = Object.keys(pending).filter(function (t) { return pending[t]; });
-    pending = {};
+function playType(type) {
+    var now = Date.now();
+    var last = parseInt(lastPlayedAt[type] || 0, 10);
+    if (last > 0 && (now - last) < REPEATABLE_COOLDOWN_MS) {
+        return;
+    }
+    lastPlayedAt[type] = now;
+    playUrl(getUrl(type));
+}
+
+function stopReminder(type) {
+    if (reminderTimers[type]) {
+        clearInterval(reminderTimers[type]);
+        reminderTimers[type] = null;
+    }
+}
+
+function ensureReminder(type) {
+    if (!REMINDER_TYPES[type]) {
+        return;
+    }
+    if (reminderTimers[type]) {
+        return;
+    }
+
+    reminderTimers[type] = setInterval(function () {
+        if (!activeAlerts[type] || !isAttentionActive(type)) {
+            activeAlerts[type] = false;
+            stopReminder(type);
+            return;
+        }
+
+        if (type !== 'global' && hasGlobalConfigured() && isAttentionActive('global')) {
+            return;
+        }
+
+        playType(type);
+    }, REMINDER_INTERVAL_MS);
+}
+
+function flushBatchPending() {
+    batchTimer = null;
+    var pendingTypes = Object.keys(batchPending).filter(function (t) { return batchPending[t]; });
+    batchPending = {};
 
     if (pendingTypes.length === 0) { return; }
 
-    var globalUrl = getUrl('global');
-    if (pendingTypes.length >= 2 && globalUrl !== '' && !played.global) {
-        played.global = true;
+    var globalEnabled = hasGlobalConfigured();
+    if (pendingTypes.length >= 2 && globalEnabled) {
+        activeAlerts.global = true;
+        ensureReminder('global');
+        playType('global');
+
         for (var i = 0; i < pendingTypes.length; i++) {
-            played[pendingTypes[i]] = true;
+            ensureReminder(pendingTypes[i]);
         }
-        playUrl(globalUrl);
         return;
     }
 
     for (var j = 0; j < pendingTypes.length; j++) {
-        var t = pendingTypes[j];
-        if (played[t]) { continue; }
-        var url = getUrl(t);
-        if (url === '') { continue; }
-        played[t] = true;
-        playUrl(url);
+        var type = pendingTypes[j];
+        playType(type);
+        ensureReminder(type);
     }
 }
 
 var AppSounds = {
     /**
-     * Trigger a sound for the given type (dm | notifications | whispers).
-     * Calls are batched via a 300ms debounce globalWindow.
-     * If 2+ types arrive simultaneously AND a global sound is configured, the global plays once.
-     * Otherwise each type plays its own specific sound, each at most once per page session.
+     * Trigger a sound for the given type (chat | dm | notifications | whispers).
+     * chat plays one-shot on each event (anti-spam cooldown), never in loop.
+     * dm/notifications/whispers/global use a soft reminder loop while unread badges remain active.
      */
     play: function (type) {
-        if (!KEYS[type] || type === 'global') { return; }
-        if (played[type]) { return; }
+        if (!KEYS[type] || type === 'global') {
+            return;
+        }
 
-        pending[type] = true;
+        if (type === 'chat') {
+            playType('chat');
+            return;
+        }
 
-        if (debounceTimer) { clearTimeout(debounceTimer); }
-        debounceTimer = setTimeout(flushPending, DEBOUNCE_MS);
+        activeAlerts[type] = true;
+        ensureReminder(type);
+        batchPending[type] = true;
+
+        if (batchTimer) { clearTimeout(batchTimer); }
+        batchTimer = setTimeout(flushBatchPending, BATCH_DEBOUNCE_MS);
     },
 
     /** Preview a sound by type from current localStorage value. */
@@ -113,7 +240,17 @@ var AppSounds = {
     },
 
     clear: function (type) {
+        activeAlerts[type] = false;
+        stopReminder(type);
         setUrl(type, '');
+    },
+
+    stop: function (type) {
+        if (!type || !KEYS[type]) {
+            return;
+        }
+        activeAlerts[type] = false;
+        stopReminder(type);
     },
 
     types: function () {

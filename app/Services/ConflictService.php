@@ -6,11 +6,14 @@ namespace App\Services;
 
 use Core\Database\DbAdapterFactory;
 use Core\Database\DbAdapterInterface;
+use Core\Filter;
 use Core\Http\AppError;
 
 class ConflictService
 {
     use ConflictServiceReadQueriesTrait;
+
+    private const TYPE_SYSTEM = 3;
 
     public const STATUS_PROPOSAL = 'proposal';
     public const STATUS_OPEN = 'open';
@@ -33,6 +36,8 @@ class ConflictService
 
     /** @var NotificationService|null */
     private $notificationService = null;
+    /** @var LocationMessageService|null */
+    private $locationMessageService = null;
 
     /** @var array<string, bool> */
     private $tableExistsCache = [];
@@ -66,6 +71,12 @@ class ConflictService
         return $this;
     }
 
+    public function setLocationMessageService(LocationMessageService $service = null)
+    {
+        $this->locationMessageService = $service;
+        return $this;
+    }
+
     private function narrativeDomainService(): NarrativeDomainService
     {
         if ($this->narrativeDomainService instanceof NarrativeDomainService) {
@@ -84,6 +95,16 @@ class ConflictService
 
         $this->notificationService = new NotificationService($this->db);
         return $this->notificationService;
+    }
+
+    private function locationMessageService(): LocationMessageService
+    {
+        if ($this->locationMessageService instanceof LocationMessageService) {
+            return $this->locationMessageService;
+        }
+
+        $this->locationMessageService = new LocationMessageService($this->db);
+        return $this->locationMessageService;
     }
 
     private function firstPrepared(string $sql, array $params = [])
@@ -207,6 +228,146 @@ class ConflictService
                 ],
             );
         }
+    }
+
+    private function resolveCharacterDisplayName(int $characterId): string
+    {
+        if ($characterId <= 0) {
+            return 'Personaggio';
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT name, surname
+             FROM characters
+             WHERE id = ?
+             LIMIT 1',
+            [$characterId],
+        );
+        if (empty($row)) {
+            return 'Personaggio #' . $characterId;
+        }
+
+        $name = trim((string) ($row->name ?? ''));
+        $surname = trim((string) ($row->surname ?? ''));
+        $fullName = trim($name . ' ' . $surname);
+
+        if ($fullName !== '') {
+            return $fullName;
+        }
+
+        return 'Personaggio #' . $characterId;
+    }
+
+    private function limitTextPreview(string $text, int $limit = 180): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($text) > $limit) {
+                return mb_substr($text, 0, max(1, $limit - 1)) . '...';
+            }
+
+            return $text;
+        }
+
+        if (strlen($text) > $limit) {
+            return substr($text, 0, max(1, $limit - 1)) . '...';
+        }
+
+        return $text;
+    }
+
+    private function buildLocationConflictSystemBody(string $title, string $message): string
+    {
+        $safeTitle = Filter::html(trim($title));
+        $safeMessage = nl2br(Filter::html(trim($message)));
+
+        return '<div class="text-center">'
+            . '<p class="mb-1"><b>' . $safeTitle . '</b></p>'
+            . '<p class="mb-0">' . $safeMessage . '</p>'
+            . '</div>';
+    }
+
+    /**
+     * @param array<string,mixed> $meta
+     */
+    private function publishLocationConflictSystemMessage(
+        int $locationId,
+        int $actorCharacterId,
+        string $title,
+        string $message,
+        array $meta = [],
+        ?int $recipientCharacterId = null,
+    ): void {
+        if ($locationId <= 0 || $actorCharacterId <= 0) {
+            return;
+        }
+
+        $eventMeta = array_merge([
+            'source_type' => 'conflict',
+            'event_type' => 'conflict_update',
+        ], $meta);
+
+        $this->locationMessageService()->insertMessage(
+            $locationId,
+            $actorCharacterId,
+            self::TYPE_SYSTEM,
+            $this->buildLocationConflictSystemBody($title, $message),
+            $this->toJson($eventMeta),
+            $recipientCharacterId,
+        );
+    }
+
+    /**
+     * @param array<string,mixed> $data
+     * @return array<int, int>
+     */
+    private function resolveProposalRecipientCharacterIds(array $data, int $openedBy, int $targetId): array
+    {
+        $ids = [];
+        if ($targetId > 0 && $targetId !== $openedBy) {
+            $ids[] = $targetId;
+        }
+
+        $targetIds = $data['target_ids'] ?? [];
+        if (is_array($targetIds)) {
+            foreach ($targetIds as $rawId) {
+                $id = (int) $rawId;
+                if ($id > 0 && $id !== $openedBy) {
+                    $ids[] = $id;
+                }
+            }
+        }
+
+        $targets = $data['targets'] ?? [];
+        if (is_array($targets)) {
+            foreach ($targets as $target) {
+                if (is_object($target)) {
+                    $target = (array) $target;
+                }
+                if (!is_array($target)) {
+                    continue;
+                }
+
+                $targetType = strtolower(trim((string) ($target['target_type'] ?? 'character')));
+                if ($targetType !== 'character') {
+                    continue;
+                }
+
+                $id = (int) ($target['target_id'] ?? 0);
+                if ($id > 0 && $id !== $openedBy) {
+                    $ids[] = $id;
+                }
+            }
+        }
+
+        $ids = array_values(array_unique($ids));
+        sort($ids);
+
+        return $ids;
     }
 
     private function hasTable(string $table): bool
@@ -745,15 +906,9 @@ class ConflictService
         }
     }
 
-
-
-
-
-
     /**
      * @return array<string, mixed>
      */
-
 
     private function runProposalExpiryMaintenance(): array
     {
@@ -898,8 +1053,6 @@ class ConflictService
         ], []);
     }
 
-
-
     private function ensureWritable($conflict, int $actorCharacterId, bool $isStaff): void
     {
         if ($isStaff) {
@@ -922,6 +1075,52 @@ class ConflictService
         $this->failUnauthorized('Operazione non autorizzata', 'conflict_write_forbidden');
     }
 
+    private function canNonStaffResolveByAuthority(string $authority): bool
+    {
+        // Players and mixed can propose/submit outcomes directly.
+        return in_array($authority, ['players', 'mixed', 'deferred_review'], true);
+    }
+
+    private function canNonStaffCloseByAuthority(string $authority): bool
+    {
+        // Players and mixed can close with additional players-specific safeguards.
+        return in_array($authority, ['players', 'mixed'], true);
+    }
+
+    private function enforceFinalizeByAuthority(
+        $conflict,
+        int $actorCharacterId,
+        bool $isStaff,
+        string $operation,
+    ): void {
+        if ($isStaff) {
+            return;
+        }
+
+        $authority = $this->normalizeResolutionAuthority($conflict->resolution_authority ?? 'mixed');
+        if ($operation === 'resolve') {
+            if (!$this->canNonStaffResolveByAuthority($authority)) {
+                $this->failUnauthorized('La risoluzione richiede supervisione master/staff', 'conflict_master_supervision_required');
+            }
+            return;
+        }
+
+        if ($operation === 'close') {
+            if (!$this->canNonStaffCloseByAuthority($authority)) {
+                $this->failUnauthorized('La chiusura richiede supervisione master/staff', 'conflict_master_supervision_required');
+            }
+        }
+    }
+
+    private function isDeferredReviewForNonStaff($conflict, bool $isStaff): bool
+    {
+        if ($isStaff) {
+            return false;
+        }
+        $authority = $this->normalizeResolutionAuthority($conflict->resolution_authority ?? 'mixed');
+        return $authority === 'deferred_review';
+    }
+
     private function ensureStaff(bool $isStaff): void
     {
         if (!$isStaff) {
@@ -941,7 +1140,6 @@ class ConflictService
             [$conflictId],
         );
     }
-
 
     private function upsertParticipantRow(int $conflictId, array $participant): void
     {
@@ -1138,11 +1336,9 @@ class ConflictService
      * @return array<string, mixed>
      */
 
-
     /**
      * @return array<string, mixed>
      */
-
 
     /**
      * @param array<string,mixed>|object $payload
@@ -1328,6 +1524,32 @@ class ConflictService
             'error_code' => '',
         ];
 
+        $proposalRecipients = $this->resolveProposalRecipientCharacterIds($data, $openedBy, $targetId);
+        if (!empty($proposalRecipients)) {
+            $openedByName = $this->resolveCharacterDisplayName($openedBy);
+            $summaryPreview = $this->limitTextPreview($summary);
+            $message = $openedByName . ' ti ha inviato una proposta di conflitto.';
+            if ($summaryPreview !== '') {
+                $message .= "\nMotivo: " . $summaryPreview;
+            }
+
+            foreach ($proposalRecipients as $recipientCharacterId) {
+                $this->publishLocationConflictSystemMessage(
+                    $locationId,
+                    $openedBy,
+                    'Proposta conflitto #' . $conflictId,
+                    $message,
+                    [
+                        'event_type' => 'conflict_proposal_created',
+                        'conflict_id' => $conflictId,
+                        'location_id' => $locationId,
+                        'target_id' => $recipientCharacterId,
+                    ],
+                    $recipientCharacterId,
+                );
+            }
+        }
+
         $this->notifyConflictParticipants(
             $conflictId,
             $locationId,
@@ -1491,6 +1713,33 @@ class ConflictService
             $actorCharacterId,
         );
 
+        $locationId = (int) ($conflict->location_id ?? 0);
+        if ($response === 'accept') {
+            $this->publishLocationConflictSystemMessage(
+                $locationId,
+                $actorCharacterId,
+                'Conflitto #' . $conflictId . ' aperto',
+                'La proposta di conflitto e stata accettata. Il conflitto e ora aperto.',
+                [
+                    'event_type' => 'conflict_opened',
+                    'conflict_id' => $conflictId,
+                    'location_id' => $locationId,
+                ],
+            );
+        } elseif ($response === 'reject') {
+            $this->publishLocationConflictSystemMessage(
+                $locationId,
+                $actorCharacterId,
+                'Conflitto #' . $conflictId . ' chiuso',
+                'La proposta di conflitto e stata rifiutata e il conflitto e stato chiuso.',
+                [
+                    'event_type' => 'conflict_closed',
+                    'conflict_id' => $conflictId,
+                    'location_id' => $locationId,
+                ],
+            );
+        }
+
         return $detail;
     }
 
@@ -1498,7 +1747,6 @@ class ConflictService
      * @param array<string,mixed>|object $payload
      * @return array<string,mixed>
      */
-
 
     /**
      * @param array<string,mixed>|object $payload
@@ -1724,6 +1972,28 @@ class ConflictService
         }
 
         $status = $this->normalizeStatus($data['status'] ?? '', self::STATUS_OPEN);
+        $authority = $this->normalizeResolutionAuthority($conflict->resolution_authority ?? 'mixed');
+        if (!$isStaff && in_array($status, [self::STATUS_RESOLVED, self::STATUS_CLOSED], true)) {
+            if ($this->isDeferredReviewForNonStaff($conflict, $isStaff)) {
+                $this->failValidation(
+                    'Con questa autorita l esito va inviato in revisione staff',
+                    'conflict_deferred_review_required',
+                );
+            }
+            if ($status === self::STATUS_CLOSED && $authority === 'players' && $openedBy > 0 && $openedBy === $actorCharacterId) {
+                $this->failValidation(
+                    'La chiusura richiede conferma della controparte o revisione staff',
+                    'conflict_close_counterparty_required',
+                );
+            }
+            $this->enforceFinalizeByAuthority(
+                $conflict,
+                $actorCharacterId,
+                $isStaff,
+                $status === self::STATUS_RESOLVED ? 'resolve' : 'close',
+            );
+        }
+
         $setParts = ['status = ?'];
         $params = [$status];
 
@@ -1819,6 +2089,7 @@ class ConflictService
 
         $conflict = $this->ensureConflictExists($conflictId);
         $this->ensureWritable($conflict, $actorCharacterId, $isStaff);
+        $this->enforceFinalizeByAuthority($conflict, $actorCharacterId, $isStaff, 'resolve');
 
         $actorId = (int) ($data['actor_id'] ?? 0);
         if ($actorId <= 0) {
@@ -1900,6 +2171,65 @@ class ConflictService
             'resolution_authority' => $conflict->resolution_authority ?? null,
         ]);
 
+        if ($this->isDeferredReviewForNonStaff($conflict, $isStaff)) {
+            $setParts = [
+                'status = ?',
+                'outcome_summary = ?',
+                'verdict_text = ?',
+                'verdict_meta_json = ?',
+            ];
+            $params = [
+                self::STATUS_AWAITING,
+                $outcomeSummary !== '' ? $outcomeSummary : null,
+                $verdictText !== '' ? $verdictText : null,
+                $this->toJson([
+                    'review_required' => 1,
+                    'submitted_by' => $actorCharacterId,
+                    'submitted_at' => $this->now(),
+                    'resolution_preview' => $resolutionResult,
+                ]),
+            ];
+            if ($this->hasColumn('conflicts', 'last_activity_at')) {
+                $setParts[] = 'last_activity_at = NOW()';
+            }
+
+            $params[] = $conflictId;
+            $this->execPrepared(
+                'UPDATE conflicts SET '
+                . implode(', ', $setParts)
+                . ' WHERE id = ? LIMIT 1',
+                $params,
+            );
+
+            $this->insertActionRow($conflictId, [
+                'actor_id' => $actorCharacterId,
+                'actor_type' => 'character',
+                'action_type' => 'verdict',
+                'action_kind' => 'resolve_submitted',
+                'action_mode' => $mode,
+                'action_body' => $outcomeSummary !== '' ? $outcomeSummary : 'Esito inviato in revisione staff.',
+                'resolution_type' => $mode,
+                'resolution_status' => 'pending_review',
+                'meta_json' => $this->toJson([
+                    'event_type' => 'conflict_resolution_submitted',
+                    'resolution' => $resolutionResult,
+                    'error_code' => 'conflict_deferred_review_required',
+                ]),
+            ]);
+
+            $detail = $this->getConflict($conflictId);
+            $detail['review_pending'] = 1;
+            $this->notifyConflictParticipants(
+                $conflictId,
+                (int) ($conflict->location_id ?? 0),
+                'Conflitto in revisione',
+                'L esito e stato inviato allo staff per revisione.',
+                'awaiting_review',
+                $actorCharacterId,
+            );
+            return $detail;
+        }
+
         $setParts = [
             'status = ?',
             'outcome_summary = ?',
@@ -1973,6 +2303,19 @@ class ConflictService
             $actorCharacterId,
         );
 
+        $locationId = (int) ($conflict->location_id ?? 0);
+        $this->publishLocationConflictSystemMessage(
+            $locationId,
+            $actorCharacterId,
+            'Conflitto #' . $conflictId . ' risolto',
+            $summaryMessage,
+            [
+                'event_type' => 'conflict_resolved',
+                'conflict_id' => $conflictId,
+                'location_id' => $locationId,
+            ],
+        );
+
         return $detail;
     }
 
@@ -1993,6 +2336,48 @@ class ConflictService
         if (!$isStaff && $openedBy !== $actorCharacterId) {
             $this->ensureWritable($conflict, $actorCharacterId, $isStaff);
         }
+        $authority = $this->normalizeResolutionAuthority($conflict->resolution_authority ?? 'mixed');
+        if (!$isStaff && $authority === 'players' && $openedBy > 0 && $openedBy === $actorCharacterId) {
+            $setParts = ['status = ?'];
+            $params = [self::STATUS_AWAITING];
+            if ($this->hasColumn('conflicts', 'last_activity_at')) {
+                $setParts[] = 'last_activity_at = NOW()';
+            }
+            $params[] = $conflictId;
+            $this->execPrepared(
+                'UPDATE conflicts SET '
+                . implode(', ', $setParts)
+                . ' WHERE id = ? LIMIT 1',
+                $params,
+            );
+
+            $this->insertActionRow($conflictId, [
+                'actor_id' => $actorCharacterId,
+                'actor_type' => 'character',
+                'action_type' => 'system',
+                'action_kind' => 'close_escalated',
+                'action_mode' => 'players',
+                'action_body' => 'Richiesta chiusura inoltrata alla revisione staff (manca conferma controparte).',
+                'resolution_status' => 'pending_review',
+                'meta_json' => $this->toJson([
+                    'event_type' => 'conflict_close_escalated',
+                    'error_code' => 'conflict_close_counterparty_required',
+                ]),
+            ]);
+
+            $detail = $this->getConflict($conflictId);
+            $detail['review_pending'] = 1;
+            $this->notifyConflictParticipants(
+                $conflictId,
+                (int) ($conflict->location_id ?? 0),
+                'Conflitto in revisione',
+                'La chiusura richiede conferma controparte o intervento staff.',
+                'awaiting_review',
+                $actorCharacterId,
+            );
+            return $detail;
+        }
+        $this->enforceFinalizeByAuthority($conflict, $actorCharacterId, $isStaff, 'close');
 
         $mode = $this->normalizeResolutionMode($conflict->resolution_mode ?? $this->settingsService->mode());
         $resolver = $this->resolverFactory->forMode($mode);
@@ -2064,6 +2449,19 @@ class ConflictService
             $note,
             'closed',
             $actorCharacterId,
+        );
+
+        $locationId = (int) ($conflict->location_id ?? 0);
+        $this->publishLocationConflictSystemMessage(
+            $locationId,
+            $actorCharacterId,
+            'Conflitto #' . $conflictId . ' chiuso',
+            $note,
+            [
+                'event_type' => 'conflict_closed',
+                'conflict_id' => $conflictId,
+                'location_id' => $locationId,
+            ],
         );
 
         return $detail;
@@ -2235,4 +2633,3 @@ class ConflictService
         return $this->settingsService->updateSettings($payload);
     }
 }
-

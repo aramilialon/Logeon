@@ -1,8 +1,8 @@
 <div data-admin-page="settings">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3 mt-3">
         <header>
-            <h4 class="mb-1">Impostazioni</h4>
-            <p class="text-muted mb-0">Configura i parametri runtime della piattaforma</p>
+            <h4 class="display-6 mb-1">Impostazioni</h4>
+            <h6 class="mb-0">Configura i parametri runtime della piattaforma.</h6>
         </header>
         <div class="d-flex gap-2">
             <button type="button" class="btn btn-sm btn-outline-primary" data-action="admin-settings-reload">
@@ -10,6 +10,8 @@
             </button>
         </div>
     </div>
+
+    <hr class="w-75 ms-2" />
 
     <div id="admin-settings-alert" class="alert d-none mb-3" role="alert"></div>
 
@@ -64,6 +66,24 @@
                                                 <option value="2">2 - Alto impatto</option>
                                             </select>
                                             <div class="form-text">Livello massimo consentito ai delegati.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <hr class="my-0">
+                            </div>
+                            <div class="col-12">
+                                <div class="border rounded-3 p-3">
+                                    <div class="mb-3">
+                                        <h6 class="mb-1"><i class="bi bi-trash3 me-2"></i>Cancellazione personaggio</h6>
+                                        <p class="text-muted small mb-0">Numero di giorni di attesa dopo la richiesta di cancellazione prima che il personaggio venga eliminato definitivamente.</p>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-12 col-md-4">
+                                            <label for="s-character-delete-days" class="form-label mb-1">Giorni prima della cancellazione</label>
+                                            <input id="s-character-delete-days" name="character_delete_days" type="number" class="form-control" min="1" max="365" placeholder="10">
+                                            <div class="form-text">Min 1 — Max 365. Default: 10 giorni.</div>
                                         </div>
                                     </div>
                                 </div>
@@ -207,8 +227,8 @@
                                                 </div>
                                                 <div class="col-12 col-xl-8 d-none" id="admin-settings-pwa-cache-version-wrap">
                                                     <label for="s-pwa-cache-version" class="form-label mb-1">Versione cache</label>
-                                                    <input id="s-pwa-cache-version" name="pwa_cache_version" type="text" class="form-control" maxlength="64" placeholder="20260426">
-                                                    <div class="form-text">Incrementala quando cambi asset critici per forzare il refresh del service worker.</div>
+                                                    <input id="s-pwa-cache-version" name="pwa_cache_version" type="text" class="form-control" maxlength="64" readonly>
+                                                    <div class="form-text">Gestita automaticamente dagli asset compilati frontend e riutilizzata anche dal service worker.</div>
                                                 </div>
                                                 <div class="col-12">
                                                     <div class="alert alert-light border mb-0">
@@ -320,15 +340,37 @@
                     <div class="accordion-body">
                         <div class="border rounded-3 p-3">
                             <div class="row g-3">
-                                <div class="col-12 col-md-6">
+                                <div class="col-12 col-md-4">
                                     <label for="s-chat-history-hours" class="form-label mb-1">Storico chat location <span class="text-muted small">(ore)</span></label>
                                     <input id="s-chat-history-hours" name="location_chat_history_hours" type="number" class="form-control" min="1" max="24" placeholder="3">
                                     <div class="form-text">Quante ore di messaggi vengono mostrate nella chat location. Min 1 - Max 24.</div>
                                 </div>
-                                <div class="col-12 col-md-6">
+                                <div class="col-12 col-md-4">
                                     <label for="s-whisper-retention-hours" class="form-label mb-1">Retention sussurri <span class="text-muted small">(ore)</span></label>
                                     <input id="s-whisper-retention-hours" name="location_whisper_retention_hours" type="number" class="form-control" min="1" max="168" placeholder="24">
                                     <div class="form-text">Per quante ore vengono conservati i sussurri privati. Min 1 - Max 168.</div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <label for="s-chat-max-chars" class="form-label mb-1">Limite caratteri messaggio</label>
+                                    <input id="s-chat-max-chars" name="location_chat_max_chars" type="number" class="form-control" min="0" max="10000" placeholder="0">
+                                    <div class="form-text">Numero massimo di caratteri per messaggio in chat location. <strong>0 = nessun limite.</strong> Lo staff e sempre esente.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border rounded-3 p-3 mt-3">
+                            <div class="row g-3">
+                                <div class="col-12 col-md-4">
+                                    <label for="s-default-dice-faces" class="form-label mb-1">Facce dado predefinito</label>
+                                    <select id="s-default-dice-faces" name="default_dice_faces" class="form-select">
+                                        <option value="4">d4</option>
+                                        <option value="6">d6</option>
+                                        <option value="8">d8</option>
+                                        <option value="10">d10</option>
+                                        <option value="12">d12</option>
+                                        <option value="20">d20</option>
+                                        <option value="100">d100</option>
+                                    </select>
+                                    <div class="form-text">Facce usate dal comando <code>/dado</code> quando non specificato (es. <code>/dado</code> senza argomenti).</div>
                                 </div>
                             </div>
                         </div>
@@ -496,15 +538,121 @@
                                         <option value="monolithic">Pagina continua</option>
                                     </select>
                                 </div>
-                                {% if module_active('logeon.archetypes') %}
-                                <div class="col-12 col-md-4">
-                                    <label for="s-archetypes-view-mode" class="form-label mb-1">Archetipi</label>
-                                    <select id="s-archetypes-view-mode" name="archetypes_view_mode" class="form-select">
-                                        <option value="navigation">Navigazione (menu laterale)</option>
-                                        <option value="monolithic">Pagina continua</option>
-                                    </select>
+                                {{ slot('admin.settings.docs_view_modes') }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="admin-settings-heading-smtp">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#admin-settings-collapse-smtp" aria-expanded="false" aria-controls="admin-settings-collapse-smtp">
+                        <i class="bi bi-envelope me-2"></i>Posta elettronica (SMTP)
+                    </button>
+                </h2>
+                <div id="admin-settings-collapse-smtp" class="accordion-collapse collapse" aria-labelledby="admin-settings-heading-smtp">
+                    <div class="accordion-body">
+                        <div class="row g-4">
+                            <div class="col-12">
+                                <div class="border rounded-3 p-3">
+                                    <div class="mb-3">
+                                        <h6 class="mb-1"><i class="bi bi-server me-2"></i>Configurazione server</h6>
+                                        <p class="text-muted small mb-0">Configura SMTP per l'invio delle email di sistema (conferma registrazione, reset password). Se disabilitato viene usata la funzione <code>mail()</code> nativa di PHP.</p>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label mb-1">Abilita SMTP</label>
+                                            <input type="hidden" id="s-smtp-enabled" name="smtp_enabled" value="0">
+                                            <div class="form-text mt-1">Se attivo usa il transport SMTP nativo del sistema invece di <code>mail()</code>.</div>
+                                        </div>
+                                        <div class="col-12" id="admin-settings-smtp-config" style="display:none">
+                                            <div class="row g-3">
+                                                <div class="col-12 col-md-5">
+                                                    <label for="s-smtp-host" class="form-label mb-1">Host SMTP</label>
+                                                    <input id="s-smtp-host" name="smtp_host" type="text" class="form-control" maxlength="255" placeholder="smtp.gmail.com">
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label for="s-smtp-port" class="form-label mb-1">Porta</label>
+                                                    <input id="s-smtp-port" name="smtp_port" type="number" class="form-control" min="1" max="65535" placeholder="587">
+                                                </div>
+                                                <div class="col-6 col-md-4">
+                                                    <label for="s-smtp-encryption" class="form-label mb-1">Cifratura</label>
+                                                    <select id="s-smtp-encryption" name="smtp_encryption" class="form-select">
+                                                        <option value="tls">TLS (STARTTLS) — porta 587</option>
+                                                        <option value="ssl">SSL — porta 465</option>
+                                                        <option value="none">Nessuna — porta 25</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-12 col-md-6">
+                                                    <label for="s-smtp-username" class="form-label mb-1">Username</label>
+                                                    <input id="s-smtp-username" name="smtp_username" type="text" class="form-control" maxlength="255" autocomplete="off" placeholder="utente@dominio.it">
+                                                </div>
+                                                <div class="col-12 col-md-6">
+                                                    <label for="s-smtp-password" class="form-label mb-1">Password</label>
+                                                    <input id="s-smtp-password" name="smtp_password" type="password" class="form-control" maxlength="512" autocomplete="new-password" placeholder="Lascia invariato per non modificarla">
+                                                    <div class="form-text">Lascia vuoto per rimuovere la password, oppure scrivi per cambiarla.</div>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label for="s-mail-smtp-timeout" class="form-label mb-1">Timeout SMTP</label>
+                                                    <input id="s-mail-smtp-timeout" name="mail_smtp_timeout" type="number" class="form-control" min="5" max="120" placeholder="30">
+                                                    <div class="form-text">Secondi di timeout per la connessione SMTP.</div>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label for="s-mail-batch-size" class="form-label mb-1">Batch queue</label>
+                                                    <input id="s-mail-batch-size" name="mail_batch_size" type="number" class="form-control" min="1" max="100" placeholder="10">
+                                                    <div class="form-text">Email processate per singolo tick.</div>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label for="s-mail-rate-per-minute" class="form-label mb-1">Rate/min</label>
+                                                    <input id="s-mail-rate-per-minute" name="mail_rate_per_minute" type="number" class="form-control" min="1" max="1000" placeholder="60">
+                                                    <div class="form-text">Limite globale email al minuto.</div>
+                                                </div>
+                                                <div class="col-6 col-md-3">
+                                                    <label for="s-mail-retry-attempts" class="form-label mb-1">Retry max</label>
+                                                    <input id="s-mail-retry-attempts" name="mail_retry_attempts" type="number" class="form-control" min="1" max="10" placeholder="3">
+                                                    <div class="form-text">Tentativi massimi per email fallita.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                {% endif %}
+                            </div>
+                            <div class="col-12">
+                                <div class="border rounded-3 p-3">
+                                    <div class="mb-3">
+                                        <h6 class="mb-1"><i class="bi bi-person-lines-fill me-2"></i>Mittente</h6>
+                                        <p class="text-muted small mb-0">Indirizzo e nome visualizzati come mittente in tutte le email di sistema.</p>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-12 col-md-6">
+                                            <label for="s-smtp-from-email" class="form-label mb-1">Email mittente</label>
+                                            <input id="s-smtp-from-email" name="smtp_from_email" type="email" class="form-control" maxlength="255" placeholder="noreply@tuodominio.it">
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <label for="s-smtp-from-name" class="form-label mb-1">Nome mittente</label>
+                                            <input id="s-smtp-from-name" name="smtp_from_name" type="text" class="form-control" maxlength="120" placeholder="Il tuo gioco">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="border rounded-3 p-3">
+                                    <div class="mb-3">
+                                        <h6 class="mb-1"><i class="bi bi-send me-2"></i>Test invio</h6>
+                                        <p class="text-muted small mb-0">Invia un'email di test per verificare la configurazione. Le impostazioni devono essere salvate prima del test.</p>
+                                    </div>
+                                    <div class="row g-3 align-items-end">
+                                        <div class="col-12 col-md-6">
+                                            <label for="s-smtp-test-to" class="form-label mb-1">Destinatario test</label>
+                                            <input id="s-smtp-test-to" type="email" class="form-control" maxlength="255" placeholder="tua@email.it">
+                                        </div>
+                                        <div class="col-12 col-md-auto">
+                                            <button type="button" class="btn btn-outline-secondary" data-action="admin-settings-test-mail">
+                                                <i class="bi bi-send me-1"></i>Invia email di test
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -533,10 +681,39 @@
                 <div class="accordion-body">
                     <p class="small text-muted mb-4">
                         Configura i suoni di notifica. Incolla il link diretto a un file audio oppure carica un file.<br>
-                        Ogni suono viene riprodotto <strong>una sola volta per sessione</strong> di pagina: per riascoltarlo ricarica la pagina.<br>
+                        I suoni di DM, notifiche, sussurri e globale usano un <strong>promemoria sonoro non invasivo</strong> finche sono presenti elementi non letti.<br>
+                        I file audio caricati devono avere durata massima <strong>5 secondi</strong>.<br>
+                        Il suono <strong>Chat</strong> viene riprodotto ogni volta che arriva un nuovo messaggio/azione in location (mai in loop).<br>
                         Il <strong>Globale</strong> viene riprodotto solo quando arrivano avvisi di <strong>due o piu tipi contemporaneamente</strong>.
                     </p>
                     <div class="row g-4" id="admin-settings-sounds-rows">
+                        <div class="col-12 col-md-6" data-sound-row="chat">
+                            <label class="form-label mb-1">Chat (messaggi/azioni)</label>
+                            <div class="btn-group btn-group-sm mb-2 ms-3" role="group">
+                                <button type="button" class="btn btn-outline-primary active" data-sound-tab-btn="link">Incolla link</button>
+                                <button type="button" class="btn btn-outline-primary" data-sound-tab-btn="upload">Carica file</button>
+                            </div>
+                            <div data-sound-tab-panel="link">
+                                <div class="input-group">
+                                    <input type="url" class="form-control" id="admin-sound-chat" data-sound-type="chat" placeholder="https://esempio.com/suono.mp3" maxlength="512">
+                                    <button type="button" class="btn btn-outline-secondary" data-sound-test="chat" title="Ascolta"><i class="bi bi-play-fill"></i></button>
+                                    <button type="button" class="btn btn-outline-danger" data-sound-clear="chat" title="Rimuovi"><i class="bi bi-x-lg"></i></button>
+                                </div>
+                            </div>
+                            <div data-sound-tab-panel="upload" style="display:none;">
+                                <div class="border rounded p-3 text-center text-muted mb-2" data-upload-drop="sound_chat" style="cursor:pointer;">
+                                    <i class="bi bi-music-note-beamed me-1"></i> Trascina qui il file audio oppure
+                                    <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-upload-target="sound_chat">scegli file</button>
+                                </div>
+                                <div class="form-text">Formati: mp3, ogg, wav, m4a, aac, webm. Limite: <span data-upload-max-label="sound_chat">10</span> MB.</div>
+                                <div class="progress mt-2 d-none" data-upload-progress="sound_chat">
+                                    <div class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger mt-2 d-none" data-upload-cancel="sound_chat">Annulla</button>
+                            </div>
+                            <div class="form-text mt-1">Segnale singolo quando arriva un nuovo messaggio o una nuova azione in chat location.</div>
+                        </div>
+
                         <div class="col-12 col-md-6" data-sound-row="dm">
                             <label class="form-label mb-1">Messaggi privati</label>
                             <div class="btn-group btn-group-sm mb-2 ms-3" role="group">

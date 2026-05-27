@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Services\ChatArchiveService;
 use App\Services\CharacterEventService;
+use App\Services\ChatArchiveService;
 use Core\AuthGuard;
 use Core\Http\ApiResponse;
 use Core\Http\AppError;
@@ -96,7 +96,7 @@ class ChatArchives
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
         $characterId = $this->requireCharacter();
-        $userId      = $this->requireUser();
+        $userId = $this->requireUser();
 
         $rows = $this->archiveService()->listByOwner($characterId, $userId);
         $response = ['dataset' => $rows];
@@ -112,10 +112,10 @@ class ChatArchives
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
         $characterId = $this->currentCharacterIdForViewer();
-        $userId      = $this->requireUser();
-        $isStaff     = AuthGuard::isStaff();
-        $data        = $this->requestDataObject();
-        $id          = InputValidator::integer($data, 'id', 0);
+        $userId = $this->requireUser();
+        $isStaff = AuthGuard::isStaff();
+        $data = $this->requestDataObject();
+        $id = InputValidator::integer($data, 'id', 0);
         $diaryEventId = InputValidator::integer($data, 'diary_event_id', 0);
 
         if ($id <= 0) {
@@ -146,24 +146,24 @@ class ChatArchives
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
         $characterId = $this->requireCharacter();
-        $userId      = $this->requireUser();
-        $data        = $this->requestDataObject();
+        $userId = $this->requireUser();
+        $data = $this->requestDataObject();
 
         $messageIdsRaw = property_exists($data, 'message_ids') && is_array($data->message_ids)
             ? $data->message_ids
             : [];
 
         $payload = [
-            'title'                        => InputValidator::string($data, 'title', ''),
-            'description'                  => InputValidator::string($data, 'description', ''),
-            'source_location_id'           => InputValidator::integer($data, 'source_location_id', 0),
-            'started_at'                   => InputValidator::string($data, 'started_at', ''),
-            'ended_at'                     => InputValidator::string($data, 'ended_at', ''),
-            'message_ids'                  => array_map('intval', $messageIdsRaw),
+            'title' => InputValidator::string($data, 'title', ''),
+            'description' => InputValidator::string($data, 'description', ''),
+            'source_location_id' => InputValidator::integer($data, 'source_location_id', 0),
+            'started_at' => InputValidator::string($data, 'started_at', ''),
+            'ended_at' => InputValidator::string($data, 'ended_at', ''),
+            'message_ids' => array_map('intval', $messageIdsRaw),
         ];
 
         $archiveId = $this->archiveService()->create($userId, $characterId, $payload);
-        $response  = ['dataset' => ['id' => $archiveId]];
+        $response = ['dataset' => ['id' => $archiveId]];
 
         if ($echo) {
             $this->emitJson($response);
@@ -176,17 +176,17 @@ class ChatArchives
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
         $characterId = $this->currentCharacterIdForViewer();
-        $userId      = $this->requireUser();
-        $isStaff     = AuthGuard::isStaff();
-        $data        = $this->requestDataObject();
-        $id          = InputValidator::integer($data, 'id', 0);
+        $userId = $this->requireUser();
+        $isStaff = AuthGuard::isStaff();
+        $data = $this->requestDataObject();
+        $id = InputValidator::integer($data, 'id', 0);
 
         if ($id <= 0) {
             throw AppError::validation('ID archivio obbligatorio', [], 'archive_id_required');
         }
 
         $payload = [
-            'title'       => InputValidator::string($data, 'title', ''),
+            'title' => InputValidator::string($data, 'title', ''),
             'description' => InputValidator::string($data, 'description', ''),
         ];
 
@@ -204,10 +204,10 @@ class ChatArchives
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
         $characterId = $this->currentCharacterIdForViewer();
-        $userId      = $this->requireUser();
-        $isStaff     = AuthGuard::isStaff();
-        $data        = $this->requestDataObject();
-        $id          = InputValidator::integer($data, 'id', 0);
+        $userId = $this->requireUser();
+        $isStaff = AuthGuard::isStaff();
+        $data = $this->requestDataObject();
+        $id = InputValidator::integer($data, 'id', 0);
 
         if ($id <= 0) {
             throw AppError::validation('ID archivio obbligatorio', [], 'archive_id_required');
@@ -227,22 +227,22 @@ class ChatArchives
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
         $characterId = $this->currentCharacterIdForViewer();
-        $userId      = $this->requireUser();
-        $isStaff     = AuthGuard::isStaff();
-        $data        = $this->requestDataObject();
-        $id          = InputValidator::integer($data, 'id', 0);
-        $enabled     = InputValidator::integer($data, 'public_enabled', 0) === 1;
+        $userId = $this->requireUser();
+        $isStaff = AuthGuard::isStaff();
+        $data = $this->requestDataObject();
+        $id = InputValidator::integer($data, 'id', 0);
+        $enabled = InputValidator::integer($data, 'public_enabled', 0) === 1;
 
         if ($id <= 0) {
             throw AppError::validation('ID archivio obbligatorio', [], 'archive_id_required');
         }
 
-        $archive  = $this->archiveService()->setPublic($id, $characterId, $enabled, $userId, $isStaff);
+        $archive = $this->archiveService()->setPublic($id, $characterId, $enabled, $userId, $isStaff);
         $response = [
             'dataset' => [
-                'public_token'   => $archive->public_token ?? null,
+                'public_token' => $archive->public_token ?? null,
                 'public_enabled' => isset($archive->public_enabled) ? (int) $archive->public_enabled : 0,
-                'visibility'     => $archive->visibility ?? 'private',
+                'visibility' => $archive->visibility ?? 'private',
             ],
         ];
 
@@ -256,13 +256,13 @@ class ChatArchives
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
-        $characterId   = $this->currentCharacterIdForViewer();
-        $userId        = $this->requireUser();
-        $isStaff       = AuthGuard::isStaff();
-        $data          = $this->requestDataObject();
-        $id            = InputValidator::integer($data, 'id', 0);
+        $characterId = $this->currentCharacterIdForViewer();
+        $userId = $this->requireUser();
+        $isStaff = AuthGuard::isStaff();
+        $data = $this->requestDataObject();
+        $id = InputValidator::integer($data, 'id', 0);
         $diaryEventRaw = InputValidator::integer($data, 'diary_event_id', 0);
-        $diaryEventId  = $diaryEventRaw > 0 ? $diaryEventRaw : null;
+        $diaryEventId = $diaryEventRaw > 0 ? $diaryEventRaw : null;
 
         if ($id <= 0) {
             throw AppError::validation('ID archivio obbligatorio', [], 'archive_id_required');
@@ -282,11 +282,11 @@ class ChatArchives
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
         $viewerCharacterId = $this->currentCharacterIdForViewer();
-        $userId            = $this->requireUser();
-        $isStaff           = AuthGuard::isStaff();
-        $data              = $this->requestDataObject();
-        $id                = InputValidator::integer($data, 'id', 0);
-        $query             = InputValidator::string($data, 'query', '');
+        $userId = $this->requireUser();
+        $isStaff = AuthGuard::isStaff();
+        $data = $this->requestDataObject();
+        $id = InputValidator::integer($data, 'id', 0);
+        $query = InputValidator::string($data, 'query', '');
 
         if ($id <= 0) {
             throw AppError::validation('ID archivio obbligatorio', [], 'archive_id_required');

@@ -237,6 +237,14 @@ class Inventory
         $result = $this->inventoryService()->maintainItem($me, $instanceId, $inventoryItemId);
         $this->emitJson($result);
     }
+
+    public function transfer()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $me = \Core\AuthGuard::api()->requireCharacter();
+        $data = $this->requestDataObject();
+        $recipientCharacterId = InputValidator::integer($data, 'recipient_character_id', 0);
+        $result = $this->inventoryService()->transferItemToCharacter((int) $me, $recipientCharacterId, $data);
+        $this->emitJson($result);
+    }
 }
-
-

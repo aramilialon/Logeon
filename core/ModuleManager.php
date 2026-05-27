@@ -13,6 +13,12 @@ class ModuleManager
     private const STATUS_ACTIVE = 'active';
     private const STATUS_INACTIVE = 'inactive';
     private const STATUS_ERROR = 'error';
+    private const TIER2_EXTENSION_MODULES = [
+        'logeon.combat-environment',
+        'logeon.combat-ai',
+        'logeon.combat-coordination',
+        'logeon.combat-admin-tools',
+    ];
 
     /** @var DbAdapterInterface */
     private $db;
@@ -30,7 +36,14 @@ class ModuleManager
     ) {
         $this->db = $db ?: DbAdapterFactory::createFromConfig();
         $this->modulesRoot = $modulesRoot ?: dirname(__DIR__) . '/modules';
-        $this->coreVersion = $coreVersion ?: '1.0.0';
+        $resolvedCoreVersion = trim((string) ($coreVersion ?? ''));
+        if ($resolvedCoreVersion === '') {
+            $resolvedCoreVersion = trim(ReleaseInfo::version());
+        }
+        if (!preg_match('/^\d+\.\d+\.\d+/', $resolvedCoreVersion)) {
+            $resolvedCoreVersion = '1.0.0';
+        }
+        $this->coreVersion = $resolvedCoreVersion;
     }
 
     public function discover(): array
@@ -83,6 +96,10 @@ class ModuleManager
             $manifest['_core'] = $this->normalizeCoreConstraint(
                 $manifest['core'] ?? ($manifest['compat'] ?? []),
             );
+            $manifest['_privacy'] = $this->normalizePrivacyDeclaration(
+                $manifest['privacy'] ?? null,
+                (($manifest['_class'] ?? 'optional') === 'bundled'),
+            );
             $out[$id] = $manifest;
         }
 
@@ -103,15 +120,28 @@ class ModuleManager
         foreach ($ids as $moduleId) {
             $manifest = $manifests[$moduleId] ?? [];
             $row = $rows[$moduleId] ?? null;
+            $hasManifest = !empty($manifest);
 
             $status = 'detected';
             if (is_object($row) && isset($row->status)) {
                 $status = (string) $row->status;
             }
 
+            $isInstalled = is_object($row);
+            $isActive = ($status === self::STATUS_ACTIVE);
+            $isBundled = ($manifest['_class'] ?? 'optional') === 'bundled';
+            $canSafeUninstall = !$isBundled && $isInstalled && !$isActive;
+            $canPurge = !$isActive && ($hasManifest || $isInstalled);
+
             $deps = isset($manifest['_dependencies']) && is_array($manifest['_dependencies'])
                 ? $manifest['_dependencies']
                 : ['required' => [], 'optional' => []];
+            $privacy = isset($manifest['_privacy']) && is_array($manifest['_privacy'])
+                ? $manifest['_privacy']
+                : $this->normalizePrivacyDeclaration(null, $isBundled);
+            $privacyValidation = isset($privacy['validation']) && is_array($privacy['validation'])
+                ? $privacy['validation']
+                : ['ok' => true, 'issues' => []];
 
             $dataset[] = [
                 'id' => (string) $moduleId,
@@ -120,8 +150,8 @@ class ModuleManager
                 'vendor' => (string) ($manifest['vendor'] ?? ($row->vendor ?? '')),
                 'version' => (string) ($manifest['version'] ?? ($row->version ?? '')),
                 'status' => $status,
-                'is_installed' => is_object($row) ? 1 : 0,
-                'is_active' => ($status === self::STATUS_ACTIVE) ? 1 : 0,
+                'is_installed' => $isInstalled ? 1 : 0,
+                'is_active' => $isActive ? 1 : 0,
                 'dependencies_required' => $deps['required'],
                 'dependencies_optional' => $deps['optional'],
                 'core_min' => (string) (($manifest['_core']['min'] ?? '') ?: ''),
@@ -133,7 +163,20 @@ class ModuleManager
                 'last_error' => is_object($row) ? (string) ($row->last_error ?? '') : '',
                 'directory' => (string) ($manifest['_dir'] ?? ''),
                 'class' => (string) ($manifest['_class'] ?? 'optional'),
-                'is_bundled' => ($manifest['_class'] ?? 'optional') === 'bundled' ? 1 : 0,
+                'is_bundled' => $isBundled ? 1 : 0,
+                'has_manifest' => $hasManifest ? 1 : 0,
+                'can_uninstall_safe' => $canSafeUninstall ? 1 : 0,
+                'can_purge' => $canPurge ? 1 : 0,
+                'privacy_declared' => (int) ($privacy['declared'] ?? 0),
+                'privacy_personal_data' => (int) ($privacy['personal_data'] ?? 0),
+                'privacy_data_categories' => (array) ($privacy['data_categories'] ?? []),
+                'privacy_purposes' => (array) ($privacy['purposes'] ?? []),
+                'privacy_retention' => (string) ($privacy['retention'] ?? ''),
+                'privacy_requires_consent' => (int) ($privacy['requires_consent'] ?? 0),
+                'privacy_exports_user_data' => (int) ($privacy['exports_user_data'] ?? 0),
+                'privacy_supports_purge' => (int) ($privacy['supports_purge'] ?? 0),
+                'privacy_validation_ok' => ((int) (($privacyValidation['ok'] ?? false) ? 1 : 0)),
+                'privacy_validation_issues' => (array) ($privacyValidation['issues'] ?? []),
             ];
         }
 
@@ -146,7 +189,8 @@ class ModuleManager
 
     public function uninstall(string $moduleId, array $options = []): array
     {
-        $moduleId = trim($moduleId);
+        $discovered = $this->discover();
+        $moduleId = $this->resolveDiscoveredModuleId($moduleId, $discovered);
         if ($moduleId === '') {
             return $this->errorResult('module_not_found', 'Modulo non valido');
         }
@@ -154,15 +198,8 @@ class ModuleManager
         $this->ensureStorageTables();
 
         $purge = !empty($options['purge']);
-        $discovered = $this->discover();
         $manifest = $discovered[$moduleId] ?? null;
-
-        if (is_array($manifest) && ($manifest['_class'] ?? 'optional') === 'bundled') {
-            return $this->errorResult(
-                'module_bundled_no_purge',
-                'I moduli bundled standard non supportano la disinstallazione. Disattiva il modulo per disabilitarne le funzionalita.',
-            );
-        }
+        $isBundled = is_array($manifest) && ($manifest['_class'] ?? 'optional') === 'bundled';
 
         $row = $this->db->fetchOnePrepared(
             'SELECT id, status
@@ -182,6 +219,17 @@ class ModuleManager
                 'module_uninstall_requires_inactive',
                 'Disattiva prima il modulo per procedere con la disinstallazione',
             );
+        }
+
+        if (!$purge && $isBundled) {
+            return $this->errorResult(
+                'module_bundled_safe_uninstall_blocked',
+                'I moduli bundled non supportano la disinstallazione safe. Disattiva il modulo e usa purge dati per riallineare schema e metadati.',
+            );
+        }
+
+        if (!$purge && !isset($row->id)) {
+            return $this->errorResult('module_not_installed', 'Modulo non installato');
         }
 
         if ($purge && is_array($manifest)) {
@@ -223,6 +271,7 @@ class ModuleManager
                 'module_id' => $moduleId,
                 'status' => 'detected',
                 'uninstall_mode' => $purge ? 'purge' : 'safe',
+                'is_bundled' => $isBundled ? 1 : 0,
             ],
         ];
     }
@@ -279,6 +328,8 @@ class ModuleManager
 
         $orphanInstalled = [];
         $activeWithoutArtifacts = [];
+        $privacyMissingDeclaration = [];
+        $privacyIssueModules = [];
         foreach ($installed as $installedId => $row) {
             if (!isset($discovered[$installedId])) {
                 $orphanInstalled[] = [
@@ -300,6 +351,38 @@ class ModuleManager
             }
         }
 
+        foreach ($discovered as $moduleId => $manifest) {
+            if (!is_array($manifest)) {
+                continue;
+            }
+
+            $privacy = isset($manifest['_privacy']) && is_array($manifest['_privacy'])
+                ? $manifest['_privacy']
+                : $this->normalizePrivacyDeclaration(null, (($manifest['_class'] ?? 'optional') === 'bundled'));
+            $validation = isset($privacy['validation']) && is_array($privacy['validation'])
+                ? $privacy['validation']
+                : ['ok' => true, 'issues' => []];
+            $issues = isset($validation['issues']) && is_array($validation['issues'])
+                ? $validation['issues']
+                : [];
+
+            if ((int) ($privacy['declared'] ?? 0) !== 1) {
+                $privacyMissingDeclaration[] = [
+                    'module_id' => (string) $moduleId,
+                    'class' => (string) ($manifest['_class'] ?? 'optional'),
+                ];
+                continue;
+            }
+
+            if (!empty($issues)) {
+                $privacyIssueModules[] = [
+                    'module_id' => (string) $moduleId,
+                    'class' => (string) ($manifest['_class'] ?? 'optional'),
+                    'issues' => $issues,
+                ];
+            }
+        }
+
         return [
             'ok' => true,
             'dataset' => [
@@ -310,10 +393,14 @@ class ModuleManager
                     'orphan_installed_rows' => count($orphanInstalled),
                     'orphan_artifacts' => count($orphanArtifacts),
                     'active_without_artifacts' => count($activeWithoutArtifacts),
+                    'privacy_missing_declaration' => count($privacyMissingDeclaration),
+                    'privacy_incomplete_declaration' => count($privacyIssueModules),
                 ],
                 'orphan_installed_rows' => $orphanInstalled,
                 'orphan_artifacts' => $orphanArtifacts,
                 'active_modules_without_artifacts' => $activeWithoutArtifacts,
+                'privacy_missing_declaration' => $privacyMissingDeclaration,
+                'privacy_issue_modules' => $privacyIssueModules,
             ],
         ];
     }
@@ -362,16 +449,101 @@ class ModuleManager
         return (is_object($row) && isset($row->status) && (string) $row->status === self::STATUS_ACTIVE);
     }
 
-    public function activate(string $moduleId): array
+    public function getSettings(string $moduleId): array
     {
         $moduleId = trim($moduleId);
+        if ($moduleId === '') {
+            return [];
+        }
+
+        $this->ensureStorageTables();
+        $rows = $this->db->fetchAllPrepared(
+            'SELECT setting_key, setting_value, value_type
+             FROM sys_module_settings
+             WHERE module_id = ?
+             ORDER BY setting_key ASC',
+            [$moduleId],
+        );
+
+        $settings = [];
+        foreach ($rows as $row) {
+            if (!is_object($row) || !isset($row->setting_key)) {
+                continue;
+            }
+
+            $settings[(string) $row->setting_key] = $this->decodeModuleSettingValue(
+                isset($row->setting_value) ? (string) $row->setting_value : null,
+                isset($row->value_type) ? (string) $row->value_type : 'string',
+            );
+        }
+
+        return $settings;
+    }
+
+    public function getSetting(string $moduleId, string $settingKey, $default = null)
+    {
+        $moduleId = trim($moduleId);
+        $settingKey = trim($settingKey);
+        if ($moduleId === '' || $settingKey === '') {
+            return $default;
+        }
+
+        $this->ensureStorageTables();
+        $row = $this->db->fetchOnePrepared(
+            'SELECT setting_value, value_type
+             FROM sys_module_settings
+             WHERE module_id = ?
+               AND setting_key = ?
+             LIMIT 1',
+            [$moduleId, $settingKey],
+        );
+        if (!is_object($row)) {
+            return $default;
+        }
+
+        return $this->decodeModuleSettingValue(
+            isset($row->setting_value) ? (string) $row->setting_value : null,
+            isset($row->value_type) ? (string) $row->value_type : 'string',
+        );
+    }
+
+    public function setSetting(string $moduleId, string $settingKey, $value): void
+    {
+        $moduleId = trim($moduleId);
+        $settingKey = trim($settingKey);
+        if ($moduleId === '' || $settingKey === '') {
+            return;
+        }
+
+        $this->ensureStorageTables();
+        $normalized = $this->normalizeModuleSettingValue($value);
+        $this->db->executePrepared(
+            'INSERT INTO sys_module_settings
+                (module_id, setting_key, setting_value, value_type, updated_at)
+             VALUES (?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE
+                setting_value = VALUES(setting_value),
+                value_type = VALUES(value_type),
+                updated_at = NOW()',
+            [
+                $moduleId,
+                $settingKey,
+                $normalized['setting_value'],
+                $normalized['value_type'],
+            ],
+        );
+    }
+
+    public function activate(string $moduleId): array
+    {
+        $discovered = $this->discover();
+        $moduleId = $this->resolveDiscoveredModuleId($moduleId, $discovered);
         if ($moduleId === '') {
             return $this->errorResult('module_not_found', 'Modulo non valido');
         }
 
         $this->ensureStorageTables();
 
-        $discovered = $this->discover();
         if (!isset($discovered[$moduleId])) {
             return $this->errorResult('module_not_found', 'Modulo non trovato');
         }
@@ -397,6 +569,12 @@ class ModuleManager
             return $migrations;
         }
 
+        $activationAdjustments = $this->applyActivationAdjustments($moduleId, $manifest);
+        if (!$activationAdjustments['ok']) {
+            $this->markError($moduleId, $activationAdjustments['message']);
+            return $activationAdjustments;
+        }
+
         $this->db->executePrepared(
             'UPDATE sys_modules
              SET status = ?,
@@ -413,13 +591,14 @@ class ModuleManager
             'dataset' => [
                 'module_id' => $moduleId,
                 'status' => self::STATUS_ACTIVE,
+                'activation_adjustments' => $activationAdjustments['dataset'] ?? [],
             ],
         ];
     }
 
     public function deactivate(string $moduleId, array $options = []): array
     {
-        $moduleId = trim($moduleId);
+        $moduleId = $this->resolveDiscoveredModuleId($moduleId, $this->discover());
         if ($moduleId === '') {
             return $this->errorResult('module_not_found', 'Modulo non valido');
         }
@@ -441,6 +620,66 @@ class ModuleManager
                 'deactivated_modules' => array_values(array_unique($deactivatedModules)),
             ],
         ];
+    }
+
+    private function normalizeModuleIdentifier(string $moduleId): string
+    {
+        $moduleId = trim(str_replace('\\', '/', $moduleId));
+        if ($moduleId === '') {
+            return '';
+        }
+
+        $moduleId = trim($moduleId, '/');
+        if ($moduleId === '') {
+            return '';
+        }
+
+        if (substr($moduleId, -12) === '/module.json') {
+            $moduleId = substr($moduleId, 0, -12);
+        }
+
+        $parts = array_values(array_filter(explode('/', $moduleId), static function ($part) {
+            return $part !== '' && $part !== '.';
+        }));
+
+        if ($parts !== []) {
+            $moduleId = (string) end($parts);
+        }
+
+        return trim($moduleId);
+    }
+
+    private function resolveDiscoveredModuleId(string $moduleId, array $discovered): string
+    {
+        $normalizedId = $this->normalizeModuleIdentifier($moduleId);
+        if ($normalizedId === '') {
+            return '';
+        }
+
+        if (isset($discovered[$normalizedId])) {
+            return $normalizedId;
+        }
+
+        foreach ($discovered as $discoveredId => $manifest) {
+            $directoryId = trim((string) ($manifest['_dir'] ?? ''));
+            if ($directoryId !== '' && $directoryId === $normalizedId) {
+                return (string) $discoveredId;
+            }
+        }
+
+        $normalizedLower = strtolower($normalizedId);
+        foreach ($discovered as $discoveredId => $manifest) {
+            $candidates = [
+                strtolower(trim((string) $discoveredId)),
+                strtolower(trim((string) ($manifest['_dir'] ?? ''))),
+            ];
+
+            if (in_array($normalizedLower, $candidates, true)) {
+                return (string) $discoveredId;
+            }
+        }
+
+        return $normalizedId;
     }
 
     private function deactivateInternal(string $moduleId, bool $cascade, array &$deactivatedModules, array $path): array
@@ -558,6 +797,127 @@ class ModuleManager
         return $decoded;
     }
 
+    private function applyActivationAdjustments(string $moduleId, array $manifest): array
+    {
+        if (!in_array($moduleId, self::TIER2_EXTENSION_MODULES, true)) {
+            return ['ok' => true, 'dataset' => []];
+        }
+
+        try {
+            $baseTier = (int) $this->getSetting('logeon.narrative-combat', 'combat_depth', 2);
+            $wasPromoted = $baseTier <= 1;
+            if ($wasPromoted) {
+                $this->setSetting('logeon.narrative-combat', 'combat_depth', 2);
+            }
+
+            $contextsUpgraded = false;
+            if ($this->hasTable('combat_contexts')) {
+                $this->db->executePrepared(
+                    'UPDATE combat_contexts
+                     SET tier_level = ?, updated_at = NOW()
+                     WHERE tier_level < ?',
+                    [2, 2],
+                );
+                $contextsUpgraded = true;
+            }
+
+            $dataset = [
+                'base_tier_promoted' => $wasPromoted,
+                'contexts_upgraded' => $contextsUpgraded,
+                'dependency_module_id' => 'logeon.narrative-combat',
+            ];
+            return [
+                'ok' => true,
+                'dataset' => $dataset,
+            ];
+        } catch (\Throwable $error) {
+            return $this->errorResult(
+                'module_activation_adjustment_failed',
+                'Allineamento automatico Tier 2 non riuscito: ' . $error->getMessage(),
+            );
+        }
+    }
+
+    private function hasTable(string $table): bool
+    {
+        $this->ensureStorageTables();
+        $row = $this->db->fetchOnePrepared(
+            'SELECT COUNT(*) AS c
+             FROM information_schema.tables
+             WHERE table_schema = DATABASE()
+               AND table_name = ?
+             LIMIT 1',
+            [$table],
+        );
+
+        return is_object($row) && (int) ($row->c ?? 0) > 0;
+    }
+
+    /**
+     * @return array{setting_value:?string,value_type:string}
+     */
+    private function normalizeModuleSettingValue($value): array
+    {
+        if (is_bool($value)) {
+            return [
+                'setting_value' => $value ? '1' : '0',
+                'value_type' => 'bool',
+            ];
+        }
+        if (is_int($value)) {
+            return [
+                'setting_value' => (string) $value,
+                'value_type' => 'int',
+            ];
+        }
+        if (is_float($value)) {
+            return [
+                'setting_value' => (string) $value,
+                'value_type' => 'float',
+            ];
+        }
+        if (is_array($value)) {
+            $encoded = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return [
+                'setting_value' => is_string($encoded) ? $encoded : '[]',
+                'value_type' => 'json',
+            ];
+        }
+        if ($value === null) {
+            return [
+                'setting_value' => null,
+                'value_type' => 'null',
+            ];
+        }
+
+        return [
+            'setting_value' => trim((string) $value),
+            'value_type' => 'string',
+        ];
+    }
+
+    private function decodeModuleSettingValue(?string $value, string $valueType)
+    {
+        if ($valueType === 'bool') {
+            return $value === '1';
+        }
+        if ($valueType === 'int') {
+            return (int) $value;
+        }
+        if ($valueType === 'float') {
+            return (float) $value;
+        }
+        if ($valueType === 'json') {
+            $decoded = json_decode((string) $value, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        if ($valueType === 'null') {
+            return null;
+        }
+
+        return (string) $value;
+    }
+
     private function normalizeCoreConstraint($core): array
     {
         if (!is_array($core)) {
@@ -609,6 +969,131 @@ class ModuleManager
             'required' => $required,
             'optional' => $optional,
         ];
+    }
+
+    private function normalizePrivacyDeclaration($privacy, bool $isBundled): array
+    {
+        $declared = is_array($privacy);
+        $normalized = [
+            'declared' => $declared ? 1 : 0,
+            'personal_data' => 0,
+            'data_categories' => [],
+            'purposes' => [],
+            'retention' => '',
+            'requires_consent' => 0,
+            'exports_user_data' => 0,
+            'supports_purge' => 0,
+            'validation' => [
+                'ok' => true,
+                'issues' => [],
+            ],
+        ];
+
+        if (!$declared) {
+            $normalized['validation'] = [
+                'ok' => false,
+                'issues' => [
+                    [
+                        'code' => 'privacy_block_missing',
+                        'severity' => 'warning',
+                        'message' => 'Manifest senza blocco privacy',
+                    ],
+                ],
+            ];
+            return $normalized;
+        }
+
+        $personalData = $this->toBool($privacy['personal_data'] ?? false);
+        $dataCategories = $this->normalizeStringList($privacy['data_categories'] ?? []);
+        $purposes = $this->normalizeStringList($privacy['purposes'] ?? []);
+        $retention = trim((string) ($privacy['retention'] ?? ''));
+        $requiresConsent = $this->toBool($privacy['requires_consent'] ?? false);
+        $exportsUserData = $this->toBool($privacy['exports_user_data'] ?? false);
+        $supportsPurge = $this->toBool($privacy['supports_purge'] ?? false);
+
+        $issues = [];
+        if ($personalData && empty($dataCategories)) {
+            $issues[] = [
+                'code' => 'privacy_data_categories_missing',
+                'severity' => 'error',
+                'message' => 'Dati personali attivi ma categorie dati mancanti',
+            ];
+        }
+        if ($personalData && empty($purposes)) {
+            $issues[] = [
+                'code' => 'privacy_purposes_missing',
+                'severity' => 'error',
+                'message' => 'Dati personali attivi ma finalita mancanti',
+            ];
+        }
+        if ($personalData && $retention === '') {
+            $issues[] = [
+                'code' => 'privacy_retention_missing',
+                'severity' => 'error',
+                'message' => 'Dati personali attivi ma retention non dichiarata',
+            ];
+        }
+        if ($requiresConsent && !$personalData) {
+            $issues[] = [
+                'code' => 'privacy_requires_consent_without_personal_data',
+                'severity' => 'warning',
+                'message' => 'Consenso richiesto ma personal_data disattivo: verificare coerenza',
+            ];
+        }
+        if ($exportsUserData && !$personalData) {
+            $issues[] = [
+                'code' => 'privacy_exports_without_personal_data',
+                'severity' => 'warning',
+                'message' => 'Export dati utente attivo ma personal_data disattivo: verificare coerenza',
+            ];
+        }
+        if (!$supportsPurge && !$isBundled) {
+            $issues[] = [
+                'code' => 'privacy_optional_without_purge_support',
+                'severity' => 'warning',
+                'message' => 'Modulo optional senza supporto purge dichiarato',
+            ];
+        }
+
+        $hasError = false;
+        foreach ($issues as $issue) {
+            if (($issue['severity'] ?? 'warning') === 'error') {
+                $hasError = true;
+                break;
+            }
+        }
+
+        $normalized['personal_data'] = $personalData ? 1 : 0;
+        $normalized['data_categories'] = $dataCategories;
+        $normalized['purposes'] = $purposes;
+        $normalized['retention'] = $retention;
+        $normalized['requires_consent'] = $requiresConsent ? 1 : 0;
+        $normalized['exports_user_data'] = $exportsUserData ? 1 : 0;
+        $normalized['supports_purge'] = $supportsPurge ? 1 : 0;
+        $normalized['validation'] = [
+            'ok' => !$hasError,
+            'issues' => $issues,
+        ];
+
+        return $normalized;
+    }
+
+    private function normalizeStringList($items): array
+    {
+        if (!is_array($items)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($items as $item) {
+            $value = trim((string) $item);
+            if ($value === '') {
+                continue;
+            }
+            $out[$value] = true;
+        }
+
+        return array_keys($out);
     }
 
     private function normalizeModuleClass(string $class): string

@@ -97,6 +97,14 @@ class NarrativeStates extends NarrativeState
         \Core\AuthGuard::api()->requireAbility('settings.manage');
     }
 
+    private function requireNarrativeStaff(): void
+    {
+        $auth = \Core\AppContext::authContext();
+        if (!$auth->isAdmin() && !$auth->isMaster() && !$auth->isSuperuser()) {
+            throw AppError::unauthorized('Operazione riservata a Master, Admin e Superuser');
+        }
+    }
+
     private function ensureLocationAccess(int $locationId, int $characterId): void
     {
         if ($locationId <= 0) {
@@ -132,6 +140,7 @@ class NarrativeStates extends NarrativeState
     public function apply($echo = true)
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
         $characterId = $this->requireCharacter();
         $data = $this->requestDataObject();
 
@@ -165,6 +174,7 @@ class NarrativeStates extends NarrativeState
     public function remove($echo = true)
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
         $characterId = $this->requireCharacter();
         $data = $this->requestDataObject();
 
@@ -182,6 +192,7 @@ class NarrativeStates extends NarrativeState
             'target_id' => (int) ($data->target_id ?? 0),
             'scene_id' => $sceneId,
             'reason' => (string) ($data->reason ?? 'manual_remove'),
+            'ignore_missing' => (int) ($data->ignore_missing ?? 0),
         ]);
 
         $response = ['dataset' => $result];
@@ -286,5 +297,3 @@ class NarrativeStates extends NarrativeState
         return $response;
     }
 }
-
-

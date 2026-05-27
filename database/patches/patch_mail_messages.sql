@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `mail_messages` (
+    `id`                   INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `owner_user_id`        INT UNSIGNED NULL DEFAULT NULL,
+    `template_id`          INT UNSIGNED NULL DEFAULT NULL,
+    `distribution_list_id` INT UNSIGNED NULL DEFAULT NULL,
+    `subject`              VARCHAR(500)   NOT NULL DEFAULT '',
+    `body_html`            LONGTEXT       NOT NULL,
+    `body_text`            TEXT           NOT NULL DEFAULT '',
+    `category`             ENUM('transactional','system','announcement','newsletter') NOT NULL DEFAULT 'announcement',
+    `status`               ENUM('draft','scheduled','queued','sending','sent','failed','cancelled') NOT NULL DEFAULT 'draft',
+    `scheduled_at`         DATETIME       NULL DEFAULT NULL,
+    `sent_at`              DATETIME       NULL DEFAULT NULL,
+    `total_recipients`     INT UNSIGNED   NOT NULL DEFAULT 0,
+    `sent_count`           INT UNSIGNED   NOT NULL DEFAULT 0,
+    `failed_count`         INT UNSIGNED   NOT NULL DEFAULT 0,
+    `created_at`           DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`           DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    INDEX `idx_status`        (`status`),
+    INDEX `idx_scheduled_at`  (`scheduled_at`),
+    INDEX `idx_owner`         (`owner_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

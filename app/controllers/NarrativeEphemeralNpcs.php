@@ -145,5 +145,3 @@ class NarrativeEphemeralNpcs
         return $response;
     }
 }
-
-

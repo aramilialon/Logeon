@@ -9,6 +9,19 @@ class ChatCommandService
     private $catalogCache = null;
     private $supportedCommandsCache = null;
 
+    /** @return array<string, mixed> */
+    private function config(): array
+    {
+        if (!defined('CONFIG')) {
+            return [];
+        }
+
+        /** @var array<string, mixed> $config */
+        $config = constant('CONFIG');
+
+        return $config;
+    }
+
     private function defaultCatalog()
     {
         return [
@@ -74,6 +87,20 @@ class ChatCommandService
                 'hint' => 'Dai monete a un personaggio in location. Es: /dai @Mario 50',
                 'kind' => 'dai',
             ],
+            [
+                'key' => '/off',
+                'value' => '/off ',
+                'hint' => 'Messaggio OFF-game a tutti i presenti in location (cooldown 60s)',
+                'kind' => 'off',
+            ],
+            [
+                'key' => '/music',
+                'value' => '/music ',
+                'hint' => 'Musica di sottofondo (solo staff): /music <url> | /music stop | /music mute-all | /music unmute-all',
+                'aliases' => ['/musica'],
+                'kind' => 'music',
+                'staff_only' => true,
+            ],
         ];
     }
 
@@ -113,6 +140,7 @@ class ChatCommandService
             'hint' => isset($row['hint']) ? (string) $row['hint'] : '',
             'aliases' => $aliases,
             'kind' => isset($row['kind']) ? strtolower(trim((string) $row['kind'])) : '',
+            'staff_only' => !empty($row['staff_only']),
         ];
     }
 
@@ -302,7 +330,15 @@ class ChatCommandService
     {
         $expr = trim((string) $args);
         if ($expr === '') {
-            $expr = '1d20';
+            $defaultFaces = 20;
+            $config = $this->config();
+            if (array_key_exists('default_dice_faces', $config)) {
+                $f = (int) $config['default_dice_faces'];
+                if ($f >= 2 && $f <= 1000) {
+                    $defaultFaces = $f;
+                }
+            }
+            $expr = '1d' . $defaultFaces;
         }
 
         if (!preg_match('/^(\d*)d(\d+)(([+-]\d+)*)$/i', $expr, $m)) {

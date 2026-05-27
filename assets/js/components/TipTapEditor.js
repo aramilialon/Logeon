@@ -1,4 +1,4 @@
-import { Editor } from '@tiptap/core';
+import { Editor, Mark, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
@@ -17,6 +17,294 @@ const DEFAULT_OPTIONS = {
         'image/gif': 'GIF'
     }
 };
+
+const IMAGE_ALIGNMENTS = ['left', 'center', 'right'];
+
+const Underline = Mark.create({
+    name: 'underline',
+
+    parseHTML() {
+        return [
+            { tag: 'u' },
+            {
+                style: 'text-decoration',
+                getAttrs: function (value) {
+                    return String(value || '').toLowerCase().indexOf('underline') !== -1 ? {} : false;
+                }
+            }
+        ];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['u', mergeAttributes(HTMLAttributes), 0];
+    },
+
+    addCommands() {
+        return {
+            setUnderline: () => ({ commands }) => commands.setMark(this.name),
+            toggleUnderline: () => ({ commands }) => commands.toggleMark(this.name),
+            unsetUnderline: () => ({ commands }) => commands.unsetMark(this.name)
+        };
+    },
+
+    addKeyboardShortcuts() {
+        return {
+            'Mod-u': () => this.editor.commands.toggleUnderline()
+        };
+    }
+});
+
+const LinkMark = Mark.create({
+    name: 'link',
+    inclusive: false,
+    priority: 1000,
+    keepOnSplit: false,
+
+    addAttributes() {
+        return {
+            href: {
+                default: null
+            },
+            target: {
+                default: null
+            },
+            rel: {
+                default: null
+            },
+            title: {
+                default: null
+            }
+        };
+    },
+
+    parseHTML() {
+        return [
+            {
+                tag: 'a[href]',
+                getAttrs: function (node) {
+                    const element = node && node.getAttribute ? node : null;
+                    if (!element) {
+                        return false;
+                    }
+
+                    const href = String(element.getAttribute('href') || '').trim();
+                    if (href === '') {
+                        return false;
+                    }
+
+                    return {
+                        href: href,
+                        target: element.getAttribute('target'),
+                        rel: element.getAttribute('rel'),
+                        title: element.getAttribute('title')
+                    };
+                }
+            }
+        ];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        const attrs = Object.assign({}, HTMLAttributes || {});
+        if (!attrs.href) {
+            return ['span', 0];
+        }
+
+        return ['a', mergeAttributes(attrs), 0];
+    },
+
+    addCommands() {
+        return {
+            setLink: (attributes) => ({ commands }) => {
+                const attrs = attributes && typeof attributes === 'object' ? attributes : {};
+                const href = String(attrs.href || '').trim();
+                if (href === '') {
+                    return false;
+                }
+
+                return commands.setMark(this.name, {
+                    href: href,
+                    target: attrs.target || null,
+                    rel: attrs.rel || null,
+                    title: attrs.title || null
+                });
+            },
+            unsetLink: () => ({ commands }) => commands.unsetMark(this.name, { extendEmptyMarkRange: true }),
+            toggleLink: (attributes) => ({ commands }) => commands.toggleMark(this.name, attributes || {})
+        };
+    }
+});
+
+function parseStyleDeclarations(styleValue) {
+    const declarations = {};
+    const style = String(styleValue || '').trim();
+    if (style === '') {
+        return declarations;
+    }
+
+    const parts = style.split(';');
+    for (let i = 0; i < parts.length; i += 1) {
+        const part = String(parts[i] || '').trim();
+        if (part === '' || part.indexOf(':') === -1) {
+            continue;
+        }
+
+        const tokens = part.split(':');
+        const property = String(tokens.shift() || '').trim().toLowerCase();
+        const value = String(tokens.join(':') || '').trim();
+        if (property !== '' && value !== '') {
+            declarations[property] = value;
+        }
+    }
+
+    return declarations;
+}
+
+function serializeStyleDeclarations(declarations) {
+    const parts = [];
+    const source = declarations && typeof declarations === 'object' ? declarations : {};
+    const keys = Object.keys(source);
+    for (let i = 0; i < keys.length; i += 1) {
+        const key = String(keys[i] || '').trim().toLowerCase();
+        const value = String(source[key] || '').trim();
+        if (key !== '' && value !== '') {
+            parts.push(key + ': ' + value);
+        }
+    }
+
+    return parts.join('; ');
+}
+
+function normalizeImageAlign(value) {
+    const align = String(value || '').trim().toLowerCase();
+    return IMAGE_ALIGNMENTS.indexOf(align) !== -1 ? align : '';
+}
+
+function detectImageAlignment(element) {
+    if (!element || typeof element.getAttribute !== 'function') {
+        return '';
+    }
+
+    const explicitAlign = normalizeImageAlign(element.getAttribute('data-align'));
+    if (explicitAlign !== '') {
+        return explicitAlign;
+    }
+
+    const styles = parseStyleDeclarations(element.getAttribute('style'));
+    const margin = String(styles.margin || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const marginInline = String(styles['margin-inline'] || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const marginLeft = String(styles['margin-left'] || '').trim().toLowerCase();
+    const marginRight = String(styles['margin-right'] || '').trim().toLowerCase();
+    const floatValue = String(styles.float || '').trim().toLowerCase();
+
+    if (floatValue === 'left' || floatValue === 'right') {
+        return floatValue;
+    }
+
+    if (marginInline === 'auto' || margin === '0 auto' || margin === 'auto') {
+        return 'center';
+    }
+
+    if (marginLeft === 'auto' && marginRight === 'auto') {
+        return 'center';
+    }
+
+    if (marginLeft === 'auto') {
+        return 'right';
+    }
+
+    if (marginRight === 'auto') {
+        return 'left';
+    }
+
+    return '';
+}
+
+function stripImageAlignmentStyle(styleValue) {
+    const declarations = parseStyleDeclarations(styleValue);
+    delete declarations.display;
+    delete declarations.float;
+    delete declarations.margin;
+    delete declarations['margin-inline'];
+    delete declarations['margin-left'];
+    delete declarations['margin-right'];
+
+    return serializeStyleDeclarations(declarations);
+}
+
+function buildImageStyle(styleValue, alignValue) {
+    const declarations = parseStyleDeclarations(styleValue);
+    const align = normalizeImageAlign(alignValue);
+
+    delete declarations.display;
+    delete declarations.float;
+    delete declarations.margin;
+    delete declarations['margin-inline'];
+    delete declarations['margin-left'];
+    delete declarations['margin-right'];
+
+    declarations.display = 'block';
+
+    if (align === 'left') {
+        declarations['margin-left'] = '0';
+        declarations['margin-right'] = 'auto';
+    } else if (align === 'right') {
+        declarations['margin-left'] = 'auto';
+        declarations['margin-right'] = '0';
+    } else {
+        declarations['margin-left'] = 'auto';
+        declarations['margin-right'] = 'auto';
+    }
+
+    return serializeStyleDeclarations(declarations);
+}
+
+const RichImage = Image.extend({
+    addAttributes() {
+        const parentAttributes = this.parent ? this.parent() : {};
+
+        return Object.assign({}, parentAttributes, {
+            align: {
+                default: 'center',
+                parseHTML: function (element) {
+                    const align = detectImageAlignment(element);
+                    return align !== '' ? align : 'center';
+                },
+                renderHTML: function () {
+                    return {};
+                }
+            },
+            style: {
+                default: '',
+                parseHTML: function (element) {
+                    if (!element || typeof element.getAttribute !== 'function') {
+                        return '';
+                    }
+
+                    return stripImageAlignmentStyle(element.getAttribute('style'));
+                },
+                renderHTML: function (attributes) {
+                    const style = buildImageStyle(attributes && attributes.style ? attributes.style : '', attributes && attributes.align ? attributes.align : 'center');
+                    return style !== '' ? { style: style } : {};
+                }
+            }
+        });
+    },
+
+    addCommands() {
+        const parentCommands = this.parent ? this.parent() : {};
+
+        return Object.assign({}, parentCommands, {
+            setImageAlignment: (align) => ({ commands }) => {
+                const normalized = normalizeImageAlign(align);
+                if (normalized === '') {
+                    return false;
+                }
+
+                return commands.updateAttributes(this.name, { align: normalized });
+            }
+        });
+    }
+});
 
 function hasJQuery() {
     return typeof globalWindow.$ === 'function';
@@ -93,6 +381,24 @@ function syncTextareaValue(instance) {
     instance.textarea.value = normalizeHtml(instance.editor.getHTML());
 }
 
+function syncEditorFromTextarea(instance, force) {
+    if (!instance || !instance.textarea || !instance.editor) {
+        return;
+    }
+
+    const sourceHtml = normalizeHtml(instance.textarea.value);
+    const editorHtml = normalizeHtml(instance.editor.getHTML());
+    if (sourceHtml === editorHtml) {
+        return;
+    }
+
+    if (force !== true && typeof instance.editor.isFocused === 'function' && instance.editor.isFocused === true) {
+        return;
+    }
+
+    setContent(instance, sourceHtml);
+}
+
 function setButtonActive(button, isActive) {
     if (!button) {
         return;
@@ -143,7 +449,12 @@ function updateToolbarState(instance) {
             active = editor.isActive('link');
         } else if (action === 'align-left' || action === 'align-center' || action === 'align-right') {
             const align = action.replace('align-', '');
-            active = editor.isActive({ textAlign: align });
+            if (editor.isActive('image')) {
+                const imageAttrs = editor.getAttributes('image') || {};
+                active = normalizeImageAlign(imageAttrs.align || 'center') === align;
+            } else {
+                active = editor.isActive({ textAlign: align });
+            }
         }
 
         setButtonActive(button, active);
@@ -178,6 +489,35 @@ function executeChain(editor, commandName, payload) {
     }
 
     return chain[commandName](payload).run();
+}
+
+function resolveCurrentImageAlignment(editor) {
+    if (!editor) {
+        return 'center';
+    }
+
+    if (editor.isActive('image')) {
+        const imageAttrs = editor.getAttributes('image') || {};
+        const current = normalizeImageAlign(imageAttrs.align);
+        return current !== '' ? current : 'center';
+    }
+
+    const textAlign = normalizeImageAlign((editor.getAttributes('paragraph') || {}).textAlign);
+    return textAlign !== '' ? textAlign : 'center';
+}
+
+function applyAlignment(instance, align) {
+    if (!instance || !instance.editor) {
+        return;
+    }
+
+    const editor = instance.editor;
+    if (editor.isActive('image') && typeof editor.commands.setImageAlignment === 'function') {
+        editor.commands.setImageAlignment(align);
+        return;
+    }
+
+    executeChain(editor, 'setTextAlign', align);
 }
 
 function setHeadingLevel(instance, value) {
@@ -254,7 +594,10 @@ function insertImageFromUrl(instance) {
         return;
     }
 
-    executeChain(instance.editor, 'setImage', { src: url });
+    executeChain(instance.editor, 'setImage', {
+        src: url,
+        align: resolveCurrentImageAlignment(instance.editor)
+    });
 }
 
 function finalizeUpload(instance, file) {
@@ -276,7 +619,10 @@ function finalizeUpload(instance, file) {
             return;
         }
 
-        executeChain(instance.editor, 'setImage', { src: url });
+        executeChain(instance.editor, 'setImage', {
+            src: url,
+            align: resolveCurrentImageAlignment(instance.editor)
+        });
         setToolbarBusy(instance, false);
         notify('success', 'Immagine inserita.');
     }).catch(function (error) {
@@ -418,19 +764,19 @@ function buildToolbar(instance) {
             action: 'align-left',
             title: 'Allinea a sinistra',
             icon: '<i class="bi bi-text-left"></i>',
-            onClick: function (ctx) { executeChain(ctx.editor, 'setTextAlign', 'left'); }
+            onClick: function (ctx) { applyAlignment(ctx, 'left'); }
         },
         {
             action: 'align-center',
             title: 'Allinea al centro',
             icon: '<i class="bi bi-text-center"></i>',
-            onClick: function (ctx) { executeChain(ctx.editor, 'setTextAlign', 'center'); }
+            onClick: function (ctx) { applyAlignment(ctx, 'center'); }
         },
         {
             action: 'align-right',
             title: 'Allinea a destra',
             icon: '<i class="bi bi-text-right"></i>',
-            onClick: function (ctx) { executeChain(ctx.editor, 'setTextAlign', 'right'); }
+            onClick: function (ctx) { applyAlignment(ctx, 'right'); }
         },
         {
             action: 'image-url',
@@ -530,11 +876,13 @@ function buildEditorExtensions() {
                 levels: [3, 4, 5, 6]
             }
         }),
+        Underline,
+        LinkMark,
         TextAlign.configure({
             types: ['heading', 'paragraph'],
             alignments: ['left', 'center', 'right']
         }),
-        Image.configure({
+        RichImage.configure({
             inline: false,
             allowBase64: false
         })
@@ -612,6 +960,7 @@ function getInstance(textarea) {
 function ensureInstance(textarea, options) {
     let instance = getInstance(textarea);
     if (instance) {
+        syncEditorFromTextarea(instance, true);
         return instance;
     }
     return attachEditor(textarea, options);

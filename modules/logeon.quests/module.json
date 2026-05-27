@@ -1,19 +1,34 @@
 {
   "id": "logeon.quests",
-  "name": "Logeon Quests",
+  "name": "Missioni",
   "version": "0.1.0",
   "vendor": "Logeon",
   "description": "Modulo Quest: trigger runtime e API missioni/admin.",
+  "privacy": {
+    "personal_data": false,
+    "data_categories": [],
+    "purposes": [],
+    "retention": "inherits_instance_policy",
+    "requires_consent": false,
+    "exports_user_data": false,
+    "supports_purge": true
+  },
   "category": "gameplay",
   "class": "bundled",
   "compat": {
-    "min": "0.8.0",
+    "min": "1.0.0",
     "max": ""
   },
   "requires": [],
   "entrypoints": {
     "bootstrap": "bootstrap.php",
     "routes": "routes.php"
+  },
+  "migrations": {
+    "path": "migrations"
+  },
+  "uninstall": {
+    "path": "migrations/uninstall"
   },
   "assets": {
     "admin": {
@@ -29,7 +44,7 @@
         {
           "label": "Quest",
           "href": "/admin/quests",
-          "icon": "bi bi-journal-check",
+          "icon": "",
           "page": "quests",
           "section": "Narrativa",
           "section_order": 50,
@@ -44,6 +59,23 @@
     "quests.admin.routes",
     "quests.game.history.route",
     "quests.twig.slots",
-    "quests.views"
-  ]
+    "quests.views",
+    "landing.metrics.provider",
+    "system_event.delete.related_cleanup",
+    "narrative_tags.entity_provider"
+  ],
+  "privacy": {
+    "personal_data": true,
+    "data_categories": [
+      "character_progression",
+      "quest_history"
+    ],
+    "purposes": [
+      "gameplay_progress_tracking"
+    ],
+    "retention": "fino a rimozione personaggio/modulo",
+    "requires_consent": false,
+    "exports_user_data": true,
+    "supports_purge": true
+  }
 }

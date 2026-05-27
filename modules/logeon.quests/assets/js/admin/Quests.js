@@ -370,8 +370,8 @@ var AdminQuests = {
                     + '</div>')
                 : '')
             + '<div class="small text-muted mb-2">Step: <b>' + (parseInt(row.steps_count || '0', 10) || 0) + '</b> - Istanze attive: <b>' + (parseInt(row.active_instances || '0', 10) || 0) + '</b></div>'
-            + (row.summary ? '<p class="small mb-2">' + this.escapeHtml(row.summary) + '</p>' : '')
-            + (row.description ? '<p class="small mb-0">' + this.escapeHtml(row.description) + '</p>' : '');
+            + (row.summary ? '<div class="small mb-2">' + String(row.summary) + '</div>' : '')
+            + (row.description ? '<div class="small mb-0">' + String(row.description) + '</div>' : '');
         this.detailEmpty.classList.add('d-none');
         this.detailPanel.classList.remove('d-none');
     },

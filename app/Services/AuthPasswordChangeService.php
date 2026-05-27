@@ -174,5 +174,3 @@ class AuthPasswordChangeService
         );
     }
 }
-
-

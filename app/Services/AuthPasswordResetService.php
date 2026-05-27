@@ -93,21 +93,7 @@ class AuthPasswordResetService
 
     private function dispatchMail(string $to, string $subject, string $htmlBody): bool
     {
-        $to = trim($to);
-        if ($to === '') {
-            return false;
-        }
-
-        $from = trim((string) APP['support_email']);
-        $headers = [];
-        $headers[] = 'MIME-Version: 1.0';
-        $headers[] = 'Content-type: text/html; charset=UTF-8';
-        if ($from !== '' && $from !== '-') {
-            $headers[] = 'From: ' . $from;
-            $headers[] = 'Reply-To: ' . $from;
-        }
-
-        return @mail($to, $subject, $htmlBody, implode("\r\n", $headers));
+        return (new \App\Services\MailService())->send($to, $subject, $htmlBody);
     }
 
     public function resetPassword()
@@ -264,5 +250,3 @@ class AuthPasswordResetService
         );
     }
 }
-
-

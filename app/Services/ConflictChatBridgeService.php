@@ -59,33 +59,33 @@ class ConflictChatBridgeService
         int $targetId,
         string $summary,
         int $characterId,
-        bool $isStaff
+        bool $isStaff,
     ): array {
         $result = $this->conflictService()->proposeConflict([
             'location_id' => $locationId,
-            'target_id'   => $targetId,
-            'summary'     => $summary,
+            'target_id' => $targetId,
+            'summary' => $summary,
             'conflict_origin' => 'chat',
         ], $characterId, $isStaff);
 
-        $conflict   = $result['conflict'] ?? null;
+        $conflict = $result['conflict'] ?? null;
         $conflictId = (int) ($conflict->id ?? 0);
-        $status     = strtolower(trim((string) ($conflict->status ?? 'proposal')));
+        $status = strtolower(trim((string) ($conflict->status ?? 'proposal')));
         if ($status === '') {
             $status = 'proposal';
         }
 
         $statusLabelMap = [
-            'proposal'           => 'Proposta',
-            'open'               => 'Aperto',
-            'active'             => 'Attivo',
+            'proposal' => 'Proposta',
+            'open' => 'Aperto',
+            'active' => 'Attivo',
             'awaiting_resolution' => 'In attesa',
-            'resolved'           => 'Risolto',
-            'closed'             => 'Chiuso',
+            'resolved' => 'Risolto',
+            'closed' => 'Chiuso',
         ];
         $statusLabel = $statusLabelMap[$status] ?? ucfirst($status);
 
-        $settings      = $this->conflictSettingsService()->getSettings();
+        $settings = $this->conflictSettingsService()->getSettings();
         $compactEvents = ((int) ($settings['conflict_chat_compact_events'] ?? 1) === 1);
 
         $header = 'Conflitto';
@@ -118,14 +118,14 @@ class ConflictChatBridgeService
         }
 
         $meta = (string) json_encode([
-            'event_type'  => 'conflict_proposal_created',
-            'command'     => 'conflict',
+            'event_type' => 'conflict_proposal_created',
+            'command' => 'conflict',
             'conflict_id' => $conflictId,
-            'status'      => $status,
+            'status' => $status,
             'location_id' => $locationId,
-            'target_id'   => $targetId > 0 ? $targetId : null,
-            'summary'     => $summary,
-            'compact'     => $compactEvents ? 1 : 0,
+            'target_id' => $targetId > 0 ? $targetId : null,
+            'summary' => $summary,
+            'compact' => $compactEvents ? 1 : 0,
         ], JSON_UNESCAPED_UNICODE);
 
         return ['body' => $body, 'meta' => $meta];

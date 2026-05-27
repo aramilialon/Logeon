@@ -34,7 +34,7 @@ const PAGE_MODULES = {
     thread: ['game.notifications', 'game.narrative-events', 'game.system-events', 'game.messages', 'game.forum'],
     profile: ['game.notifications', 'game.narrative-events', 'game.system-events', 'game.news', 'game.messages', 'game.profile', 'game.lifecycle', 'game.narrative-states'],
     onlines: ['game.notifications', 'game.narrative-events', 'game.system-events', 'game.onlines'],
-    location: ['game.notifications', 'game.narrative-events', 'game.narrative-ephemeral-npcs', 'game.system-events', 'game.messages', 'game.location.page', 'game.location.chat', 'game.location.whispers', 'game.location.drops', 'game.location.invites'],
+    location: ['game.notifications', 'game.narrative-events', 'game.narrative-ephemeral-npcs', 'game.system-events', 'game.messages', 'game.profile', 'game.inventory', 'game.onlines', 'game.location.page', 'game.location.chat', 'game.location.whispers', 'game.location.drops', 'game.location.invites'],
     shop: ['game.notifications', 'game.narrative-events', 'game.system-events', 'game.messages', 'game.shop'],
     bank: ['game.notifications', 'game.narrative-events', 'game.system-events', 'game.messages', 'game.bank'],
     maps: ['game.notifications', 'game.narrative-events', 'game.system-events', 'game.messages', 'game.maps'],

@@ -243,6 +243,7 @@ function GameProfilePage(character_id, extension) {
                     }
                 }
                 block.find('[name="socialstatus_badge"]').text(dataset.socialstatus_name || '');
+                this.renderKamiSummary(block, dataset);
 
                 this.renderGuilds(block, this.character_id);
 
@@ -487,15 +488,21 @@ function GameProfilePage(character_id, extension) {
                 var groups = payload.profile || {};
                 var self = this;
                 ['primary', 'secondary', 'narrative'].forEach(function (groupKey) {
+                    var wrapNode = card.find('[data-role="profile-attributes-group-' + groupKey + '-wrap"]');
                     var listNode = card.find('[data-role="profile-attributes-group-' + groupKey + '"]');
                     var emptyNode = card.find('[data-role="profile-attributes-group-' + groupKey + '-empty"]');
                     listNode.empty();
 
                     var entries = Array.isArray(groups[groupKey]) ? groups[groupKey] : [];
                     if (!entries.length) {
-                        emptyNode.removeClass('d-none');
+                        if (groupKey !== 'primary') {
+                            wrapNode.addClass('d-none');
+                        } else {
+                            emptyNode.removeClass('d-none');
+                        }
                         return;
                     }
+                    wrapNode.removeClass('d-none');
                     emptyNode.addClass('d-none');
 
                     entries.forEach(function (entry) {
@@ -672,6 +679,57 @@ function GameProfilePage(character_id, extension) {
                     }
                 }).catch(function () {});
             },
+            renderKamiSummary: function (block, dataset) {
+                var row = block.find('[data-role="profile-kami-item"]');
+                if (!row.length) {
+                    return;
+                }
+
+                var nameNode = row.find('[data-role="profile-kami-name"]');
+                var iconNode = row.find('[data-role="profile-kami-icon"]');
+                var kami = dataset && dataset.demonhanta_kami ? dataset.demonhanta_kami : null;
+                var name = dataset && dataset.kami_name ? String(dataset.kami_name).trim() : '';
+                var icon = dataset && dataset.kami_icon ? String(dataset.kami_icon).trim() : '';
+
+                if (!name && kami && kami.name) {
+                    name = String(kami.name).trim();
+                }
+                if (!icon && kami && kami.icon) {
+                    icon = String(kami.icon).trim();
+                }
+
+                if (!name && !icon) {
+                    row.addClass('d-none');
+                    if (nameNode.length) {
+                        nameNode.text('');
+                    }
+                    if (iconNode.length) {
+                        iconNode.attr('src', '').attr('alt', '').addClass('d-none');
+                    }
+                    return;
+                }
+
+                if (nameNode.length) {
+                    nameNode.text(name || 'Kami');
+                }
+                if (iconNode.length) {
+                    if (icon !== '') {
+                        iconNode.attr('src', icon);
+                        iconNode.attr('alt', name || 'Kami');
+                        iconNode.removeClass('d-none');
+                        if (name !== '') {
+                            iconNode.attr('data-bs-title', name);
+                            if (typeof initTooltips === 'function') {
+                                initTooltips(iconNode[0].parentNode || iconNode[0]);
+                            }
+                        }
+                    } else {
+                        iconNode.attr('src', '').attr('alt', '').addClass('d-none');
+                    }
+                }
+
+                row.removeClass('d-none');
+            },
             renderRichTextSections: function (block, dataset) {
                 if (!block || !block.length || !dataset) {
                     return;
@@ -681,6 +739,7 @@ function GameProfilePage(character_id, extension) {
                     { key: 'description_body', selector: '[name="description_body"]' },
                     { key: 'description_temper', selector: '[name="description_temper"]' },
                     { key: 'background_story', selector: '[name="background_story"]' },
+                    { key: 'kami_encounter_html', selector: '[name="kami_encounter_html"]' },
                     { key: 'friends_knowledge_html', selector: '[name="friends-list"], [name="friends_knowledge_html"]' }
                 ];
 
@@ -1138,6 +1197,11 @@ function GameProfilePage(character_id, extension) {
                 var healthForm = $('#profile-health-form');
                 var experienceModal = $('#profile-experience-assign-modal');
                 var experienceForm = $('#profile-experience-assign-form');
+                var narrativeModal = $('#profile-narrative-state-modal');
+                var narrativeApplyForm = $('#profile-narrative-state-apply-form');
+                var narrativeRemoveForm = $('#profile-narrative-state-remove-form');
+                var narrativeFeedback = narrativeModal.find('[data-role="profile-narrative-state-feedback"]');
+                var narrativeCatalog = [];
 
                 if (!root.length) {
                     return;
@@ -1149,6 +1213,16 @@ function GameProfilePage(character_id, extension) {
                 }
                 if (experienceForm.length) {
                     experienceForm.off('submit.profile-experience');
+                }
+                if (narrativeApplyForm.length) {
+                    narrativeApplyForm.off('submit.profile-narrative-apply');
+                    narrativeApplyForm.off('input.profile-narrative-filter');
+                }
+                if (narrativeRemoveForm.length) {
+                    narrativeRemoveForm.off('submit.profile-narrative-remove');
+                }
+                if (narrativeModal.length) {
+                    narrativeModal.off('click.profile-narrative-refresh');
                 }
 
                 if (healthModal.length && healthForm.length) {
@@ -1297,6 +1371,242 @@ function GameProfilePage(character_id, extension) {
                                 body: normalizeProfileError(error, 'Errore durante assegnazione esperienza.'),
                                 type: 'error'
                             });
+                        });
+                    });
+                }
+
+                if (narrativeModal.length && narrativeApplyForm.length && narrativeRemoveForm.length) {
+                    var renderNarrativeFeedback = function (message, type) {
+                        if (!narrativeFeedback.length) {
+                            return;
+                        }
+                        var tone = (type === 'success' || type === 'warning' || type === 'danger') ? type : 'info';
+                        narrativeFeedback.removeClass('d-none alert-info alert-success alert-warning alert-danger')
+                            .addClass('alert-' + tone)
+                            .text(String(message || ''));
+                    };
+
+                    var hideNarrativeFeedback = function () {
+                        if (!narrativeFeedback.length) {
+                            return;
+                        }
+                        narrativeFeedback.addClass('d-none')
+                            .removeClass('alert-info alert-success alert-warning alert-danger')
+                            .text('');
+                    };
+
+                    var renderNarrativeStateOptions = function (query) {
+                        var select = narrativeApplyForm.find('[name="state_id"]');
+                        if (!select.length) {
+                            return;
+                        }
+
+                        var filter = String(query || '').trim().toLowerCase();
+                        var options = ['<option value="">Seleziona uno stato...</option>'];
+
+                        for (var i = 0; i < narrativeCatalog.length; i += 1) {
+                            var row = narrativeCatalog[i] || {};
+                            var stateId = parseInt(row.id || '0', 10) || 0;
+                            if (stateId <= 0) {
+                                continue;
+                            }
+
+                            var code = String(row.code || '').trim();
+                            var name = String(row.name || '').trim();
+                            var category = String(row.category || '').trim();
+                            var haystack = (code + ' ' + name + ' ' + category).toLowerCase();
+                            if (filter !== '' && haystack.indexOf(filter) === -1) {
+                                continue;
+                            }
+
+                            var label = name !== '' ? name : ('Stato #' + stateId);
+                            if (code !== '') {
+                                label += ' [' + code + ']';
+                            }
+                            if (category !== '') {
+                                label += ' - ' + category;
+                            }
+
+                            options.push('<option value="' + stateId + '">' + self.escapeHtml(label) + '</option>');
+                        }
+
+                        select.html(options.join(''));
+                    };
+
+                    var loadNarrativeCatalog = function (done) {
+                        callProfileModule('narrativeStatesCatalog', { include_hidden: 1 }, function (response) {
+                            var rows = response && Array.isArray(response.dataset) ? response.dataset : [];
+                            narrativeCatalog = rows;
+                            renderNarrativeStateOptions(narrativeApplyForm.find('[name="state_filter"]').val());
+                            if (typeof done === 'function') {
+                                done(true);
+                            }
+                        }, function (error) {
+                            narrativeCatalog = [];
+                            renderNarrativeStateOptions('');
+                            if (typeof done === 'function') {
+                                done(false);
+                            }
+                            renderNarrativeFeedback(normalizeProfileError(error, 'Caricamento catalogo stati non riuscito.'), 'warning');
+                        });
+                    };
+
+                    var loadActiveNarrativeStates = function () {
+                        var characterId = parseInt(narrativeApplyForm.find('[name="character_id"]').val(), 10) || self.character_id || 0;
+                        var select = narrativeRemoveForm.find('[name="applied_state_id"]');
+                        if (!select.length || characterId <= 0) {
+                            return;
+                        }
+
+                        callProfileModule('narrativeStatesForCharacter', { character_id: characterId }, function (response) {
+                            var rows = response && Array.isArray(response.dataset) ? response.dataset : [];
+                            var options = ['<option value="">Nessuno stato attivo</option>'];
+
+                            for (var i = 0; i < rows.length; i += 1) {
+                                var row = rows[i] || {};
+                                var appliedId = parseInt(row.applied_id || '0', 10) || 0;
+                                if (appliedId <= 0) {
+                                    continue;
+                                }
+
+                                var label = String(row.name || row.code || ('Stato #' + (parseInt(row.state_id || '0', 10) || 0))).trim();
+                                var stacks = parseInt(row.stacks || '1', 10) || 1;
+                                if (stacks > 1) {
+                                    label += ' x' + stacks;
+                                }
+                                if (row.expires_at) {
+                                    label += ' (scade: ' + String(row.expires_at) + ')';
+                                }
+
+                                options.push('<option value="' + appliedId + '">' + self.escapeHtml(label) + '</option>');
+                            }
+
+                            select.html(options.join(''));
+                        }, function () {
+                            select.html('<option value="">Nessuno stato attivo</option>');
+                        });
+                    };
+
+                    root.on('click.profile-metrics', '[data-action="profile-open-narrative-state-edit"]', function (event) {
+                        event.preventDefault();
+
+                        hideNarrativeFeedback();
+                        narrativeApplyForm[0].reset();
+                        narrativeRemoveForm[0].reset();
+
+                        var targetCharacterId = self.character_id || 0;
+                        narrativeApplyForm.find('[name="character_id"]').val(targetCharacterId);
+                        narrativeRemoveForm.find('[name="character_id"]').val(targetCharacterId);
+                        narrativeApplyForm.find('[name="duration_unit"]').val('scene');
+                        narrativeApplyForm.find('[name="duration_value"]').val('0');
+                        narrativeApplyForm.find('[name="intensity"]').val('1');
+
+                        loadNarrativeCatalog();
+                        loadActiveNarrativeStates();
+                        self.showModal(narrativeModal[0]);
+                    });
+
+                    narrativeApplyForm.on('input.profile-narrative-filter', '[name="state_filter"]', function () {
+                        renderNarrativeStateOptions(this.value || '');
+                    });
+
+                    narrativeModal.on('click.profile-narrative-refresh', '[data-action="profile-narrative-states-refresh"]', function (event) {
+                        event.preventDefault();
+                        hideNarrativeFeedback();
+                        loadNarrativeCatalog();
+                        loadActiveNarrativeStates();
+                    });
+
+                    narrativeApplyForm.on('submit.profile-narrative-apply', function (event) {
+                        event.preventDefault();
+
+                        var submit = narrativeApplyForm.find('[data-narrative-state-apply-save]');
+                        if (submit.data('busy') === 1) {
+                            return;
+                        }
+
+                        var targetCharacterId = parseInt(narrativeApplyForm.find('[name="character_id"]').val(), 10) || self.character_id || 0;
+                        var stateId = parseInt(narrativeApplyForm.find('[name="state_id"]').val(), 10) || 0;
+                        var intensity = self.normalizeDecimalInput(narrativeApplyForm.find('[name="intensity"]').val(), NaN);
+                        var durationValue = parseInt(narrativeApplyForm.find('[name="duration_value"]').val(), 10);
+                        var durationUnit = String(narrativeApplyForm.find('[name="duration_unit"]').val() || 'scene').trim().toLowerCase();
+
+                        if (targetCharacterId <= 0) {
+                            renderNarrativeFeedback('Personaggio non valido.', 'warning');
+                            return;
+                        }
+                        if (stateId <= 0) {
+                            renderNarrativeFeedback('Seleziona uno stato narrativo.', 'warning');
+                            return;
+                        }
+                        if (isNaN(intensity) || intensity <= 0) {
+                            renderNarrativeFeedback('Intensita non valida.', 'warning');
+                            return;
+                        }
+                        if (isNaN(durationValue) || durationValue < 0) {
+                            durationValue = 0;
+                        }
+
+                        submit.data('busy', 1).prop('disabled', true);
+
+                        callProfileModule('narrativeStateApply', {
+                            state_id: stateId,
+                            target_type: 'character',
+                            target_id: targetCharacterId,
+                            intensity: intensity,
+                            duration_value: durationValue,
+                            duration_unit: durationUnit
+                        }, function () {
+                            submit.data('busy', 0).prop('disabled', false);
+                            renderNarrativeFeedback('Stato narrativo applicato.', 'success');
+                            loadActiveNarrativeStates();
+
+                            var narrativeModule = resolveModule('game.narrative-states');
+                            if (narrativeModule && typeof narrativeModule.loadIntoProfile === 'function') {
+                                narrativeModule.loadIntoProfile();
+                            }
+                        }, function (error) {
+                            submit.data('busy', 0).prop('disabled', false);
+                            renderNarrativeFeedback(normalizeProfileError(error, 'Applicazione stato non riuscita.'), 'warning');
+                        });
+                    });
+
+                    narrativeRemoveForm.on('submit.profile-narrative-remove', function (event) {
+                        event.preventDefault();
+
+                        var submit = narrativeRemoveForm.find('[data-narrative-state-remove-save]');
+                        if (submit.data('busy') === 1) {
+                            return;
+                        }
+
+                        var appliedStateId = parseInt(narrativeRemoveForm.find('[name="applied_state_id"]').val(), 10) || 0;
+                        var reason = String(narrativeRemoveForm.find('[name="reason"]').val() || 'manual_remove').trim();
+
+                        if (appliedStateId <= 0) {
+                            renderNarrativeFeedback('Seleziona uno stato attivo da rimuovere.', 'warning');
+                            return;
+                        }
+                        if (reason === '') {
+                            reason = 'manual_remove';
+                        }
+
+                        submit.data('busy', 1).prop('disabled', true);
+
+                        callProfileModule('narrativeStateRemove', {
+                            applied_state_id: appliedStateId,
+                            reason: reason
+                        }, function () {
+                            submit.data('busy', 0).prop('disabled', false);
+                            renderNarrativeFeedback('Stato narrativo rimosso.', 'success');
+                            loadActiveNarrativeStates();
+
+                            var narrativeModule = resolveModule('game.narrative-states');
+                            if (narrativeModule && typeof narrativeModule.loadIntoProfile === 'function') {
+                                narrativeModule.loadIntoProfile();
+                            }
+                        }, function (error) {
+                            submit.data('busy', 0).prop('disabled', false);
+                            renderNarrativeFeedback(normalizeProfileError(error, 'Rimozione stato non riuscita.'), 'warning');
                         });
                     });
                 }

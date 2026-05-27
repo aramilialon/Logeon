@@ -258,6 +258,7 @@ var AdminSystemUpdate = {
             this.setText('update-release-migration', '-');
             this.setText('update-release-package', '-');
             this.setReleaseLink('');
+            this.renderReleaseNotes([]);
             return;
         }
 
@@ -266,6 +267,35 @@ var AdminSystemUpdate = {
         this.setText('update-release-migration', release.requires_db_migration ? 'si' : 'no');
         this.setText('update-release-package', (release.package && release.package.url) ? release.package.url : '-');
         this.setReleaseLink(release.changelog_url || '');
+        this.renderReleaseNotes(release.notes || []);
+    },
+
+    renderReleaseNotes: function (notes) {
+        var node = this.root.querySelector('[data-role="update-release-notes"]');
+        if (!node) {
+            return;
+        }
+
+        if (!Array.isArray(notes) || notes.length === 0) {
+            node.textContent = 'Nessuna nota disponibile per questa release.';
+            return;
+        }
+
+        var html = ['<ul class="mb-0 ps-3">'];
+        for (var i = 0; i < notes.length; i++) {
+            var note = String(notes[i] || '').trim();
+            if (note === '') {
+                continue;
+            }
+            html.push('<li class="mb-1">' + this.escapeHtml(note) + '</li>');
+        }
+        html.push('</ul>');
+
+        if (html.length === 2) {
+            node.textContent = 'Nessuna nota disponibile per questa release.';
+            return;
+        }
+        node.innerHTML = html.join('');
     },
 
     renderPreflightChecks: function (checks) {

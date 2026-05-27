@@ -92,12 +92,34 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'archetypes-admin-dashboard-page',
-            'template' => 'admin/pages/archetypes.twig',
+            'template' => 'archetypes/admin/pages/archetypes.twig',
             'after' => '',
             'before' => '',
             'data' => [],
         ];
         return $fragments;
+    });
+
+    \Core\Hooks::add('twig.slot.admin.settings.docs_view_modes', static function ($fragments) {
+        if (!is_array($fragments)) {
+            $fragments = [];
+        }
+        $fragments[] = [
+            'id' => 'archetypes-admin-settings-docs-view-mode',
+            'template' => 'archetypes/admin/settings/docs-view-mode-field.twig',
+            'after' => '',
+            'before' => '',
+            'data' => [],
+        ];
+        return $fragments;
+    });
+
+    \Core\Hooks::add('settings.docs_view_modes.defaults', static function ($defaults) {
+        if (!is_array($defaults)) {
+            $defaults = [];
+        }
+        $defaults['archetypes_view_mode'] = 'navigation';
+        return $defaults;
     });
 
     $providerResolver = static function ($current) {
@@ -113,5 +135,21 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         } catch (\Throwable $e) {
             return false;
         }
+    });
+
+    \Core\Hooks::add('capability.registry.capabilities', static function ($capabilities) {
+        if (!is_array($capabilities)) {
+            $capabilities = [];
+        }
+
+        $capabilities['character.archetypes'] = static function (): bool {
+            try {
+                return \Modules\Logeon\Archetypes\Services\ArchetypeConfigAccessor::isEnabled();
+            } catch (\Throwable $e) {
+                return false;
+            }
+        };
+
+        return $capabilities;
     });
 };

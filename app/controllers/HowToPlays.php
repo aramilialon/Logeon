@@ -11,7 +11,6 @@ use Core\Http\InputValidator;
 use Core\Http\RequestData;
 use Core\Http\ResponseEmitter;
 
-
 use Core\Logging\LoggerInterface;
 
 class HowToPlays extends HowToPlay
@@ -176,5 +175,3 @@ class HowToPlays extends HowToPlay
         return ResponseEmitter::emit(ApiResponse::json($response));
     }
 }
-
-

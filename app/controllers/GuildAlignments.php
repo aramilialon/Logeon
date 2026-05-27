@@ -8,7 +8,6 @@ use App\Services\GuildAlignmentAdminService;
 use Core\Http\InputValidator;
 use Core\Http\RequestData;
 
-
 use Core\Logging\LoggerInterface;
 
 class GuildAlignments extends GuildAlignment
@@ -100,5 +99,3 @@ class GuildAlignments extends GuildAlignment
         return parent::delete($operator);
     }
 }
-
-

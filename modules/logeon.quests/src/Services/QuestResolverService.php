@@ -1965,6 +1965,33 @@ class QuestResolverService
             throw AppError::validation('La quest non e disponibile', [], 'quest_instance_invalid_state');
         }
 
+        if (class_exists('\\Core\\Hooks')) {
+            $hookErrors = \Core\Hooks::filter(
+                'quest.participation.join.validate',
+                [],
+                $definition,
+                $payload,
+                $viewerCharacterId,
+                $isStaff
+            );
+            if (is_array($hookErrors) && !empty($hookErrors)) {
+                $first = reset($hookErrors);
+                if (is_array($first)) {
+                    throw AppError::validation(
+                        (string) ($first['message'] ?? 'Partecipazione alla quest non consentita'),
+                        [],
+                        (string) ($first['code'] ?? 'quest_participation_blocked')
+                    );
+                }
+
+                throw AppError::validation(
+                    (string) $first,
+                    [],
+                    'quest_participation_blocked'
+                );
+            }
+        }
+
         $scopeType = $this->normalizeScope((string) ($definition['scope_type'] ?? 'character'));
         $scopeId = (int) ($definition['scope_id'] ?? 0);
 

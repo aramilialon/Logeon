@@ -20,6 +20,10 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function isValidHexColor(value) {
+    return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(String(value || '').trim());
+}
+
 function toInt(value, fallback) {
     var num = parseInt(value, 10);
     if (isNaN(num)) {
@@ -99,6 +103,7 @@ function showInventoryError(error, fallback) {
                 item_jammed: 'L\'arma si e inceppata.',
                 item_maintenance_not_supported: 'Manutenzione non disponibile per questo oggetto.',
                 item_equipped: 'Questo oggetto risulta gia equipaggiato.',
+                item_is_equipped: 'Non puoi recapitare o distruggere un oggetto equipaggiato.',
                 item_not_sellable: 'Questo oggetto non e vendibile.',
                 slot_required: 'Devi selezionare uno slot.',
                 slot_invalid: 'Lo slot selezionato non e valido.',
@@ -111,6 +116,9 @@ function showInventoryError(error, fallback) {
                 swap_source_incompatible: 'L\'oggetto nello slot destinazione non e compatibile con lo slot origine.',
                 quantity_invalid: 'Quantita non valida.',
                 quantity_unavailable: 'Quantita non disponibile.',
+                recipient_invalid: 'Destinatario non valido.',
+                recipient_not_found: 'Destinatario non trovato.',
+                recipient_same_character: 'Non puoi recapitare un oggetto a te stesso.',
                 sell_price_invalid: 'Prezzo di vendita non valido.',
                 inventory_capacity_reached: 'Inventario pieno: libera spazio prima di aggiungere nuovi oggetti.',
                 inventory_stack_limit_reached: 'Hai raggiunto la quantita massima trasportabile per questo oggetto.'
@@ -132,6 +140,7 @@ function showInventoryError(error, fallback) {
                 'item_jammed',
                 'item_maintenance_not_supported',
                 'item_equipped',
+                'item_is_equipped',
                 'item_not_sellable',
                 'slot_required',
                 'slot_invalid',
@@ -144,6 +153,9 @@ function showInventoryError(error, fallback) {
                 'swap_source_incompatible',
                 'quantity_invalid',
                 'quantity_unavailable',
+                'recipient_invalid',
+                'recipient_not_found',
+                'recipient_same_character',
                 'sell_price_invalid',
                 'inventory_capacity_reached',
                 'inventory_stack_limit_reached'
@@ -168,12 +180,10 @@ function GameBagPage(char_id, extension) {
             dataset: null,
             dg_threads: {},
             dg_bag_config: null,
-            categories: [],
-            category_id: null,
-            search_term: '',
-            search_timer: null,
-            sort_field: 'name',
-            sort_direction: 'ASC',
+            slots: [],
+            slotIndex: {},
+            capacity: null,
+            selected_item_key: '',
             inventoryModule: null,
             getInventoryModule: function () {
                 if (this.inventoryModule) {
@@ -233,13 +243,11 @@ function GameBagPage(char_id, extension) {
                     return;
                 }
 
-                this.bindSearch();
-                this.bindSort();
                 var self = this;
-                this.loadCategories(function () {
+                this.bindReorganize();
+                this.loadSlots(function () {
                     self.get();
                 });
-
                 return this;
             },
             sync: function () {
@@ -260,220 +268,109 @@ function GameBagPage(char_id, extension) {
             build: function () {
                 this.buildDatagrid();
             },
-            bindSearch: function () {
-                var self = this;
-                let input = $('#bag-search');
-                if (input.length) {
-                    input.off('input').on('input', function () {
-                        self.search_term = $(this).val().toLowerCase().trim();
-                        if (self.search_timer) {
-                            globalWindow.clearTimeout(self.search_timer);
-                        }
-                        self.search_timer = globalWindow.setTimeout(function () {
-                            self.applyFilters();
-                        }, 300);
+            legacySlots: function () {
+                return [
+                    { key: 'amulet', name: 'Ciondolo', group_key: 'amulet', sort_order: 10 },
+                    { key: 'helm', name: 'Elmo', group_key: 'helm', sort_order: 20 },
+                    { key: 'weapon_1', name: 'Arma 1', group_key: 'weapon', sort_order: 30 },
+                    { key: 'gloves', name: 'Guanti', group_key: 'gloves', sort_order: 40 },
+                    { key: 'armor', name: 'Armatura', group_key: 'armor', sort_order: 50 },
+                    { key: 'weapon_2', name: 'Arma 2', group_key: 'weapon', sort_order: 60 },
+                    { key: 'ring_1', name: 'Anello 1', group_key: 'ring', sort_order: 70 },
+                    { key: 'boots', name: 'Stivali', group_key: 'boots', sort_order: 80 },
+                    { key: 'ring_2', name: 'Anello 2', group_key: 'ring', sort_order: 90 }
+                ];
+            },
+            normalizeSlots: function (rows, useLegacyFallback) {
+                var source = Array.isArray(rows) ? rows : [];
+                if (!source.length && useLegacyFallback === true) {
+                    source = this.legacySlots();
+                }
+
+                var normalized = [];
+                for (var i = 0; i < source.length; i++) {
+                    var slot = source[i] || {};
+                    var key = (slot.key || '').toString().trim();
+                    if (!key) {
+                        continue;
+                    }
+
+                    var sortOrder = parseInt(slot.sort_order, 10);
+                    if (isNaN(sortOrder)) {
+                        sortOrder = 9999;
+                    }
+
+                    normalized.push({
+                        id: slot.id || 0,
+                        key: key,
+                        name: (slot.name || key).toString(),
+                        group_key: (slot.group_key || key).toString(),
+                        sort_order: sortOrder
                     });
                 }
-                let clear = $('[data-action="bag-search-clear"]');
-                if (clear.length) {
-                    clear.off('click').on('click', function () {
-                        if (input.length) {
-                            input.val('');
-                        }
-                        self.search_term = '';
-                        self.applyFilters();
-                    });
+
+                normalized.sort(function (a, b) {
+                    if (a.sort_order !== b.sort_order) {
+                        return a.sort_order - b.sort_order;
+                    }
+                    return a.key.localeCompare(b.key);
+                });
+
+                return normalized;
+            },
+            rebuildSlotIndex: function () {
+                this.slotIndex = {};
+                for (var i = 0; i < this.slots.length; i++) {
+                    var slot = this.slots[i];
+                    this.slotIndex[slot.key] = slot;
                 }
             },
-            bindSort: function () {
+            parseCsv: function (value) {
+                var raw = (value || '').toString().trim();
+                if (!raw) {
+                    return [];
+                }
+
+                var chunks = raw.split(',');
+                var out = [];
+                for (var i = 0; i < chunks.length; i++) {
+                    var part = (chunks[i] || '').toString().trim();
+                    if (!part) {
+                        continue;
+                    }
+                    if (out.indexOf(part) === -1) {
+                        out.push(part);
+                    }
+                }
+                return out;
+            },
+            loadSlots: function (onComplete) {
                 var self = this;
-                let fields = $('[data-role="bag-sort-field"]');
-                if (!fields.length) {
-                    fields = $('[data-role="bag-sort"]'); // backward compatibility
-                }
-                let directionBtn = $('[data-role="bag-sort-direction"]');
-
-                if (!fields.length && !directionBtn.length) {
-                    return;
-                }
-
-                fields.off('click').on('click', function () {
-                    let btn = $(this);
-                    let field = (btn.data('sort-field') || '').toString().trim();
-                    if (!field) {
-                        return;
-                    }
-
-                    let changedField = (self.sort_field !== field);
-                    self.sort_field = field;
-                    if (changedField) {
-                        let defaultDir = (btn.data('sort-default-direction') || 'asc').toString().toUpperCase();
-                        self.sort_direction = (defaultDir === 'DESC') ? 'DESC' : 'ASC';
-                    }
-
-                    self.refreshSortButtons();
-                    self.applyFilters();
-                });
-
-                directionBtn.off('click').on('click', function () {
-                    self.sort_direction = (self.sort_direction === 'DESC') ? 'ASC' : 'DESC';
-                    self.refreshSortButtons();
-                    self.applyFilters();
-                });
-
-                this.refreshSortButtons();
-            },
-            refreshSortButtons: function () {
-                let fields = $('[data-role="bag-sort-field"]');
-                if (!fields.length) {
-                    fields = $('[data-role="bag-sort"]'); // backward compatibility
-                }
-                let directionBtn = $('[data-role="bag-sort-direction"]');
-                let directionIcon = $('[data-role="bag-sort-direction-icon"]');
-                let directionLabel = $('[data-role="bag-sort-direction-label"]');
-
-                this.sort_direction = (this.sort_direction === 'DESC') ? 'DESC' : 'ASC';
-                let activeField = this.sort_field;
-                let fieldFound = false;
-
-                fields.each(function () {
-                    let btn = $(this);
-                    let field = (btn.data('sort-field') || '').toString().trim();
-                    let isActive = (field === activeField);
-                    btn.toggleClass('active', isActive);
-                    btn.attr('aria-pressed', isActive ? 'true' : 'false');
-                    if (isActive) {
-                        fieldFound = true;
-                    }
-                });
-
-                if (!fieldFound && fields.length) {
-                    let firstFieldBtn = fields.eq(0);
-                    let firstField = (firstFieldBtn.data('sort-field') || '').toString().trim();
-                    if (firstField) {
-                        this.sort_field = firstField;
-                        fields.removeClass('active').attr('aria-pressed', 'false');
-                        firstFieldBtn.addClass('active').attr('aria-pressed', 'true');
-                    }
-                }
-
-                if (directionBtn.length) {
-                    let isDesc = (this.sort_direction === 'DESC');
-                    let text = isDesc ? 'DESC' : 'ASC';
-                    let title = isDesc ? 'Ordine discendente' : 'Ordine ascendente';
-                    directionBtn.attr('title', title);
-                    directionBtn.attr('aria-label', title);
-                    if (directionLabel.length) {
-                        directionLabel.text(text);
-                    }
-                    if (directionIcon.length) {
-                        directionIcon.removeClass('bi-sort-up bi-sort-down');
-                        directionIcon.addClass(isDesc ? 'bi-sort-down' : 'bi-sort-up');
-                    }
-                }
-            },
-            loadCategories: function (onComplete) {
-                var self = this;
-                this.callInventory('categories', null, null, function (response) {
-                    self.categories = (response && response.dataset) ? response.dataset : [];
-                    self.buildCategoryTabs();
+                this.callInventory('slots', null, null, function (response) {
+                    self.slots = self.normalizeSlots((response && response.slots) ? response.slots : [], true);
+                    self.rebuildSlotIndex();
                     if (typeof onComplete === 'function') {
                         onComplete();
                     }
                 }, function () {
-                    self.categories = [];
-                    self.buildCategoryTabs();
+                    self.slots = self.normalizeSlots([], true);
+                    self.rebuildSlotIndex();
                     if (typeof onComplete === 'function') {
                         onComplete();
                     }
                 });
             },
-            buildCategoryTabs: function () {
-                let tabs = $('#bag-category-tabs');
-                if (!tabs.length) {
-                    return;
-                }
-
-                tabs.empty();
-
-                if (!this.categories || !this.categories.length) {
-                    this.category_id = null;
-                    tabs.append(
-                        '<li class="nav-item" role="presentation">'
-                        + '<span class="text-muted small">Nessuna categoria disponibile.</span>'
-                        + '</li>'
-                    );
-                    if (this.dg_bag) {
-                        this.applyFilters();
-                    }
-                    return;
-                }
-
-                let selected = null;
-                for (var c in this.categories) {
-                    if (!this.categories[c]) {
-                        continue;
-                    }
-                    let maybeId = (this.categories[c].category_id !== null && typeof this.categories[c].category_id !== 'undefined')
-                        ? parseInt(this.categories[c].category_id, 10)
-                        : 0;
-                    if (!isNaN(maybeId)) {
-                        if (selected === null) {
-                            selected = maybeId;
-                        }
-                        if (this.category_id !== null && parseInt(this.category_id, 10) === maybeId) {
-                            selected = maybeId;
-                            break;
-                        }
-                    }
-                }
-                this.category_id = selected;
-
-                for (var i in this.categories) {
-                    let row = this.categories[i];
-                    if (!row) {
-                        continue;
-                    }
-                    let id = (row.category_id !== null && typeof row.category_id !== 'undefined') ? parseInt(row.category_id, 10) : 0;
-                    if (isNaN(id)) {
-                        id = 0;
-                    }
-                    let name = row.name || 'Altro';
-                    let active = (this.category_id !== null && id === parseInt(this.category_id, 10)) ? ' active' : '';
-                    tabs.append(
-                        '<li class="nav-item" role="presentation">'
-                        + '<button class="nav-link w-100 text-start' + active + '" type="button" data-role="bag-category" data-category-id="' + id + '">' + name + '</button>'
-                        + '</li>'
-                    );
-                }
-
-                this.bindCategoryTabs();
-                if (this.dg_bag) {
-                    this.applyFilters();
-                }
-            },
-            bindCategoryTabs: function () {
+            bindReorganize: function () {
                 var self = this;
-                let tabs = $('#bag-category-tabs');
-                if (!tabs.length) {
+                let scope = $('#bag-page');
+                if (!scope.length) {
                     return;
                 }
 
-                tabs.off('click', '[data-role="bag-category"]');
-                tabs.on('click', '[data-role="bag-category"]', function () {
-                    let btn = $(this);
-
-                    tabs.find('.nav-link').removeClass('active');
-                    btn.addClass('active');
-
-                    let id = btn.data('category-id');
-                    if (id === '' || typeof id === 'undefined' || id === null) {
-                        self.category_id = null;
-                    } else {
-                        let parsed = parseInt(id, 10);
-                        self.category_id = isNaN(parsed) ? null : parsed;
-                    }
-                    self.applyFilters();
+                scope.off('click', '[data-action="bag-reorganize"]');
+                scope.on('click', '[data-action="bag-reorganize"]', function (e) {
+                    e.preventDefault();
+                    self.reorganizeBag();
                 });
             },
             buildDatagrid: function () {
@@ -492,16 +389,497 @@ function GameBagPage(char_id, extension) {
                 }
 
                 this.dg_bag = new Datagrid('grid-bag', this.dg_bag_config);
-                this.dg_bag.onGetDataSuccess = function () {
+                this.dg_bag.onGetDataSuccess = function (response) {
+                    if (self.syncBagResults(response)) {
+                        return;
+                    }
+                    self.capacity = (response && response.capacity) ? response.capacity : null;
+                    self.updateCapacitySummary();
+                    self.reorganizeBag();
+                    self.renderBagEmptySlots();
+                    self.bindBagSelection();
+                    self.syncBagSelection();
                     self.bindDropActions();
                     self.bindDestroyActions();
+                    self.bindUseActions();
+                    self.bindTransferActions();
                 };
                 this.applyFilters();
             },
             buildOrderBy: function () {
-                let field = (this.sort_field || 'name').toString().trim();
-                let direction = (this.sort_direction === 'DESC') ? 'DESC' : 'ASC';
-                return field + '|' + direction;
+                return 'item_name|ASC';
+            },
+            reorganizeBag: function () {
+                if (!this.dg_bag || !Array.isArray(this.dg_bag.dataset) || !this.dg_bag.dataset.length) {
+                    return;
+                }
+
+                let grid = $('#grid-bag');
+                let tbody = grid.find('tbody');
+                if (!tbody.length) {
+                    return;
+                }
+
+                let rows = this.dg_bag.dataset.slice();
+                rows.sort(function (left, right) {
+                    let leftEquipped = toInt(left && left.is_equipped, 0);
+                    let rightEquipped = toInt(right && right.is_equipped, 0);
+                    if (leftEquipped !== rightEquipped) {
+                        return rightEquipped - leftEquipped;
+                    }
+
+                    let leftUsable = toInt(left && left.usable, 0);
+                    let rightUsable = toInt(right && right.usable, 0);
+                    if (leftUsable !== rightUsable) {
+                        return rightUsable - leftUsable;
+                    }
+
+                    let leftRarity = toInt(left && left.rarity_sort_order, 0);
+                    let rightRarity = toInt(right && right.rarity_sort_order, 0);
+                    if (leftRarity !== rightRarity) {
+                        return rightRarity - leftRarity;
+                    }
+
+                    let leftQty = Math.max(1, toInt(left && left.quantity, 1));
+                    let rightQty = Math.max(1, toInt(right && right.quantity, 1));
+                    if (leftQty !== rightQty) {
+                        return rightQty - leftQty;
+                    }
+
+                    let leftName = String(left && left.item_name ? left.item_name : '').toLocaleLowerCase('it-IT');
+                    let rightName = String(right && right.item_name ? right.item_name : '').toLocaleLowerCase('it-IT');
+                    if (leftName < rightName) {
+                        return -1;
+                    }
+                    if (leftName > rightName) {
+                        return 1;
+                    }
+                    return 0;
+                });
+
+                this.dg_bag.dataset = rows;
+
+                let rowMap = {};
+                let unknownRows = [];
+                tbody.children('tr').each(function () {
+                    let row = $(this);
+                    let key = (row.find('[data-bag-item-key]').first().data('bag-item-key') || '').toString();
+                    if (key) {
+                        rowMap[key] = this;
+                    } else {
+                        unknownRows.push(this);
+                    }
+                });
+
+                let fragment = document.createDocumentFragment();
+                for (let i = 0; i < rows.length; i++) {
+                    let key = this.bagItemKey(rows[i]);
+                    if (key && rowMap[key]) {
+                        fragment.appendChild(rowMap[key]);
+                    }
+                }
+                for (let j = 0; j < unknownRows.length; j++) {
+                    fragment.appendChild(unknownRows[j]);
+                }
+
+                tbody[0].appendChild(fragment);
+            },
+            bagItemKey: function (row) {
+                if (!row) {
+                    return '';
+                }
+
+                let instanceId = parseInt(row.character_item_instance_id, 10);
+                let stackId = parseInt(row.character_item_id, 10);
+                if (instanceId > 0) {
+                    return 'instance-' + instanceId;
+                }
+                return stackId > 0 ? ('stack-' + stackId) : '';
+            },
+            findBagItemByKey: function (key) {
+                let target = String(key || '').trim();
+                if (!target || !this.dg_bag || !Array.isArray(this.dg_bag.dataset)) {
+                    return null;
+                }
+
+                for (let i = 0; i < this.dg_bag.dataset.length; i++) {
+                    let row = this.dg_bag.dataset[i];
+                    if (this.bagItemKey(row) === target) {
+                        return row;
+                    }
+                }
+
+                return null;
+            },
+            slotLabel: function (slot) {
+                var slotKey = (slot || '').toString().trim();
+                if (slotKey && this.slotIndex[slotKey] && this.slotIndex[slotKey].name) {
+                    return this.slotIndex[slotKey].name;
+                }
+                return slotKey || 'Slot';
+            },
+            getEquipSlots: function (equipSlot) {
+                var slot = (equipSlot || '').toString().trim();
+                if (slot === '') {
+                    return [];
+                }
+
+                if (this.slotIndex[slot]) {
+                    return [slot];
+                }
+
+                var byGroup = [];
+                for (var i = 0; i < this.slots.length; i++) {
+                    if (this.slots[i].group_key === slot) {
+                        byGroup.push(this.slots[i].key);
+                    }
+                }
+                if (byGroup.length) {
+                    return byGroup;
+                }
+
+                if (slot === 'weapon') {
+                    return ['weapon_1', 'weapon_2'];
+                }
+                if (slot === 'ring') {
+                    return ['ring_1', 'ring_2'];
+                }
+                return [slot];
+            },
+            syncBagSelection: function () {
+                let activeKey = this.selected_item_key;
+                let selected = this.findBagItemByKey(activeKey);
+
+                if (!selected) {
+                    activeKey = '';
+                }
+
+                this.selected_item_key = activeKey || '';
+                this.renderBagDetail();
+                this.updateSelectedBagCard();
+            },
+            updateSelectedBagCard: function () {
+                let grid = $('#grid-bag');
+                if (!grid.length) {
+                    return;
+                }
+
+                grid.find('[data-bag-item-key]').removeClass('is-selected').attr('aria-pressed', 'false');
+                if (!this.selected_item_key) {
+                    return;
+                }
+
+                grid.find('[data-bag-item-key="' + this.selected_item_key + '"]').addClass('is-selected').attr('aria-pressed', 'true');
+            },
+            bindBagSelection: function () {
+                let grid = $('#grid-bag');
+                if (!grid.length) {
+                    return;
+                }
+
+                let self = this;
+                grid.off('click', '[data-bag-item-key]');
+                grid.on('click', '[data-bag-item-key]', function (e) {
+                    if ($(e.target).closest('button,a,input,select,textarea,label').length) {
+                        return;
+                    }
+                    self.selected_item_key = ($(this).data('bag-item-key') || '').toString();
+                    self.renderBagDetail();
+                    self.updateSelectedBagCard();
+                });
+
+                grid.off('keydown', '[data-bag-item-key]');
+                grid.on('keydown', '[data-bag-item-key]', function (e) {
+                    if (e.key !== 'Enter' && e.key !== ' ') {
+                        return;
+                    }
+                    e.preventDefault();
+                    self.selected_item_key = ($(this).data('bag-item-key') || '').toString();
+                    self.renderBagDetail();
+                    self.updateSelectedBagCard();
+                });
+            },
+            renderBagDetail: function () {
+                let panel = $('[data-role="bag-detail-panel"]');
+                if (!panel.length) {
+                    return;
+                }
+
+                let row = this.findBagItemByKey(this.selected_item_key);
+                if (!row) {
+                    panel.html('<p class="text-muted small mb-0">Seleziona uno slot dell\'inventario per vedere dettagli e azioni disponibili.</p>');
+                    if (typeof document !== 'undefined' && typeof document.dispatchEvent === 'function') {
+                        document.dispatchEvent(new CustomEvent('game:bag-detail:rendered', {
+                            detail: {
+                                item: null,
+                                panel: panel[0] || null
+                            }
+                        }));
+                    }
+                    return;
+                }
+
+                let image = (row.item_image && row.item_image !== '') ? row.item_image : '/assets/imgs/defaults-images/default-location.png';
+                let name = escapeHtml(row.item_name || 'Senza nome');
+                let description = escapeHtml(row.item_description || 'Nessuna descrizione disponibile.');
+                let qty = (row.quantity != null) ? parseInt(row.quantity, 10) : 1;
+                let rarityName = String(row.rarity_name || '').trim();
+                let rarityColor = String(row.rarity_color || '').trim();
+                let metaBits = [];
+                let badges = buildItemNarrativeBadges(row);
+                let actions = [];
+                let equipped = parseInt(row.is_equipped, 10) === 1;
+                let usable = parseInt(row.usable, 10) === 1;
+                let statusLabel = equipped ? 'Equipaggiato' : 'Disponibile in inventario';
+                let interactionLabel = usable ? 'Usabile' : 'Non usabile';
+
+                if (isNaN(qty) || qty < 1) {
+                    qty = 1;
+                }
+
+                if (rarityName !== '') {
+                    if (isValidHexColor(rarityColor)) {
+                        metaBits.push('<span class="badge" style="background-color:' + rarityColor + ';border:1px solid ' + rarityColor + ';color:#fff;">' + escapeHtml(rarityName) + '</span>');
+                    } else {
+                        metaBits.push('<span class="badge text-bg-secondary">' + escapeHtml(rarityName) + '</span>');
+                    }
+                }
+                if (parseInt(row.is_equipped, 10) === 1) {
+                    metaBits.push('<span class="badge text-bg-success">Equipaggiato</span>');
+                }
+
+                if (parseInt(row.usable, 10) === 1 && parseInt(row.character_item_id, 10) > 0) {
+                    actions.push('<button type="button" class="btn btn-sm btn-outline-success" data-action="use-bag" data-inventory-item-id="' + parseInt(row.character_item_id, 10) + '">Usa</button>');
+                }
+                if (String(row.source || '') === 'instance' && parseInt(row.character_item_instance_id, 10) > 0) {
+                    actions.push('<button type="button" class="btn btn-sm btn-outline-primary" data-action="transfer" data-source="instance" data-instance-id="' + parseInt(row.character_item_instance_id, 10) + '" data-item-name="' + name + '">Recapita</button>');
+                } else if (parseInt(row.character_item_id, 10) > 0) {
+                    actions.push('<button type="button" class="btn btn-sm btn-outline-primary" data-action="transfer" data-source="stack" data-character-item-id="' + parseInt(row.character_item_id, 10) + '" data-quantity="' + qty + '" data-item-name="' + name + '">Recapita</button>');
+                }
+                if (parseInt(row.droppable, 10) === 1) {
+                    if (String(row.source || '') === 'instance' && parseInt(row.character_item_instance_id, 10) > 0) {
+                        actions.push('<button type="button" class="btn btn-sm btn-outline-danger" data-action="drop" data-source="instance" data-instance-id="' + parseInt(row.character_item_instance_id, 10) + '" data-item-name="' + name + '">Lascia</button>');
+                    } else if (parseInt(row.character_item_id, 10) > 0) {
+                        actions.push('<button type="button" class="btn btn-sm btn-outline-danger" data-action="drop" data-source="stack" data-character-item-id="' + parseInt(row.character_item_id, 10) + '" data-quantity="' + qty + '" data-item-name="' + name + '">Lascia</button>');
+                    }
+                }
+                if (String(row.source || '') === 'instance' && parseInt(row.character_item_instance_id, 10) > 0) {
+                    actions.push('<button type="button" class="btn btn-sm btn-outline-dark" data-action="destroy" data-source="instance" data-instance-id="' + parseInt(row.character_item_instance_id, 10) + '" data-item-name="' + name + '" data-quantity="1">Distruggi</button>');
+                } else if (parseInt(row.character_item_id, 10) > 0) {
+                    actions.push('<button type="button" class="btn btn-sm btn-outline-dark" data-action="destroy" data-source="stack" data-character-item-id="' + parseInt(row.character_item_id, 10) + '" data-quantity="' + qty + '" data-item-name="' + name + '">Distruggi</button>');
+                }
+
+                panel.html(
+                    '<div class="bag-detail">'
+                    + '  <div class="bag-detail__eyebrow">Oggetto selezionato</div>'
+                    + '  <div class="bag-detail__head">'
+                    + '    <img class="bag-detail__image" src="' + image + '" alt="">'
+                    + '    <div class="bag-detail__identity">'
+                    + '      <div class="bag-detail__name">' + name + '</div>'
+                    + '      <div class="bag-detail__meta">' + metaBits.join(' ') + '</div>'
+                    + '    </div>'
+                    + '  </div>'
+                    + '  <div class="bag-detail__facts">'
+                    + '    <div class="bag-detail__fact"><span class="bag-detail__fact-label">Quantità</span><span class="bag-detail__fact-value">x' + qty + '</span></div>'
+                    + '    <div class="bag-detail__fact"><span class="bag-detail__fact-label">Stato</span><span class="bag-detail__fact-value">' + escapeHtml(statusLabel) + '</span></div>'
+                    + '    <div class="bag-detail__fact"><span class="bag-detail__fact-label">Interazione</span><span class="bag-detail__fact-value">' + escapeHtml(interactionLabel) + '</span></div>'
+                    + '  </div>'
+                    + '  <div class="bag-detail__desc">' + description + '</div>'
+                    + (badges !== '' ? '<div class="bag-detail__badges">' + badges + '</div>' : '')
+                    + (actions.length ? '<div class="bag-detail__actions">' + actions.join('') + '</div>' : '<div class="bag-detail__empty text-muted small">Nessuna azione disponibile per questo oggetto.</div>')
+                    + '</div>'
+                );
+
+                if (typeof document !== 'undefined' && typeof document.dispatchEvent === 'function') {
+                    document.dispatchEvent(new CustomEvent('game:bag-detail:rendered', {
+                        detail: {
+                            item: row,
+                            panel: panel[0] || null
+                        }
+                    }));
+                }
+            },
+            showEquipDialog: function (instanceId, allowedSlots, itemName, legacyEquipSlot) {
+                var self = this;
+                var slots = Array.isArray(allowedSlots) ? allowedSlots.slice() : [];
+                if (!slots.length) {
+                    slots = this.getEquipSlots(legacyEquipSlot);
+                }
+                if (!slots.length) {
+                    Toast.show({ body: 'Slot non disponibile.', type: 'error' });
+                    return;
+                }
+                if (slots.length === 1) {
+                    self.equip(instanceId, slots[0]);
+                    return;
+                }
+
+                var optionHtml = '';
+                for (var i = 0; i < slots.length; i++) {
+                    optionHtml += '<option value="' + slots[i] + '">' + this.slotLabel(slots[i]) + '</option>';
+                }
+
+                var body = '<div class="text-start text-body">';
+                body += '<p>Seleziona lo slot per <b>' + itemName + '</b></p>';
+                body += '<label class="form-label">Slot</label>';
+                body += '<div><select class="form-select" name="equip-slot"><option value="">Seleziona...</option>' + optionHtml + '</select></div>';
+                body += '</div>';
+
+                var dialog = Dialog('default', {
+                    title: 'Equipaggia',
+                    body: body
+                }, function () {
+                    var confirmModal = getGeneralConfirmModal();
+                    if (!confirmModal) {
+                        Toast.show({ body: 'Dialog di conferma non disponibile.', type: 'error' });
+                        return;
+                    }
+                    var selected = confirmModal.find('[name="equip-slot"]').val();
+                    if (!selected) {
+                        Toast.show({ body: 'Seleziona uno slot.', type: 'error' });
+                        return;
+                    }
+                    hideGeneralConfirmDialog();
+                    self.equip(instanceId, selected);
+                });
+                dialog.show();
+            },
+            equip: function (instanceId, slot) {
+                var self = this;
+                this.callInventory('equip', {
+                    character_item_instance_id: instanceId,
+                    slot: slot
+                }, null, function () {
+                    Toast.show({ body: 'Oggetto equipaggiato.', type: 'success' });
+                    if (self.dg_bag) {
+                        self.dg_bag.reloadData();
+                    }
+                    if (globalWindow.Equips && typeof globalWindow.Equips.reload === 'function') {
+                        globalWindow.Equips.reload();
+                    }
+                }, function (error) {
+                    showInventoryError(error, 'Errore durante equipaggiamento.');
+                });
+            },
+            isFullInventoryView: function () {
+                return true;
+            },
+            syncBagResults: function (response) {
+                if (!this.dg_bag || !this.dg_bag_config || !this.dg_bag_config.nav) {
+                    return false;
+                }
+
+                let total = 0;
+                if (response && response.properties && response.properties.tot && typeof response.properties.tot.count !== 'undefined') {
+                    total = parseInt(response.properties.tot.count, 10);
+                }
+                if (isNaN(total) || total < 1) {
+                    total = 1;
+                }
+
+                let current = parseInt(this.dg_bag_config.nav.results, 10);
+                if (isNaN(current) || current < 1) {
+                    current = 10;
+                }
+
+                if (current === total) {
+                    return false;
+                }
+
+                this.dg_bag_config.nav.results = total;
+                this.dg_bag.loadData(
+                    this.dg_bag_config.nav.query || {},
+                    total,
+                    1,
+                    [
+                        this.buildOrderBy(),
+                    ]
+                );
+
+                return true;
+            },
+            updateCapacitySummary: function () {
+                let block = $('[data-role="bag-capacity-summary"]');
+                if (!block.length) {
+                    return;
+                }
+
+                let count = block.find('.bag-capacity-summary__count');
+                let meta = block.find('.bag-capacity-summary__meta');
+                let max = this.capacity && typeof this.capacity.max !== 'undefined' ? parseInt(this.capacity.max, 10) : 0;
+                let used = this.capacity && typeof this.capacity.used !== 'undefined' ? parseInt(this.capacity.used, 10) : 0;
+                let free = this.capacity && typeof this.capacity.free !== 'undefined' ? parseInt(this.capacity.free, 10) : 0;
+
+                if (isNaN(max) || max < 0) {
+                    max = 0;
+                }
+                if (isNaN(used) || used < 0) {
+                    used = 0;
+                }
+                if (isNaN(free) || free < 0) {
+                    free = 0;
+                }
+
+                count.text(used + ' / ' + max + ' slot');
+                meta.text(free + ' liberi');
+            },
+            renderBagEmptySlots: function () {
+                let grid = $('#grid-bag');
+                if (!grid.length) {
+                    return;
+                }
+
+                let tbody = grid.find('tbody');
+                if (!tbody.length) {
+                    return;
+                }
+
+                if (!this.isFullInventoryView()) {
+                    return;
+                }
+
+                let max = this.capacity && typeof this.capacity.max !== 'undefined' ? parseInt(this.capacity.max, 10) : 0;
+                let used = this.capacity && typeof this.capacity.used !== 'undefined' ? parseInt(this.capacity.used, 10) : 0;
+                if (isNaN(max) || max < 1) {
+                    return;
+                }
+                if (isNaN(used) || used < 0) {
+                    used = 0;
+                }
+
+                let emptySlots = max - used;
+                if (emptySlots < 0) {
+                    emptySlots = 0;
+                }
+
+                if (used === 0 && emptySlots > 0) {
+                    tbody.empty();
+                }
+
+                for (let i = 0; i < emptySlots; i++) {
+                    let row = document.createElement('tr');
+                    let cell = document.createElement('td');
+                    cell.innerHTML = ''
+                        + '<div class="bag-card-item bag-card-item--empty" aria-hidden="true">'
+                        + '  <div class="bag-card-item__body">'
+                        + '    <div class="bag-card-item__media-wrap">'
+                        + '      <div class="bag-card-item__image-placeholder">Vuoto</div>'
+                        + '    </div>'
+                        + '    <div class="bag-card-item__content">'
+                        + '      <div class="bag-card-item__topline">'
+                        + '        <h6 class="mb-0 bag-card-item__name">Slot libero</h6>'
+                        + '        <span class="badge text-bg-secondary bag-card-item__qty">--</span>'
+                        + '      </div>'
+                        + '      <div class="bag-card-item__badges">'
+                        + '        <span class="badge text-bg-secondary">Disponibile</span>'
+                        + '      </div>'
+                        + '    </div>'
+                        + '    </div>'
+                        + '  </div>'
+                        + '</div>';
+                    row.appendChild(cell);
+                    tbody[0].appendChild(row);
+                }
             },
             applyFilters: function () {
                 if (!this.dg_bag || !this.dg_bag_config || !this.dg_bag_config.nav) {
@@ -511,17 +889,9 @@ function GameBagPage(char_id, extension) {
                 let query = {
                     char_id: char_id
                 };
-                if (this.search_term) {
-                    query.search = this.search_term;
-                }
-                if (this.category_id !== null && typeof this.category_id !== 'undefined') {
-                    query.category_id = this.category_id;
-                }
 
                 if (this.dg_bag && this.dg_bag.lang) {
-                    this.dg_bag.lang.no_results = (this.category_id !== null && typeof this.category_id !== 'undefined')
-                        ? 'Non ci sono oggetti per questa categoria'
-                        : 'Nessun risultato';
+                    this.dg_bag.lang.no_results = 'Nessun risultato';
                 }
 
                 this.dg_bag_config.nav.query = query;
@@ -534,15 +904,264 @@ function GameBagPage(char_id, extension) {
                     ]
                 );
             },
-            bindDropActions: function () {
-                var self = this;
-                let grid = $('#grid-bag');
-                if (!grid.length) {
+            searchTransferRecipients: function (query, onSuccess, onError) {
+                this.callInventory('charactersSearch', {
+                    query: query,
+                    include_self: false
+                }, null, function (response) {
+                    var dataset = (response && Array.isArray(response.dataset)) ? response.dataset : [];
+                    if (typeof onSuccess === 'function') {
+                        onSuccess(dataset);
+                    }
+                }, function (error) {
+                    if (typeof onError === 'function') {
+                        onError(error);
+                        return;
+                    }
+                    showInventoryError(error, 'Impossibile cercare i personaggi.');
+                });
+            },
+            renderTransferRecipientResults: function (modal, dataset) {
+                if (!modal || !modal.length) {
                     return;
                 }
-                grid.off('click', '[data-action="drop"]');
+                var list = modal.find('[data-role="transfer-recipient-results"]');
+                if (!list.length) {
+                    return;
+                }
 
-                grid.on('click', '[data-action="drop"]', function (e) {
+                var rows = Array.isArray(dataset) ? dataset : [];
+                if (!rows.length) {
+                    list.html('<div class="small text-muted p-2">Nessun personaggio trovato.</div>');
+                    return;
+                }
+
+                var html = '<div class="list-group list-group-flush">';
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var id = parseInt(row.id, 10);
+                    if (!id) {
+                        continue;
+                    }
+                    var fullName = String((row.name || '') + ' ' + (row.surname || '')).trim();
+                    if (fullName === '') {
+                        fullName = 'Personaggio #' + id;
+                    }
+                    var avatar = String(row.avatar || '').trim();
+                    if (avatar === '') {
+                        avatar = '/assets/imgs/defaults-images/default-avatar.png';
+                    }
+                    html += ''
+                        + '<button type="button" class="list-group-item list-group-item-action d-flex align-items-center gap-2"'
+                        + ' data-action="select-transfer-recipient"'
+                        + ' data-recipient-id="' + id + '"'
+                        + ' data-recipient-name="' + escapeHtml(fullName) + '">'
+                        + '  <img src="' + avatar + '" alt="" width="28" height="28" class="rounded-circle">'
+                        + '  <span class="text-truncate">' + escapeHtml(fullName) + '</span>'
+                        + '</button>';
+                }
+                html += '</div>';
+                list.html(html);
+            },
+            bindTransferRecipientSearch: function (modal) {
+                if (!modal || !modal.length) {
+                    return;
+                }
+
+                var self = this;
+                var debounceTimer = null;
+
+                modal.off('input.inventoryTransfer', '[name="transfer-recipient-query"]');
+                modal.off('click.inventoryTransfer', '[data-action="select-transfer-recipient"]');
+
+                modal.on('input.inventoryTransfer', '[name="transfer-recipient-query"]', function () {
+                    var query = ($(this).val() || '').toString().trim();
+                    modal.find('[name="transfer-recipient-id"]').val('');
+                    modal.find('[name="transfer-recipient-name"]').val('');
+                    modal.find('[data-role="transfer-recipient-selected"]').text('Nessun destinatario selezionato.');
+
+                    if (debounceTimer) {
+                        clearTimeout(debounceTimer);
+                    }
+
+                    if (query.length < 2) {
+                        modal.find('[data-role="transfer-recipient-results"]').html('<div class="small text-muted p-2">Scrivi almeno 2 caratteri per cercare.</div>');
+                        return;
+                    }
+
+                    debounceTimer = setTimeout(function () {
+                        self.searchTransferRecipients(query, function (dataset) {
+                            self.renderTransferRecipientResults(modal, dataset);
+                        }, function (error) {
+                            showInventoryError(error, 'Impossibile cercare i personaggi.');
+                        });
+                    }, 220);
+                });
+
+                modal.on('click.inventoryTransfer', '[data-action="select-transfer-recipient"]', function (e) {
+                    e.preventDefault();
+                    var btn = $(this);
+                    var recipientId = parseInt(btn.data('recipient-id'), 10);
+                    var recipientName = (btn.data('recipient-name') || '').toString().trim();
+                    if (!recipientId) {
+                        return;
+                    }
+
+                    modal.find('[name="transfer-recipient-id"]').val(recipientId);
+                    modal.find('[name="transfer-recipient-name"]').val(recipientName);
+                    modal.find('[data-role="transfer-recipient-selected"]').text(recipientName || ('Personaggio #' + recipientId));
+
+                    modal.find('[data-action="select-transfer-recipient"]').removeClass('active');
+                    btn.addClass('active');
+                });
+            },
+            showTransferDialog: function (options) {
+                var self = this;
+                var source = (options && options.source ? options.source : '').toString().trim();
+                var itemName = (options && options.itemName ? options.itemName : 'Oggetto').toString();
+                var instanceId = parseInt(options && options.instanceId ? options.instanceId : 0, 10);
+                var characterItemId = parseInt(options && options.characterItemId ? options.characterItemId : 0, 10);
+                var maxQty = parseInt(options && options.maxQty ? options.maxQty : 1, 10);
+                if (isNaN(maxQty) || maxQty < 1) {
+                    maxQty = 1;
+                }
+
+                var body = '<div class="text-start text-body">';
+                body += '<p class="mb-2">Recapita <b>' + escapeHtml(itemName) + '</b> a un altro personaggio, anche se non e presente in location.</p>';
+                if (source === 'stack' && maxQty > 1) {
+                    body += '<label class="form-label">Quantita da recapitare</label>';
+                    body += '<input type="number" class="form-control mb-2" name="transfer-quantity" min="1" max="' + maxQty + '" value="1">';
+                }
+                body += '<label class="form-label">Cerca personaggio</label>';
+                body += '<input type="text" class="form-control mb-2" name="transfer-recipient-query" placeholder="Nome o cognome">';
+                body += '<input type="hidden" name="transfer-recipient-id" value="">';
+                body += '<input type="hidden" name="transfer-recipient-name" value="">';
+                body += '<div class="small text-muted mb-2" data-role="transfer-recipient-selected">Nessun destinatario selezionato.</div>';
+                body += '<div class="border rounded overflow-auto" style="max-height: 220px;" data-role="transfer-recipient-results"><div class="small text-muted p-2">Scrivi almeno 2 caratteri per cercare.</div></div>';
+                body += '</div>';
+
+                var dialog = Dialog('default', {
+                    title: 'Recapita oggetto',
+                    body: body
+                }, function () {
+                    var confirmModal = getGeneralConfirmModal();
+                    if (!confirmModal) {
+                        Toast.show({ body: 'Dialog di conferma non disponibile.', type: 'error' });
+                        return;
+                    }
+
+                    var recipientId = parseInt(confirmModal.find('[name="transfer-recipient-id"]').val(), 10);
+                    var recipientName = (confirmModal.find('[name="transfer-recipient-name"]').val() || '').toString().trim();
+                    if (!recipientId) {
+                        Toast.show({ body: 'Seleziona il destinatario dalla lista.', type: 'warning' });
+                        return;
+                    }
+
+                    var sendQty = 1;
+                    if (source === 'stack' && maxQty > 1) {
+                        sendQty = parseInt(confirmModal.find('[name="transfer-quantity"]').val(), 10);
+                        if (isNaN(sendQty) || sendQty < 1) {
+                            Toast.show({ body: 'Quantita non valida.', type: 'warning' });
+                            return;
+                        }
+                        if (sendQty > maxQty) {
+                            sendQty = maxQty;
+                        }
+                    }
+
+                    var payload = {
+                        recipient_character_id: recipientId
+                    };
+                    if (source === 'instance') {
+                        if (!instanceId) {
+                            Toast.show({ body: 'Oggetto non valido.', type: 'error' });
+                            return;
+                        }
+                        payload.character_item_instance_id = instanceId;
+                    } else {
+                        if (!characterItemId) {
+                            Toast.show({ body: 'Oggetto non valido.', type: 'error' });
+                            return;
+                        }
+                        payload.character_item_id = characterItemId;
+                        payload.quantity = sendQty;
+                    }
+
+                    hideGeneralConfirmDialog();
+                    self.transferItem(payload, itemName, recipientName, sendQty);
+                });
+
+                dialog.show();
+                this.bindTransferRecipientSearch(getGeneralConfirmModal());
+            },
+            bindTransferActions: function () {
+                var self = this;
+                var scope = $('#bag-page');
+                if (!scope.length) {
+                    return;
+                }
+
+                scope.off('click', '[data-action="transfer"]');
+                scope.on('click', '[data-action="transfer"]', function (e) {
+                    e.preventDefault();
+                    var btn = $(this);
+                    var source = (btn.data('source') || '').toString().trim();
+                    var itemName = (btn.data('item-name') || 'Oggetto').toString();
+                    var maxQty = parseInt(btn.data('quantity'), 10);
+                    var instanceId = parseInt(btn.data('instance-id'), 10);
+                    var characterItemId = parseInt(btn.data('character-item-id'), 10);
+
+                    if (source === 'instance' && !instanceId) {
+                        Toast.show({ body: 'Oggetto non valido.', type: 'error' });
+                        return;
+                    }
+                    if (source === 'stack' && !characterItemId) {
+                        Toast.show({ body: 'Oggetto non valido.', type: 'error' });
+                        return;
+                    }
+
+                    self.showTransferDialog({
+                        source: source,
+                        itemName: itemName,
+                        instanceId: instanceId,
+                        characterItemId: characterItemId,
+                        maxQty: maxQty
+                    });
+                });
+            },
+            transferItem: function (payload, itemName, recipientName, quantity) {
+                var self = this;
+                this.callInventory('transfer', payload, null, function (response) {
+                    var transferredQty = parseInt(response && response.transferred_quantity ? response.transferred_quantity : quantity, 10);
+                    if (isNaN(transferredQty) || transferredQty < 1) {
+                        transferredQty = 1;
+                    }
+                    var who = (response && response.recipient_name ? response.recipient_name : recipientName) || 'destinatario';
+                    var label = 'Oggetto recapitato';
+                    if (itemName) {
+                        label += ': ' + itemName;
+                    }
+                    if (transferredQty > 1) {
+                        label += ' x' + transferredQty;
+                    }
+                    label += ' a ' + who + '.';
+                    Toast.show({ body: label, type: 'success' });
+                    if (self.dg_bag) {
+                        self.dg_bag.reloadData();
+                    }
+                }, function (error) {
+                    showInventoryError(error, 'Errore durante il recapito.');
+                });
+            },
+            bindDropActions: function () {
+                var self = this;
+                let scope = $('#bag-page');
+                if (!scope.length) {
+                    return;
+                }
+                scope.off('click', '[data-action="drop"]');
+
+                scope.on('click', '[data-action="drop"]', function (e) {
                     e.preventDefault();
                     let btn = $(this);
                     let source = (btn.data('source') || '').toString();
@@ -622,10 +1241,10 @@ function GameBagPage(char_id, extension) {
             },
             bindDestroyActions: function () {
                 var self = this;
-                let grid = $('#grid-bag');
-                if (!grid.length) { return; }
-                grid.off('click', '[data-action="destroy"]');
-                grid.on('click', '[data-action="destroy"]', function (e) {
+                let scope = $('#bag-page');
+                if (!scope.length) { return; }
+                scope.off('click', '[data-action="destroy"]');
+                scope.on('click', '[data-action="destroy"]', function (e) {
                     e.preventDefault();
                     let btn = $(this);
                     let source = (btn.data('source') || '').toString();
@@ -684,6 +1303,26 @@ function GameBagPage(char_id, extension) {
                     }
                 }, function (error) {
                     showInventoryError(error, 'Errore durante l\'uso dell\'oggetto.');
+                });
+            },
+            bindUseActions: function () {
+                var self = this;
+                let scope = $('#bag-page');
+                if (!scope.length) {
+                    return;
+                }
+
+                scope.off('click', '[data-action="use-bag"]');
+                scope.on('click', '[data-action="use-bag"]', function (e) {
+                    e.preventDefault();
+                    let inventoryItemId = parseInt($(this).data('inventory-item-id'), 10);
+                    if (!inventoryItemId) {
+                        Toast.show({ body: 'Oggetto non valido.', type: 'error' });
+                        return;
+                    }
+                    self.useItem({
+                        inventory_item_id: inventoryItemId
+                    });
                 });
             }
         };
@@ -1671,4 +2310,3 @@ globalWindow.GameEquipsPage = GameEquipsPage;
 export { GameBagPage as GameBagPage };
 export { GameEquipsPage as GameEquipsPage };
 export default GameEquipsPage;
-

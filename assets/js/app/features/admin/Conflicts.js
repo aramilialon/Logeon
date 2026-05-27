@@ -1116,7 +1116,12 @@ var AdminConflicts = {
             Dialog('warning', { title: title, body: '<p>' + body + '</p>' }, function () { if (typeof onConfirm === 'function') onConfirm(); }).show();
             return;
         }
-        if (globalWindow.confirm(title + '\n\n' + String(body || '').replace(/<[^>]+>/g, ''))) if (typeof onConfirm === 'function') onConfirm();
+        if (globalWindow.Toast && typeof globalWindow.Toast.show === 'function') {
+            globalWindow.Toast.show({
+                body: 'Modale di conferma non disponibile.',
+                type: 'error'
+            });
+        }
     },
 
     err: function (error) {

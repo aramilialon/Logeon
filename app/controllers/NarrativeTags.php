@@ -9,7 +9,6 @@ use Core\Http\InputValidator;
 use Core\Http\RequestData;
 use Core\Http\ResponseEmitter;
 
-
 use Core\Logging\LoggerInterface;
 
 class NarrativeTags
@@ -251,5 +250,3 @@ class NarrativeTags
         $this->emitJson(['dataset' => $results]);
     }
 }
-
-

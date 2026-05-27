@@ -10,6 +10,8 @@ var AdminUsers = {
     currentUserIsAdmin: false,
     currentUserIsSuperuser: false,
     currentUserIsModerator: false,
+    currentUserSuperuserRole: '',
+    currentUserIsSuperuserCreator: false,
     state: null,
 
     defaults: {
@@ -41,6 +43,9 @@ var AdminUsers = {
         this.currentUserIsAdmin = parseInt(gridContainer.getAttribute('data-current-user-is-admin') || '0', 10) === 1;
         this.currentUserIsSuperuser = parseInt(gridContainer.getAttribute('data-current-user-is-superuser') || '0', 10) === 1;
         this.currentUserIsModerator = parseInt(gridContainer.getAttribute('data-current-user-is-moderator') || '0', 10) === 1;
+        this.currentUserSuperuserRole = String(gridContainer.getAttribute('data-current-user-superuser-role') || '').trim().toLowerCase();
+        this.currentUserIsSuperuserCreator = parseInt(gridContainer.getAttribute('data-current-user-is-superuser-creator') || '0', 10) === 1
+            || this.currentUserSuperuserRole === 'creatore';
         this.state = this.getStateFromUrl();
         this.applyStateToForm();
         this.bindEvents();
@@ -125,7 +130,8 @@ var AdminUsers = {
                 this.datasetInt(trigger, 'isModerator', 0),
                 this.datasetInt(trigger, 'isMaster', 0),
                 this.datasetInt(trigger, 'lockAdmin', 0),
-                this.datasetInt(trigger, 'isSuperuser', 0)
+                this.datasetInt(trigger, 'isSuperuser', 0),
+                this.datasetText(trigger, 'superuserRole', '')
             );
             return this;
         }
@@ -347,6 +353,7 @@ var AdminUsers = {
         var isModerator = parseInt(row.is_moderator || 0, 10) === 1;
         var isMaster = parseInt(row.is_master || 0, 10) === 1;
         var isSuperuser = parseInt(row.is_superuser || 0, 10) === 1;
+        var superuserRole = String(row.superuser_role || '').trim().toLowerCase();
         var restrictLabel = isRestricted ? 'Sblocca' : 'Restringi';
         var restrictClass = isRestricted ? 'btn-outline-success' : 'btn-outline-warning';
         var banUrl = '/admin/blacklist?user_id=' + encodeURIComponent(String(userId));
@@ -356,12 +363,11 @@ var AdminUsers = {
         if (this.currentUserIsAdmin === true) {
             html += '<button type="button" class="btn btn-sm btn-outline-primary" data-action="admin-users-reset-password" data-user-id="' + userId + '">Reset password</button>';
         }
-        var canEditPermissions = !isSelf && !isSuperuser && (
-            this.currentUserIsSuperuser === true ||
-            (this.currentUserIsAdmin === true && !isAdministrator)
-        );
+        var canEditPermissions = this.currentUserIsSuperuser === true
+            && !isSelf
+            && (!isSuperuser || this.currentUserIsSuperuserCreator === true);
         if (canEditPermissions) {
-            html += '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-users-permissions" data-user-id="' + userId + '" data-is-administrator="' + (isAdministrator ? 1 : 0) + '" data-is-moderator="' + (isModerator ? 1 : 0) + '" data-is-master="' + (isMaster ? 1 : 0) + '" data-lock-admin="' + (isAdministrator && this.currentUserIsSuperuser !== true ? 1 : 0) + '" data-is-superuser="' + (isSuperuser ? 1 : 0) + '">Permessi</button>';
+            html += '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-users-permissions" data-user-id="' + userId + '" data-is-administrator="' + (isAdministrator ? 1 : 0) + '" data-is-moderator="' + (isModerator ? 1 : 0) + '" data-is-master="' + (isMaster ? 1 : 0) + '" data-lock-admin="' + (isAdministrator && this.currentUserIsSuperuser !== true ? 1 : 0) + '" data-is-superuser="' + (isSuperuser ? 1 : 0) + '" data-superuser-role="' + this.escapeHtml(superuserRole) + '">Permessi</button>';
         }
         if (isSelf) {
             html += '<span class="badge text-bg-secondary align-self-center">Utente corrente</span>';
@@ -397,24 +403,45 @@ var AdminUsers = {
         }).show();
     },
 
-    actionPermissions: function (userId, isAdministrator, isModerator, isMaster, lockAdmin, isSuperuser) {
+    actionPermissions: function (userId, isAdministrator, isModerator, isMaster, lockAdmin, isSuperuser, superuserRole) {
         var self = this;
         var flags = this.normalizePermissionsHierarchy(isAdministrator, isModerator, isMaster);
         var lockAdminOn = parseInt(lockAdmin, 10) === 1;
         var lockSuperuserOn = parseInt(isSuperuser, 10) === 1;
+        var canManageSuperusers = this.currentUserIsSuperuserCreator === true;
+        var normalizedSuperuserRole = this.normalizeSuperuserRole(superuserRole || 'gestore');
         var adminLockedHint = lockAdminOn
             ? '<div class="alert alert-info py-2 px-3 small mt-3 mb-0">Questo account è già amministratore: il ruolo Admin non può essere rimosso.</div>'
             : '';
-        if (lockSuperuserOn) {
-            Toast.show({ body: 'I permessi dell\'account superuser non sono modificabili.', type: 'warning' });
+        if (lockSuperuserOn && !canManageSuperusers) {
+            Toast.show({ body: 'Solo il superuser creatore puo modificare altri superuser.', type: 'warning' });
             return this;
+        }
+        var superuserBlock = '';
+        if (canManageSuperusers) {
+            superuserBlock = ''
+                + '<hr class="my-3">'
+                + '<div class="mb-3">'
+                + '<label class="form-label d-block mb-1">Ruolo elevato</label>'
+                + '<input type="hidden" id="admin-users-perm-superuser" name="is_superuser" value="' + (lockSuperuserOn ? '1' : '0') + '">'
+                + '<div class="form-text mt-1">Attivalo per assegnare il livello elevato. Include sempre Admin, Moderatore e Master.</div>'
+                + '</div>'
+                + '<div class="mb-0">'
+                + '<label for="admin-users-perm-superuser-role" class="form-label">Etichetta</label>'
+                + '<select id="admin-users-perm-superuser-role" name="superuser_role" class="form-select form-select-sm">'
+                + '<option value="gestore"' + (normalizedSuperuserRole === 'gestore' ? ' selected' : '') + '>Gestore</option>'
+                + '<option value="sviluppatore"' + (normalizedSuperuserRole === 'sviluppatore' ? ' selected' : '') + '>Sviluppatore</option>'
+                + '<option value="grafico"' + (normalizedSuperuserRole === 'grafico' ? ' selected' : '') + '>Grafico</option>'
+                + '</select>'
+                + '<div class="form-text mt-1">"Creatore" resta riservato all\'account iniziale di installazione.</div>'
+                + '</div>';
         }
         var body = ''
             + '<form id="admin-users-permissions-form" class="text-start">'
             + '<div class="mb-3">'
             + '<label class="form-label d-block mb-1">Admin</label>'
             + '<input type="hidden" id="admin-users-perm-admin" name="is_administrator" value="' + String(flags.is_administrator) + '">'
-            + '<div class="form-text mt-1">Super utente: include automaticamente i permessi di Moderatore e Master.</div>'
+            + '<div class="form-text mt-1">Admin include automaticamente i permessi di Moderatore e Master.</div>'
             + '</div>'
             + '<div class="mb-3">'
             + '<label class="form-label d-block mb-1">Moderatore</label>'
@@ -425,6 +452,7 @@ var AdminUsers = {
             + '<label class="form-label d-block mb-1">Master</label>'
             + '<input type="hidden" id="admin-users-perm-master" name="is_master" value="' + String(flags.is_master) + '">'
             + '</div>'
+            + superuserBlock
             + adminLockedHint
             + '</form>';
 
@@ -442,10 +470,14 @@ var AdminUsers = {
                 user_id: userId,
                 is_administrator: self.permissionInputToInt(form.elements.is_administrator, 0),
                 is_moderator: self.permissionInputToInt(form.elements.is_moderator, 0),
-                is_master: self.permissionInputToInt(form.elements.is_master, 0)
+                is_master: self.permissionInputToInt(form.elements.is_master, 0),
+                is_superuser: self.permissionInputToInt(form.elements.is_superuser, 0),
+                superuser_role: self.normalizeSuperuserRole(form.elements.superuser_role ? form.elements.superuser_role.value : '')
             };
             payload = self.normalizePermissionsHierarchy(payload.is_administrator, payload.is_moderator, payload.is_master);
             payload.user_id = userId;
+            payload.is_superuser = self.permissionInputToInt(form.elements.is_superuser, 0);
+            payload.superuser_role = self.normalizeSuperuserRole(form.elements.superuser_role ? form.elements.superuser_role.value : '');
 
             self.hideConfirmDialog();
             self.requestPost('/admin/users/permissions', payload, function () {
@@ -461,7 +493,8 @@ var AdminUsers = {
                 return;
             }
             self.initPermissionsHierarchySwitches(form, {
-                lockAdminOn: lockAdminOn
+                lockAdminOn: lockAdminOn,
+                canManageSuperusers: canManageSuperusers
             });
         }, 0);
     },
@@ -475,6 +508,14 @@ var AdminUsers = {
             is_moderator: moderator ? 1 : 0,
             is_master: master ? 1 : 0
         };
+    },
+
+    normalizeSuperuserRole: function (value) {
+        var role = String(value || '').trim().toLowerCase();
+        if (role !== 'sviluppatore' && role !== 'grafico' && role !== 'gestore') {
+            role = 'gestore';
+        }
+        return role;
     },
 
     permissionInputToInt: function (input, fallback) {
@@ -525,11 +566,15 @@ var AdminUsers = {
         var adminInput = form.elements.is_administrator;
         var moderatorInput = form.elements.is_moderator;
         var masterInput = form.elements.is_master;
+        var superuserInput = form.elements.is_superuser;
+        var superuserRoleInput = form.elements.superuser_role;
         var adminSwitch = null;
         var moderatorSwitch = null;
         var masterSwitch = null;
+        var superuserSwitch = null;
         var isSyncing = false;
         var lockAdminOn = options.lockAdminOn === true;
+        var canManageSuperusers = options.canManageSuperusers === true;
         if (lockAdminOn) {
             this.setPermissionInputValue(adminInput, 1);
         }
@@ -538,6 +583,16 @@ var AdminUsers = {
         var previousModerator = this.permissionInputToInt(moderatorInput, 0) === 1 ? 1 : 0;
 
         if (typeof globalWindow.SwitchGroup === 'function') {
+            if (superuserInput) {
+                superuserSwitch = globalWindow.SwitchGroup(superuserInput, {
+                    preset: 'activeInactive',
+                    trueLabel: 'Assegnato',
+                    falseLabel: 'Non assegnato',
+                    trueValue: '1',
+                    falseValue: '0',
+                    defaultValue: '0'
+                });
+            }
             adminSwitch = globalWindow.SwitchGroup(adminInput, {
                 preset: 'activeInactive',
                 trueLabel: 'Attivo',
@@ -571,9 +626,25 @@ var AdminUsers = {
             isSyncing = true;
 
             try {
+                var superuser = self.permissionInputToInt(superuserInput, 0) === 1;
                 var admin = self.permissionInputToInt(adminInput, 0) === 1;
                 var moderator = self.permissionInputToInt(moderatorInput, 0) === 1;
                 var master = self.permissionInputToInt(masterInput, 0) === 1;
+
+                if (canManageSuperusers && superuser) {
+                    if (!admin) {
+                        self.setPermissionInputValue(adminInput, 1);
+                        admin = true;
+                    }
+                    if (!moderator) {
+                        self.setPermissionInputValue(moderatorInput, 1);
+                        moderator = true;
+                    }
+                    if (!master) {
+                        self.setPermissionInputValue(masterInput, 1);
+                        master = true;
+                    }
+                }
 
                 if (lockAdminOn && !admin) {
                     self.setPermissionInputValue(adminInput, 1);
@@ -619,9 +690,15 @@ var AdminUsers = {
                     master = true;
                 }
 
-                self.setPermissionInputDisabled(moderatorInput, moderatorSwitch, admin);
-                self.setPermissionInputDisabled(masterInput, masterSwitch, admin || moderator);
-                self.setPermissionInputDisabled(adminInput, adminSwitch, lockAdminOn);
+                self.setPermissionInputDisabled(moderatorInput, moderatorSwitch, superuser || admin);
+                self.setPermissionInputDisabled(masterInput, masterSwitch, superuser || admin || moderator);
+                self.setPermissionInputDisabled(adminInput, adminSwitch, lockAdminOn || superuser);
+                if (superuserRoleInput) {
+                    superuserRoleInput.disabled = !superuser;
+                }
+                if (superuserSwitch && typeof superuserSwitch.refresh === 'function') {
+                    superuserSwitch.refresh();
+                }
                 if (moderatorSwitch && typeof moderatorSwitch.refresh === 'function') {
                     moderatorSwitch.refresh();
                 }
@@ -640,10 +717,12 @@ var AdminUsers = {
         };
 
         if (typeof globalWindow.$ === 'function') {
+            if (superuserInput) globalWindow.$(superuserInput).off('change.adminUsersPerm').on('change.adminUsersPerm', syncHierarchy);
             if (adminInput) globalWindow.$(adminInput).off('change.adminUsersPerm').on('change.adminUsersPerm', syncHierarchy);
             if (moderatorInput) globalWindow.$(moderatorInput).off('change.adminUsersPerm').on('change.adminUsersPerm', syncHierarchy);
             if (masterInput) globalWindow.$(masterInput).off('change.adminUsersPerm').on('change.adminUsersPerm', syncHierarchy);
         } else {
+            if (superuserInput && superuserInput.addEventListener) superuserInput.addEventListener('change', syncHierarchy);
             if (adminInput && adminInput.addEventListener) adminInput.addEventListener('change', syncHierarchy);
             if (moderatorInput && moderatorInput.addEventListener) moderatorInput.addEventListener('change', syncHierarchy);
             if (masterInput && masterInput.addEventListener) masterInput.addEventListener('change', syncHierarchy);
@@ -848,6 +927,14 @@ var AdminUsers = {
         return parsed;
     },
 
+    datasetText: function (node, key, fallback) {
+        if (!node || !node.dataset || typeof node.dataset[key] === 'undefined') {
+            return String(fallback || '');
+        }
+
+        return String(node.dataset[key] || '');
+    },
+
     formatDateTime: function (value) {
         var raw = String(value || '').trim();
         if (!raw) {
@@ -885,7 +972,11 @@ var AdminUsers = {
             tags.push('<span class="badge text-bg-danger">Admin</span>');
         }
         if (parseInt(row.is_superuser || 0, 10) === 1) {
-            tags.push('<span class="badge text-bg-warning text-dark">Superuser</span>');
+            var role = String(row.superuser_role || '').trim().toLowerCase();
+            if (role !== 'creatore' && role !== 'sviluppatore' && role !== 'grafico' && role !== 'gestore') {
+                role = 'gestore';
+            }
+            tags.push('<span class="badge text-bg-warning text-dark">' + this.escapeHtml(this.superuserRoleLabel(role)) + '</span>');
         }
         if (parseInt(row.is_moderator || 0, 10) === 1) {
             tags.push('<span class="badge text-bg-info">Moderatore</span>');
@@ -920,6 +1011,20 @@ var AdminUsers = {
             return full;
         }
         return 'Nessun personaggio associato';
+    },
+
+    superuserRoleLabel: function (role) {
+        var normalized = String(role || '').trim().toLowerCase();
+        if (normalized === 'creatore') {
+            return 'Creatore';
+        }
+        if (normalized === 'sviluppatore') {
+            return 'Sviluppatore';
+        }
+        if (normalized === 'grafico') {
+            return 'Grafico';
+        }
+        return 'Gestore';
     },
 
     escapeHtml: function (value) {

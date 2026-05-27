@@ -10,7 +10,6 @@ class Location extends Models
     protected $primary_key = 'id';
     protected $joins = [
         ' LEFT JOIN maps ON locations.map_id = maps.id ',
-        ' LEFT JOIN social_status AS required_status ON locations.min_socialstatus_id = required_status.id ',
     ];
     protected $fillable = [
         'locations.id',
@@ -46,8 +45,6 @@ class Location extends Models
         'maps.image AS map_image',
         'maps.render_mode AS map_render_mode',
         'maps.position AS map_position',
-        'required_status.name AS required_status_name',
-        'required_status.min AS required_status_min',
     ];
 
 }

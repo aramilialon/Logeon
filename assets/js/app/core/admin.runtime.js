@@ -76,6 +76,7 @@ export function getConfig() {
                 'logs-location-access': ['admin.logs-location-access'],
                 'logs-sys': ['admin.logs-sys'],
                 settings: ['admin.settings'],
+                'system-update': ['admin.system-update'],
                 'narrative-tags': ['admin.narrative-tags'],
                 'message-reports': ['admin.message-reports'],
                 news: ['admin.news']

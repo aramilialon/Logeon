@@ -62,11 +62,16 @@ Blocchi gia completati:
 Dettagli aggiornati: `docs/README.md`.
 
 ## Requisiti
-1. PHP 8.1+ (consigliato 8.2)
+1. PHP 8.2.x supportato
 2. MySQL/MariaDB
 3. Composer
 4. ambiente web locale (XAMPP o equivalente)
 5. HTTPS se vuoi abilitare la PWA installabile
+
+Nota compatibilita PHP:
+1. la baseline supportata del progetto e PHP `8.2`;
+2. su PHP `8.4`, con `CONFIG['debug'] = true`, possono comparire warning di deprecazione;
+3. finche non viene completata una pulizia dedicata per `8.4`, la versione consigliata per sviluppo e produzione resta `8.2.x`.
 
 ## Pacchetti release
 1. `logeon-core-ready.zip`: pacchetto pronto per il deploy, adatto a un server dove vuoi pubblicare subito l'applicazione.

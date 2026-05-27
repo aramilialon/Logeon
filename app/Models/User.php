@@ -14,6 +14,7 @@ class User extends Models
         'AES_DECRYPT(email, "' . DB['crypt_key'] . '") AS email',
         'is_administrator',
         'is_superuser',
+        'superuser_role',
         'is_moderator',
         'is_master',
         'date_created',

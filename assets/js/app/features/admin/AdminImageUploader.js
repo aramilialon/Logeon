@@ -56,28 +56,45 @@ function _showTab(wrapEl, tab) {
 
 function _finalizeUpload(target, inputEl, previewEl, file) {
     if (!file || !file.token) { return; }
-    $.ajax({
-        url: '/uploader?action=uploadFinalize&token=' + encodeURIComponent(file.token),
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({ target: target }),
-        headers: { 'X-CSRF-Token': _csrf(), 'X-Requested-With': 'XMLHttpRequest' },
-        success: function (res) {
-            if (res && res.dataset && res.dataset.url) {
-                if (inputEl) { inputEl.value = res.dataset.url; }
-                if (previewEl) { previewEl.src = res.dataset.url; previewEl.style.display = ''; }
-                _resetProgress(target);
-                _setActionMode(target, '');
-                var dropEl = document.querySelector('[data-upload-drop="' + target + '"]');
-                if (dropEl) {
-                    var wrapEl = dropEl.closest('[data-img-upload-wrap]');
-                    if (wrapEl) { _showTab(wrapEl, 'link'); }
-                }
-            } else {
-                _setActionMode(target, 'retry');
-            }
+    if (typeof window.fetch !== 'function') {
+        _setActionMode(target, 'retry');
+        return;
+    }
+
+    window.fetch('/uploader?action=uploadFinalize&token=' + encodeURIComponent(file.token), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': _csrf(),
+            'X-Requested-With': 'XMLHttpRequest'
         },
-        error: function () { _setActionMode(target, 'retry'); }
+        body: JSON.stringify({ target: target })
+    }).then(function (response) {
+        return response.text().then(function (text) {
+            var res = {};
+            try { res = JSON.parse(text); } catch (error) { res = {}; }
+            if (!response.ok) {
+                throw res;
+            }
+            return res;
+        });
+    }).then(function (res) {
+        if (res && res.dataset && res.dataset.url) {
+            if (inputEl) { inputEl.value = res.dataset.url; }
+            if (previewEl) { previewEl.src = res.dataset.url; previewEl.style.display = ''; }
+            _resetProgress(target);
+            _setActionMode(target, '');
+            var dropEl = document.querySelector('[data-upload-drop="' + target + '"]');
+            if (dropEl) {
+                var wrapEl = dropEl.closest('[data-img-upload-wrap]');
+                if (wrapEl) { _showTab(wrapEl, 'link'); }
+            }
+            return;
+        }
+
+        _setActionMode(target, 'retry');
+    }).catch(function () {
+        _setActionMode(target, 'retry');
     });
 }
 

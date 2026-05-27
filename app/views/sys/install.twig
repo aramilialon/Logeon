@@ -19,6 +19,15 @@
                 </div>
 
                 <div id="install-alert" class="alert d-none mb-3"></div>
+                <div id="install-runtime-status" class="alert alert-info d-none mb-3">
+                    <div class="d-flex align-items-start gap-2">
+                        <div class="spinner-border spinner-border-sm mt-1" role="status" aria-hidden="true"></div>
+                        <div>
+                            <div class="fw-semibold" id="install-runtime-title">Operazione in corso...</div>
+                            <div class="small mb-1" id="install-runtime-message">Attendere il completamento del passaggio corrente.</div>
+                        </div>
+                    </div>
+                </div>
 
                 <div data-install-step="1">
                     <h5 class="mb-3">1. Dati Applicazione</h5>
@@ -28,6 +37,7 @@
                         <div class="col-md-4">
                             <label class="form-label">Base URL</label>
                             <input type="text" class="form-control" id="app-baseurl" placeholder="es. mygame.site">
+                            <div class="form-text">Inserisci dominio host, senza protocollo. Esempio: <code>mygame.site</code></div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Lingua</label>
@@ -38,14 +48,17 @@
                         <div class="col-md-4">
                             <label class="form-label">Nome</label>
                             <input type="text" class="form-control" id="app-name" placeholder="Nome applicazione">
+                            <div class="form-text">Nome breve mostrato nelle principali aree del sistema.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Titolo</label>
                             <input type="text" class="form-control" id="app-title" placeholder="Titolo sito">
+                            <div class="form-text">Titolo completo usato in homepage e intestazioni.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Descrizione</label>
                             <input type="text" class="form-control" id="app-description" placeholder="Descrizione breve">
+                            <div class="form-text">Breve descrizione introduttiva visibile agli utenti in fase pubblica.</div>
                         </div>
                     </div>
 
@@ -80,18 +93,22 @@
 
                 <div data-install-step="2" class="d-none">
                     <h5 class="mb-3">2. Connessione Database</h5>
+                    <p class="text-muted mb-3">Configura credenziali e codifica del database. Questo passaggio verifica solo la connessione.</p>
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label class="form-label">Host</label>
                             <input type="text" class="form-control" id="db-host" placeholder="localhost">
+                            <div class="form-text">Di solito <code>localhost</code> in ambienti XAMPP.</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Database</label>
                             <input type="text" class="form-control" id="db-name" placeholder="appdb">
+                            <div class="form-text">Nome del database da creare/aggiornare.</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Utente</label>
                             <input type="text" class="form-control" id="db-user" placeholder="root">
+                            <div class="form-text">Utente con permessi di creazione schema e tabelle.</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Password</label>
@@ -200,23 +217,25 @@
 
                 <div data-install-step="3" class="d-none">
                     <h5 class="mb-3">3. Scrittura Configurazione</h5>
-                    <p class="text-muted mb-2">Scrive automaticamente:</p>
+                    <p class="text-muted mb-2">Scrive automaticamente i file di configurazione dell'ambiente:</p>
                     <ul class="mb-3">
                         <li><code>configs/app.php</code></li>
                         <li><code>configs/db.php</code></li>
                     </ul>
+                    <p class="small text-muted mb-3">Dopo la scrittura, il sistema verifica e mostra il base URL effettivamente salvato.</p>
                     <button type="button" class="btn btn-primary" id="btn-write-config">Scrivi configurazione</button>
                 </div>
 
                 <div data-install-step="4" class="d-none">
                     <h5 class="mb-3">4. Inizializzazione Database</h5>
-                    <p class="text-muted mb-3">Importa lo schema iniziale da <code>database/logeon_db_core.sql</code>.</p>
+                    <p class="text-muted mb-2">Importa lo schema iniziale da <code>database/logeon_db_core.sql</code>.</p>
+                    <p class="small text-muted mb-3">Durante questo passaggio il sistema può impiegare alcuni secondi: attendi il completamento senza ricaricare la pagina.</p>
                     <button type="button" class="btn btn-primary" id="btn-init-db">Inizializza database</button>
                 </div>
 
                 <div data-install-step="5" class="d-none">
                     <h5 class="mb-3">5. Account amministratore</h5>
-                    <p class="text-muted mb-3">Crea l'utenza superuser e il personaggio con cui accedere al gioco.</p>
+                    <p class="text-muted mb-3">Crea l'utenza superuser iniziale con etichetta "creatore" e il personaggio con cui accedere al gioco.</p>
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Email</label>

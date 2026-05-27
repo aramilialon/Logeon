@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Services\LocationDropService;
+use App\Services\LocationMessageService;
+use Core\Filter;
 use Core\Http\ApiResponse;
 use Core\Http\AppError;
 use Core\Http\InputValidator;
@@ -14,10 +16,14 @@ use Core\SessionStore;
 
 class LocationDrops
 {
+    private const TYPE_SYSTEM = 3;
+
     /** @var LoggerInterface|null */
     private $logger = null;
     /** @var LocationDropService|null */
     private $locationDropService = null;
+    /** @var LocationMessageService|null */
+    private $locationMessageService = null;
 
     public function setLogger(LoggerInterface $logger = null)
     {
@@ -28,6 +34,12 @@ class LocationDrops
     public function setLocationDropService(LocationDropService $locationDropService = null)
     {
         $this->locationDropService = $locationDropService;
+        return $this;
+    }
+
+    public function setLocationMessageService(LocationMessageService $locationMessageService = null)
+    {
+        $this->locationMessageService = $locationMessageService;
         return $this;
     }
 
@@ -49,6 +61,16 @@ class LocationDrops
 
         $this->locationDropService = new LocationDropService();
         return $this->locationDropService;
+    }
+
+    private function locationMessageService(): LocationMessageService
+    {
+        if ($this->locationMessageService instanceof LocationMessageService) {
+            return $this->locationMessageService;
+        }
+
+        $this->locationMessageService = new LocationMessageService();
+        return $this->locationMessageService;
     }
 
     protected function trace($message, $context = false): void
@@ -105,6 +127,76 @@ class LocationDrops
         );
     }
 
+    private function publishDropSystemMessage(int $locationId, int $characterId, string $itemName, int $quantity): void
+    {
+        if ($locationId <= 0 || $characterId <= 0) {
+            return;
+        }
+
+        $label = trim($itemName);
+        if ($label === '') {
+            $label = 'Oggetto';
+        }
+        $qty = $quantity > 0 ? $quantity : 1;
+        $qtyLabel = $qty > 1 ? ' (x' . $qty . ')' : '';
+
+        $body = '<div class="text-center">'
+            . '<p class="mb-1"><b>Oggetto a terra</b></p>'
+            . '<p class="mb-0">' . Filter::html($label) . Filter::html($qtyLabel) . ' lasciato a terra.</p>'
+            . '</div>';
+
+        $meta = json_encode([
+            'command' => 'drop',
+            'source' => 'inventory',
+            'item_name' => $label,
+            'quantity' => $qty,
+            'location_id' => $locationId,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $this->locationMessageService()->insertMessage(
+            $locationId,
+            $characterId,
+            self::TYPE_SYSTEM,
+            $body,
+            $meta,
+        );
+    }
+
+    private function publishPickupSystemMessage(int $locationId, int $characterId, string $itemName, int $quantity): void
+    {
+        if ($locationId <= 0 || $characterId <= 0) {
+            return;
+        }
+
+        $label = trim($itemName);
+        if ($label === '') {
+            $label = 'Oggetto';
+        }
+        $qty = $quantity > 0 ? $quantity : 1;
+        $qtyLabel = $qty > 1 ? ' (x' . $qty . ')' : '';
+
+        $body = '<div class="text-center">'
+            . '<p class="mb-1"><b>Oggetto raccolto</b></p>'
+            . '<p class="mb-0">' . Filter::html($label) . Filter::html($qtyLabel) . ' raccolto da terra.</p>'
+            . '</div>';
+
+        $meta = json_encode([
+            'command' => 'pickup',
+            'source' => 'location_drop',
+            'item_name' => $label,
+            'quantity' => $qty,
+            'location_id' => $locationId,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $this->locationMessageService()->insertMessage(
+            $locationId,
+            $characterId,
+            self::TYPE_SYSTEM,
+            $body,
+            $meta,
+        );
+    }
+
     public function list()
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
@@ -152,6 +244,12 @@ class LocationDrops
             }
 
             $this->locationDropService()->dropCharacterItemInstance((int) $location_id, (int) $me, $row);
+            $this->publishDropSystemMessage(
+                (int) $location_id,
+                (int) $me,
+                (string) ($row->item_name ?? ''),
+                1,
+            );
 
             ResponseEmitter::emit(ApiResponse::json(['status' => 'ok']));
             return;
@@ -178,6 +276,12 @@ class LocationDrops
             }
 
             $this->locationDropService()->dropCharacterItemStack((int) $location_id, (int) $me, $row, (int) $qty);
+            $this->publishDropSystemMessage(
+                (int) $location_id,
+                (int) $me,
+                (string) ($row->item_name ?? ''),
+                (int) $qty,
+            );
 
             ResponseEmitter::emit(ApiResponse::json(['status' => 'ok']));
             return;
@@ -218,10 +322,15 @@ class LocationDrops
             $this->locationDropService()->pickupDropInstance((int) $me, $drop);
         }
 
+        $this->publishPickupSystemMessage(
+            (int) $location_id,
+            (int) $me,
+            (string) ($drop->item_name ?? ''),
+            (int) ($drop->quantity ?? 1),
+        );
+
         $this->locationDropService()->deleteDrop((int) $drop->id);
 
         ResponseEmitter::emit(ApiResponse::json(['status' => 'ok']));
     }
 }
-
-

@@ -337,7 +337,10 @@ class Messages
                         'actor_character_id' => (int) $me,
                         'source_type' => 'direct_message',
                         'source_id' => (int) $messageId,
-                        'action_url' => '/game/messages',
+                        'action_url' => null,
+                        'source_meta_json' => json_encode([
+                            'thread_id' => (int) $thread_id,
+                        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                         'priority' => 'normal',
                     ],
                 );
@@ -352,5 +355,3 @@ class Messages
         ]);
     }
 }
-
-

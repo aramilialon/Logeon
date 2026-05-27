@@ -202,9 +202,12 @@ var AdminBlacklist = {
                     sortable: true,
                     style: { textAlign: 'left' },
                     format: function (row) {
-                        var email = self.escapeHtml(row.banned_email || 'Utente sconosciuto');
                         var userId = parseInt(row.banned_id || 0, 10) || 0;
-                        return '<div><b>' + email + '</b></div><div class="small text-muted">ID utente #' + String(userId) + '</div>';
+                        var label = self.normalizeText(row.banned_email || '');
+                        if (label === '') {
+                            label = 'Utente #' + String(userId || '-');
+                        }
+                        return '<div><b>' + self.escapeHtml(label) + '</b></div><div class="small text-muted">ID utente #' + String(userId) + '</div>';
                     }
                 },
                 {
@@ -243,7 +246,12 @@ var AdminBlacklist = {
                     field: 'author_email',
                     sortable: true,
                     format: function (row) {
-                        return self.escapeHtml(row.author_email || '-');
+                        var authorLabel = self.normalizeText(row.author_email || '');
+                        if (authorLabel !== '') {
+                            return self.escapeHtml(authorLabel);
+                        }
+                        var authorId = parseInt(row.author_id || 0, 10) || 0;
+                        return authorId > 0 ? ('ID utente #' + String(authorId)) : '-';
                     }
                 },
                 {
@@ -406,10 +414,10 @@ var AdminBlacklist = {
     searchUsers: function (query) {
         var self = this;
         this.post('/admin/users/list', {
-            query: { email: query, status: 'all' },
+            query: { search: query, status: 'all' },
             page: 1,
             results: 8,
-            orderBy: 'email|ASC'
+            orderBy: 'character_name|ASC'
         }, function (response) {
             var rows = (response && Array.isArray(response.dataset)) ? response.dataset : [];
             self.renderSuggestions(rows);
@@ -433,9 +441,12 @@ var AdminBlacklist = {
             if (userId <= 0) {
                 continue;
             }
-            var email = this.escapeHtml(row.email || '');
-            html += '<button type="button" class="list-group-item list-group-item-action" data-action="admin-blacklist-select-user" data-user-id="' + userId + '" data-user-email="' + email + '">'
-                + email + ' <span class="small text-muted">#' + String(userId) + '</span>'
+            var email = this.normalizeText(row.email || '');
+            var characterName = this.normalizeText((row.character_name || '') + ' ' + (row.character_surname || ''));
+            var label = email !== '' ? email : (characterName !== '' ? characterName : ('Utente #' + String(userId)));
+            var safeLabel = this.escapeHtml(label);
+            html += '<button type="button" class="list-group-item list-group-item-action" data-action="admin-blacklist-select-user" data-user-id="' + userId + '" data-user-label="' + safeLabel + '">'
+                + safeLabel + ' <span class="small text-muted">#' + String(userId) + '</span>'
                 + '</button>';
         }
 
@@ -454,12 +465,12 @@ var AdminBlacklist = {
             return this;
         }
 
-        var email = this.normalizeText(trigger.getAttribute('data-user-email') || '');
+        var label = this.normalizeText(trigger.getAttribute('data-user-label') || '');
         this.setField('banned_id', String(userId));
 
         var searchInput = document.getElementById('admin-blacklist-user-search');
         if (searchInput) {
-            searchInput.value = email !== '' ? email : ('ID utente #' + String(userId));
+            searchInput.value = label !== '' ? label : ('ID utente #' + String(userId));
         }
 
         this.clearSuggestions();

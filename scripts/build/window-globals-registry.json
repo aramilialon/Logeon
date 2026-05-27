@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-24T12:14:43.571Z",
+  "generated_at": "2026-05-11T09:40:14.380Z",
   "generated_by": "scripts/build/check-window-globals.mjs",
   "purpose": "Registro ufficiale temporaneo delle API globali su window/globalWindow.",
   "entries": [
@@ -277,6 +277,15 @@
       ]
     },
     {
+      "name": "__systemArchetypesPublicPageBound",
+      "owner": "core-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/core/system.pages.js"
+      ]
+    },
+    {
       "name": "__systemContactPageBound",
       "owner": "core-runtime",
       "remove_by": "phase-4",
@@ -358,12 +367,8 @@
         "assets/js/app/core/system.dialogs.js",
         "assets/js/app/core/system.modals.js",
         "assets/js/app/core/system.pages.js",
-        "assets/js/app/features/admin/MessageReports.js",
-        "assets/js/app/features/admin/NarrativeTags.js",
-        "assets/js/app/features/admin/Settings.js",
         "assets/js/app/features/admin/SystemEvents.js",
         "assets/js/app/features/admin/Users.js",
-        "assets/js/app/features/game/location/LocationChatPage.js",
         "assets/js/app/modules/game/location/PageModule.js",
         "assets/js/components/CheckGroup.js",
         "assets/js/components/Dices.js",
@@ -792,6 +797,24 @@
       ]
     },
     {
+      "name": "AdminLocationPositionTags",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/admin/LocationPositionTags.js"
+      ]
+    },
+    {
+      "name": "AdminLocationPositionTagsModuleFactory",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/modules/admin/LocationPositionTagsModule.js"
+      ]
+    },
+    {
       "name": "AdminLocations",
       "owner": "admin-runtime",
       "remove_by": "phase-4",
@@ -972,6 +995,78 @@
       ]
     },
     {
+      "name": "AdminMailCampaigns",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/admin/MailCampaigns.js"
+      ]
+    },
+    {
+      "name": "AdminMailCampaignsModuleFactory",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/modules/admin/MailCampaignsModule.js"
+      ]
+    },
+    {
+      "name": "AdminMailDistributionLists",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/admin/MailDistributionLists.js"
+      ]
+    },
+    {
+      "name": "AdminMailDistributionListsModuleFactory",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/modules/admin/MailDistributionListsModule.js"
+      ]
+    },
+    {
+      "name": "AdminMailLogs",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/admin/MailLogs.js"
+      ]
+    },
+    {
+      "name": "AdminMailLogsModuleFactory",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/modules/admin/MailLogsModule.js"
+      ]
+    },
+    {
+      "name": "AdminMailTemplates",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/admin/MailTemplates.js"
+      ]
+    },
+    {
+      "name": "AdminMailTemplatesModuleFactory",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/modules/admin/MailTemplatesModule.js"
+      ]
+    },
+    {
       "name": "AdminMaps",
       "owner": "admin-runtime",
       "remove_by": "phase-4",
@@ -987,6 +1082,24 @@
       "todo": "Migrare da global window API a import espliciti e registry runtime.",
       "files": [
         "assets/js/app/modules/admin/MapsModule.js"
+      ]
+    },
+    {
+      "name": "AdminMedia",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/admin/Media.js"
+      ]
+    },
+    {
+      "name": "AdminMediaModuleFactory",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/modules/admin/MediaModule.js"
       ]
     },
     {
@@ -1351,6 +1464,15 @@
       ]
     },
     {
+      "name": "AppBootOverlay",
+      "owner": "core-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/core/AppBootOverlay.js"
+      ]
+    },
+    {
       "name": "AppBootstrap",
       "owner": "core-runtime",
       "remove_by": "phase-4",
@@ -1396,6 +1518,15 @@
       "todo": "Migrare da global window API a import espliciti e registry runtime.",
       "files": [
         "assets/js/app/features/game/AppSounds.js"
+      ]
+    },
+    {
+      "name": "archetypesPublicPageDocsRenderer",
+      "owner": "core-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/core/system.pages.js"
       ]
     },
     {
@@ -1456,6 +1587,7 @@
         "assets/js/app/core/game.globals.js",
         "assets/js/app/features/game/LocationsPage.js",
         "assets/js/app/features/game/WeatherCore.js",
+        "assets/js/app/features/game/location/LocationPage.js",
         "assets/js/app/features/public/HomeFeedPage.js"
       ]
     },
@@ -1466,6 +1598,33 @@
       "todo": "Migrare da global window API a import espliciti e registry runtime.",
       "files": [
         "assets/js/components/Calendar.js"
+      ]
+    },
+    {
+      "name": "ChatArchiveCreateModal",
+      "owner": "game-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/game/location/ChatArchiveCreateModal.js"
+      ]
+    },
+    {
+      "name": "ChatArchives",
+      "owner": "core-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/core/game.page.js"
+      ]
+    },
+    {
+      "name": "ChatArchiveSharedPage",
+      "owner": "public-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/public/ChatArchiveSharedPage.js"
       ]
     },
     {
@@ -1599,10 +1758,11 @@
     },
     {
       "name": "DiceEngine",
-      "owner": "ui-core",
+      "owner": "core-runtime",
       "remove_by": "phase-4",
       "todo": "Migrare da global window API a import espliciti e registry runtime.",
       "files": [
+        "assets/js/app/core/Context.js",
         "assets/js/components/DiceEngine.js",
         "assets/js/components/Dices.js"
       ]
@@ -1669,6 +1829,20 @@
         "assets/js/app/features/game/forum/ThreadsPage.js",
         "assets/js/components/EventBus.js",
         "assets/js/components/PermissionGate.js"
+      ]
+    },
+    {
+      "name": "fetch",
+      "owner": "admin-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/admin/Media.js",
+        "assets/js/app/features/admin/MessageReports.js",
+        "assets/js/app/features/admin/NarrativeTags.js",
+        "assets/js/app/features/admin/Settings.js",
+        "assets/js/app/features/game/NotificationsPage.js",
+        "assets/js/app/features/game/location/LocationChatPage.js"
       ]
     },
     {
@@ -1773,6 +1947,15 @@
       "todo": "Migrare da global window API a import espliciti e registry runtime.",
       "files": [
         "assets/js/app/features/game/BankPage.js"
+      ]
+    },
+    {
+      "name": "GameChatArchivesPage",
+      "owner": "game-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/features/game/ChatArchivesPage.js"
       ]
     },
     {
@@ -2056,6 +2239,7 @@
         "assets/js/app/core/game.modals.js",
         "assets/js/app/features/game/MessagesModal.js",
         "assets/js/app/features/game/MessagesPage.js",
+        "assets/js/app/features/game/NotificationsPage.js",
         "assets/js/app/modules/game/MessagesModule.js"
       ]
     },
@@ -2691,6 +2875,15 @@
       ]
     },
     {
+      "name": "PwaRegistration",
+      "owner": "core-runtime",
+      "remove_by": "phase-4",
+      "todo": "Migrare da global window API a import espliciti e registry runtime.",
+      "files": [
+        "assets/js/app/core/PwaRegistration.js"
+      ]
+    },
+    {
       "name": "RadioGroup",
       "owner": "core-runtime",
       "remove_by": "phase-4",
@@ -2886,6 +3079,7 @@
       "files": [
         "assets/js/app/core/game.modals.js",
         "assets/js/app/features/admin/Users.js",
+        "assets/js/app/features/game/ChatArchivesPage.js",
         "assets/js/components/SwitchGroup.js"
       ]
     },

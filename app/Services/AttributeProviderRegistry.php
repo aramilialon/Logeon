@@ -47,6 +47,28 @@ class AttributeProviderRegistry
         return self::provider()->isEnabled();
     }
 
+    public static function getValue(int $characterId, string $attributeSlug): ?float
+    {
+        return self::provider()->getValue($characterId, $attributeSlug);
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public static function getBreakdown(int $characterId, string $attributeSlug): array
+    {
+        return self::provider()->getBreakdown($characterId, $attributeSlug);
+    }
+
+    public static function meetsRequirement(
+        int $characterId,
+        string $attributeSlug,
+        string $operator,
+        int|float $requiredValue,
+    ): bool {
+        return self::provider()->meetsRequirement($characterId, $attributeSlug, $operator, $requiredValue);
+    }
+
     public static function getAttributeModifier(int $characterId, string $attributeSlug): float
     {
         return self::provider()->getAttributeModifier($characterId, $attributeSlug);

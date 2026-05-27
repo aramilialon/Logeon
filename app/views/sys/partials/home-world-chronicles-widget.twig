@@ -1,0 +1,150 @@
+{% set homeModuleFeed = home_module_feed|default([]) %}
+{% set homeSystemEvents = home_system_events_feed|default([]) %}
+
+<section id="home-world-chronicles-widget" class="py-5">
+    <div class="container">
+        <div class="text-center mb-3">
+            <h2 class="display-6 mb-2">Cronache del Mondo</h2>
+            <p class="text-muted mb-0">Feed unificato con aggiornamenti modulo ed eventi di sistema.</p>
+        </div>
+        <article class="card">
+            <div class="card-body p-0">
+                {% if homeModuleFeed is empty and homeSystemEvents is empty %}
+                    <div class="p-3 text-muted small">Nessuna cronaca disponibile al momento.</div>
+                {% else %}
+                    <div class="list-group list-group-flush">
+                        {% for item in homeModuleFeed %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div>
+                                        <div class="small text-muted mb-1">Modulo</div>
+                                        <h4 class="h6 mb-1">{{ item.title|default('Aggiornamento') }}</h4>
+                                        {% if item.excerpt is not empty %}
+                                            <p class="small text-muted mb-0">{{ item.excerpt|striptags|slice(0, 150) }}{% if item.excerpt|striptags|length > 150 %}...{% endif %}</p>
+                                        {% endif %}
+                                        <button
+                                            class="btn btn-sm btn-outline-primary mt-2"
+                                            type="button"
+                                            data-action="home-feed-open-detail"
+                                            data-feed-type="news"
+                                            data-feed-id="{{ item.id|default(loop.index) }}"
+                                            data-feed-title="{{ item.title|default('Aggiornamento')|e('html_attr') }}"
+                                        >
+                                            Approfondisci
+                                        </button>
+                                    </div>
+                                    <span class="badge text-bg-secondary">
+                                        {% if item.published_at is not empty %}
+                                            {{ item.published_at|date('d/m/Y') }}
+                                        {% elseif item.date_publish is not empty %}
+                                            {{ item.date_publish|date('d/m/Y') }}
+                                        {% elseif item.date_created is not empty %}
+                                            {{ item.date_created|date('d/m/Y') }}
+                                        {% else %}
+                                            N/D
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        {% endfor %}
+
+                        {% for event in homeSystemEvents %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div>
+                                        <div class="small text-muted mb-1">Evento di sistema</div>
+                                        <h4 class="h6 mb-1">{{ event.title|default('Evento di sistema') }}</h4>
+                                        {% if event.description is not empty %}
+                                            <p class="small text-muted mb-0">{{ event.description|slice(0, 140) }}{% if event.description|length > 140 %}...{% endif %}</p>
+                                        {% endif %}
+                                        <button
+                                            class="btn btn-sm btn-outline-primary mt-2"
+                                            type="button"
+                                            data-action="home-feed-open-detail"
+                                            data-feed-type="system-event"
+                                            data-feed-id="{{ event.id|default(loop.index) }}"
+                                            data-feed-title="{{ event.title|default('Evento di sistema')|e('html_attr') }}"
+                                        >
+                                            Approfondisci
+                                        </button>
+                                    </div>
+                                    <span class="badge {{ event.status == 'active' ? 'text-bg-success' : 'text-bg-warning' }}">
+                                        {{ event.status == 'active' ? 'Attivo' : 'Programmato' }}
+                                    </span>
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    {% if event.starts_at is not empty %}
+                                        Inizio: {{ event.starts_at|date('d/m/Y H:i') }}
+                                    {% elseif event.date_created is not empty %}
+                                        Data creazione: {{ event.date_created|date('d/m/Y H:i') }}
+                                    {% else %}
+                                        Data non disponibile
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </article>
+    </div>
+
+    <div class="d-none">
+        {% for item in homeModuleFeed %}
+            {% set itemTemplateId = 'home-feed-template-news-' ~ (item.id|default(loop.index)) %}
+            <template id="{{ itemTemplateId }}">
+                <div class="small text-muted mb-2">
+                    {{ item.detail_label|default('Aggiornamento') }}
+                    {% if item.published_at is not empty %}
+                        &bull; {{ item.published_at|date('d/m/Y H:i') }}
+                    {% elseif item.date_publish is not empty %}
+                        &bull; {{ item.date_publish|date('d/m/Y H:i') }}
+                    {% elseif item.date_created is not empty %}
+                        &bull; {{ item.date_created|date('d/m/Y H:i') }}
+                    {% endif %}
+                </div>
+                {% if item.image is not empty %}
+                    <img src="{{ item.image }}" alt="{{ item.title|default('Aggiornamento') }}" class="img-fluid rounded border mb-3">
+                {% endif %}
+                {% if item.body is not empty %}
+                    <div class="small">{{ item.body|raw }}</div>
+                {% elseif item.excerpt is not empty %}
+                    <div class="small">{{ item.excerpt|raw }}</div>
+                {% else %}
+                    <p class="small text-muted mb-0">Nessun dettaglio disponibile.</p>
+                {% endif %}
+            </template>
+        {% endfor %}
+
+        {% for event in homeSystemEvents %}
+            {% set eventTemplateId = 'home-feed-template-system-event-' ~ (event.id|default(loop.index)) %}
+            <template id="{{ eventTemplateId }}">
+                <div class="small text-muted mb-2">
+                    Stato: <b>{{ event.status == 'active' ? 'Attivo' : 'Programmato' }}</b>
+                    &bull;
+                    {% if event.starts_at is not empty %}
+                        Inizio: {{ event.starts_at|date('d/m/Y H:i') }}
+                    {% elseif event.date_created is not empty %}
+                        Creazione: {{ event.date_created|date('d/m/Y H:i') }}
+                    {% else %}
+                        Data non disponibile
+                    {% endif %}
+                </div>
+                {% if event.description is not empty %}
+                    <p class="small mb-2">{{ event.description|striptags }}</p>
+                {% else %}
+                    <p class="small text-muted mb-2">Nessuna descrizione disponibile.</p>
+                {% endif %}
+                <div class="small text-muted">
+                    {% if event.ends_at is not empty %}
+                        Fine evento: {{ event.ends_at|date('d/m/Y H:i') }}
+                    {% else %}
+                        Nessuna data di fine impostata.
+                    {% endif %}
+                </div>
+            </template>
+        {% endfor %}
+    </div>
+</section>
+
+{% include 'sys/modals/home-feed-detail.twig' %}

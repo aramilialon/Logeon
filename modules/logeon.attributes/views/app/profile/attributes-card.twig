@@ -1,0 +1,37 @@
+<div class="card mb-2" data-role="profile-attributes-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Attributi personaggio</h5>
+        {% if can_edit_profile_metrics %}
+        <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            data-action="profile-open-attributes-edit"
+            data-requires-staff
+            title="Gestione attributi personaggio"
+            aria-label="Gestione attributi personaggio">
+            <i class="bi bi-sliders"></i>
+        </button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <div class="alert alert-secondary py-2 mb-2 d-none" data-role="profile-attributes-disabled">
+            Sistema attributi non attivo.
+        </div>
+        <div class="mb-2" data-role="profile-attributes-group-primary-wrap">
+            <ul class="list-group list-group-flush" data-role="profile-attributes-group-primary"></ul>
+            <div class="small text-muted d-none" data-role="profile-attributes-group-primary-empty">Nessun attributo.</div>
+        </div>
+
+        <div class="mb-2" data-role="profile-attributes-group-secondary-wrap">
+            <h6 class="mb-1">Secondari</h6>
+            <ul class="list-group list-group-flush" data-role="profile-attributes-group-secondary"></ul>
+            <div class="small text-muted d-none" data-role="profile-attributes-group-secondary-empty">Nessun attributo.</div>
+        </div>
+
+        <div class="mb-0" data-role="profile-attributes-group-narrative-wrap">
+            <h6 class="mb-1">Narrativi</h6>
+            <ul class="list-group list-group-flush" data-role="profile-attributes-group-narrative"></ul>
+            <div class="small text-muted d-none" data-role="profile-attributes-group-narrative-empty">Nessun attributo.</div>
+        </div>
+    </div>
+</div>

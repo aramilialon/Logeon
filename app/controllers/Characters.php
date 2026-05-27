@@ -8,6 +8,8 @@ use App\Services\CharacterBondService;
 use App\Services\CharacterDirectoryService;
 use App\Services\CharacterProfileService;
 use App\Services\CharacterStateService;
+use App\Services\InventoryService;
+use App\Services\LocationMessageService;
 use App\Services\UserService;
 use Core\AuditLogService;
 use Core\Http\ApiResponse;
@@ -33,6 +35,8 @@ class Characters extends Character
     private $characterStateService = null;
     /** @var CharacterBondService|null */
     private $characterBondService = null;
+    /** @var InventoryService|null */
+    private $inventoryService = null;
 
     public function setLogger(LoggerInterface $logger = null)
     {
@@ -71,6 +75,12 @@ class Characters extends Character
     public function setCharacterBondService(CharacterBondService $service = null)
     {
         $this->characterBondService = $service;
+        return $this;
+    }
+
+    public function setInventoryService(InventoryService $service = null)
+    {
+        $this->inventoryService = $service;
         return $this;
     }
 
@@ -114,6 +124,16 @@ class Characters extends Character
         return $this->characterBondService;
     }
 
+    private function inventoryService(): InventoryService
+    {
+        if ($this->inventoryService instanceof InventoryService) {
+            return $this->inventoryService;
+        }
+
+        $this->inventoryService = new InventoryService();
+        return $this->inventoryService;
+    }
+
     protected function trace($message, $context = false): void
     {
         $this->logger()->trace($message, $context);
@@ -152,10 +172,156 @@ class Characters extends Character
             || ((int) $this->getSessionValue('user_is_master') === 1);
     }
 
+    private function isNarrativeStaffUser(): bool
+    {
+        return ((int) $this->getSessionValue('user_is_administrator') === 1)
+            || ((int) $this->getSessionValue('user_is_master') === 1)
+            || ((int) $this->getSessionValue('user_is_superuser') === 1);
+    }
+
+    private function isAdminOrSuperuser(): bool
+    {
+        return ((int) $this->getSessionValue('user_is_administrator') === 1)
+            || ((int) $this->getSessionValue('user_is_superuser') === 1);
+    }
+
     private function isAdminOrModerator(): bool
     {
         return ((int) $this->getSessionValue('user_is_administrator') === 1)
             || ((int) $this->getSessionValue('user_is_moderator') === 1);
+    }
+
+    private function resolveCharacterUserId(int $characterId): int
+    {
+        if ($characterId <= 0) {
+            return 0;
+        }
+
+        $row = static::db()->fetchOnePrepared(
+            'SELECT user_id
+             FROM characters
+             WHERE id = ?
+             LIMIT 1',
+            [$characterId],
+        );
+
+        return (int) ($row->user_id ?? 0);
+    }
+
+    private function assertCharacterExists(int $characterId): void
+    {
+        if ($characterId <= 0) {
+            $this->failValidation('Personaggio non valido', 'character_invalid');
+        }
+
+        $row = static::db()->fetchOnePrepared(
+            'SELECT id
+             FROM characters
+             WHERE id = ?
+             LIMIT 1',
+            [$characterId],
+        );
+
+        if (empty($row)) {
+            $this->failValidation('Personaggio non valido', 'character_invalid');
+        }
+    }
+
+    private function resolveCharacterDisplayNameById(int $characterId): string
+    {
+        if ($characterId <= 0) {
+            return 'Personaggio';
+        }
+
+        $row = static::db()->fetchOnePrepared(
+            'SELECT name, surname
+             FROM characters
+             WHERE id = ?
+             LIMIT 1',
+            [$characterId],
+        );
+        if (empty($row)) {
+            return 'Personaggio #' . $characterId;
+        }
+
+        $name = trim((string) ($row->name ?? ''));
+        $surname = trim((string) ($row->surname ?? ''));
+        $full = trim($name . ' ' . $surname);
+        if ($full !== '') {
+            return $full;
+        }
+
+        return 'Personaggio #' . $characterId;
+    }
+
+    private function resolveItemNameById(int $itemId): string
+    {
+        if ($itemId <= 0) {
+            return 'Oggetto';
+        }
+
+        $row = static::db()->fetchOnePrepared(
+            'SELECT name
+             FROM items
+             WHERE id = ?
+             LIMIT 1',
+            [$itemId],
+        );
+        $name = trim((string) ($row->name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        return 'Oggetto #' . $itemId;
+    }
+
+    private function pushStaffGrantItemSystemNotice(
+        int $locationId,
+        int $actorCharacterId,
+        int $targetCharacterId,
+        int $itemId,
+        int $quantity
+    ): void {
+        if ($locationId <= 0 || $actorCharacterId <= 0 || $targetCharacterId <= 0 || $itemId <= 0 || $quantity <= 0) {
+            return;
+        }
+
+        try {
+            $access = (new Locations())->canAccess($locationId, $actorCharacterId);
+            if (empty($access['allowed'])) {
+                return;
+            }
+        } catch (\Throwable $error) {
+            return;
+        }
+
+        $actorLabel = $this->resolveCharacterDisplayNameById($actorCharacterId);
+        $itemName = $this->resolveItemNameById($itemId);
+        $safeActor = htmlspecialchars($actorLabel, ENT_QUOTES, 'UTF-8');
+        $safeItem = htmlspecialchars($itemName, ENT_QUOTES, 'UTF-8');
+        $safeQty = htmlspecialchars((string) $quantity, ENT_QUOTES, 'UTF-8');
+
+        $body = '<div class="text-start">'
+            . '<p class="mb-1"><b>Assegnazione oggetto</b></p>'
+            . '<p class="mb-0">' . $safeActor . ' ti ha assegnato: <b>' . $safeItem . '</b> x' . $safeQty . '.</p>'
+            . '</div>';
+
+        $meta = json_encode([
+            'command' => 'staff_item_grant_notice',
+            'staff_only' => 0,
+            'target_character_id' => $targetCharacterId,
+            'item_id' => $itemId,
+            'quantity' => $quantity,
+        ], JSON_UNESCAPED_UNICODE);
+
+        (new LocationMessageService())->insertMessage(
+            $locationId,
+            $actorCharacterId,
+            3,
+            $body,
+            $meta,
+            $targetCharacterId
+        );
     }
     private function resolveLogTargetCharacterId(object $data, int $fallbackCharacterId): int
     {
@@ -301,7 +467,7 @@ class Characters extends Character
             return;
         }
 
-        if ($this->isStaffUser()) {
+        if ($this->isNarrativeStaffUser()) {
             return;
         }
 
@@ -445,6 +611,22 @@ class Characters extends Character
                 $dataset->loanface_request = $this->characterStateService()->getLatestLoanfaceRequest((int) $dataset->id);
                 $dataset->loanface_request_cooldown_days = $this->getLoanfaceChangeCooldownDays();
                 $dataset->identity_request = $this->characterStateService()->getLatestIdentityRequest((int) $dataset->id);
+                $notificationOptions = $this->characterProfileService()->getNotificationPreferenceOptions();
+                $dataset->notification_preference_options = array_map(static function ($option) {
+                    return [
+                        'key' => (string) ($option['key'] ?? ''),
+                        'label' => (string) ($option['label'] ?? ''),
+                    ];
+                }, $notificationOptions);
+                $dataset->notification_preferences = [];
+                foreach ($notificationOptions as $option) {
+                    $optionKey = strtolower(trim((string) ($option['key'] ?? '')));
+                    $column = trim((string) ($option['column'] ?? ''));
+                    if ($optionKey === '' || $column === '') {
+                        continue;
+                    }
+                    $dataset->notification_preferences[$optionKey] = (isset($dataset->{$column}) && (int) $dataset->{$column} === 1) ? 1 : 0;
+                }
                 $userId = \Core\AuthGuard::api()->requireUser();
                 $revokedAt = $this->characterStateService()->getUserSessionsRevokedAt((int) $userId);
                 if ($revokedAt !== null) {
@@ -453,6 +635,16 @@ class Characters extends Character
             }
 
             AttributeProviderRegistry::decorateCharacterDataset($dataset, (int) ($dataset->id ?? 0));
+
+            if (class_exists('\\Core\\Hooks')) {
+                $dataset = \Core\Hooks::filter('character.profile.dataset', $dataset, [
+                    'scope' => 'profile',
+                    'viewer_character_id' => (int) $characterId,
+                    'target_character_id' => (int) ($dataset->id ?? 0),
+                    'viewer_is_owner' => ((int) $characterId === (int) ($dataset->id ?? 0)),
+                    'viewer_is_staff' => $this->isAdminOrModerator(),
+                ]);
+            }
         }
 
         $response['dataset'] = $dataset;
@@ -773,7 +965,7 @@ class Characters extends Character
         $guard->requireUserCharacter();
         $viewerCharacterId = (int) $guard->requireCharacter();
 
-        if (!$this->isAdminOrModerator()) {
+        if (!$this->isNarrativeStaffUser()) {
             $this->failUnauthorized('Operazione non autorizzata', 'profile_session_logs_forbidden');
         }
 
@@ -800,7 +992,7 @@ class Characters extends Character
         $actorUserId = (int) $guard->requireUser();
         $viewerCharacterId = (int) $guard->requireCharacter();
 
-        if (!$this->isStaffUser()) {
+        if (!$this->isNarrativeStaffUser()) {
             $this->failUnauthorized('Operazione non autorizzata', 'profile_master_notes_forbidden');
         }
 
@@ -861,7 +1053,7 @@ class Characters extends Character
         $actorUserId = (int) $guard->requireUser();
         $viewerCharacterId = (int) $guard->requireCharacter();
 
-        if (!$this->isStaffUser()) {
+        if (!$this->isNarrativeStaffUser()) {
             $this->failUnauthorized('Operazione non autorizzata', 'profile_health_forbidden');
         }
 
@@ -928,7 +1120,7 @@ class Characters extends Character
         $actorUserId = (int) $guard->requireUser();
         $viewerCharacterId = (int) $guard->requireCharacter();
 
-        if (!$this->isStaffUser()) {
+        if (!$this->isNarrativeStaffUser()) {
             $this->failUnauthorized('Operazione non autorizzata', 'profile_experience_assign_forbidden');
         }
 
@@ -992,6 +1184,309 @@ class Characters extends Character
             'dataset' => $result,
         ]);
     }
+
+    public function staffSearchItems()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+
+        $guard = \Core\AuthGuard::api();
+        $guard->requireUserCharacter();
+
+        if (!$this->isNarrativeStaffUser()) {
+            $this->failUnauthorized('Operazione non autorizzata', 'profile_staff_items_forbidden');
+        }
+
+        $data = $this->requestDataObject((object) [], true);
+        if ($data === null) {
+            $data = (object) [];
+        }
+
+        $query = trim(InputValidator::string($data, 'query', ''));
+        $limit = InputValidator::integer($data, 'limit', 10);
+        if ($limit < 1) {
+            $limit = 10;
+        } elseif ($limit > 30) {
+            $limit = 30;
+        }
+
+        if ($query === '' || strlen($query) < 2) {
+            $this->emitJson([
+                'success' => true,
+                'dataset' => [],
+            ]);
+            return;
+        }
+
+        $like = '%' . $query . '%';
+        $rows = static::db()->fetchAllPrepared(
+            'SELECT id, name, type, item_kind, is_stackable, stackable, is_equippable
+             FROM items
+             WHERE name LIKE ?
+                OR type LIKE ?
+             ORDER BY name ASC
+             LIMIT ?',
+            [$like, $like, $limit],
+        );
+
+        $this->emitJson([
+            'success' => true,
+            'dataset' => !empty($rows) ? $rows : [],
+        ]);
+    }
+
+    public function staffGrantItem()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+
+        $guard = \Core\AuthGuard::api();
+        $guard->requireUserCharacter();
+        $actorUserId = (int) $guard->requireUser();
+        $actorCharacterId = (int) $guard->requireCharacter();
+
+        if (!$this->isNarrativeStaffUser()) {
+            $this->failUnauthorized('Operazione non autorizzata', 'profile_staff_item_grant_forbidden');
+        }
+
+        $data = $this->requestDataObject((object) [], true);
+        if ($data === null) {
+            $this->failValidation('Dati mancanti', 'payload_missing');
+        }
+
+        $targetCharacterId = InputValidator::integer($data, 'character_id', 0);
+        if ($targetCharacterId <= 0) {
+            $targetCharacterId = InputValidator::integer($data, 'id', 0);
+        }
+        if ($targetCharacterId <= 0) {
+            $this->failValidation('Personaggio non valido', 'character_invalid');
+        }
+
+        $itemId = InputValidator::integer($data, 'item_id', 0);
+        if ($itemId <= 0) {
+            $this->failValidation('Oggetto non valido', 'item_invalid');
+        }
+
+        $quantity = InputValidator::integer($data, 'quantity', 1);
+        if ($quantity < 1) {
+            $quantity = 1;
+        } elseif ($quantity > 9999) {
+            $quantity = 9999;
+        }
+        $locationId = InputValidator::integer($data, 'location_id', 0);
+
+        $this->assertCharacterExists((int) $targetCharacterId);
+        $result = $this->inventoryService()->grantItemReward((int) $targetCharacterId, (int) $itemId, (int) $quantity);
+        $this->pushStaffGrantItemSystemNotice(
+            (int) $locationId,
+            (int) $actorCharacterId,
+            (int) $targetCharacterId,
+            (int) $itemId,
+            (int) $quantity,
+        );
+
+        AuditLogService::write(
+            'profile',
+            'staff_grant_item',
+            [
+                'target_character_id' => (int) $targetCharacterId,
+                'item_id' => (int) $itemId,
+                'quantity' => (int) $quantity,
+                'location_id' => (int) $locationId,
+                'result' => $result,
+                'actor_user_id' => (int) $actorUserId,
+                'actor_character_id' => (int) $actorCharacterId,
+            ],
+            'game/location',
+            \Core\Router::currentUri(),
+            (int) $actorUserId,
+        );
+
+        $this->emitJson([
+            'success' => true,
+            'dataset' => $result,
+        ]);
+    }
+
+    public function staffRemoveItem()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+
+        $guard = \Core\AuthGuard::api();
+        $guard->requireUserCharacter();
+        $actorUserId = (int) $guard->requireUser();
+        $actorCharacterId = (int) $guard->requireCharacter();
+
+        if (!$this->isNarrativeStaffUser()) {
+            $this->failUnauthorized('Operazione non autorizzata', 'profile_staff_item_remove_forbidden');
+        }
+
+        $data = $this->requestDataObject((object) [], true);
+        if ($data === null) {
+            $this->failValidation('Dati mancanti', 'payload_missing');
+        }
+
+        $targetCharacterId = InputValidator::integer($data, 'character_id', 0);
+        if ($targetCharacterId <= 0) {
+            $targetCharacterId = InputValidator::integer($data, 'id', 0);
+        }
+        if ($targetCharacterId <= 0) {
+            $this->failValidation('Personaggio non valido', 'character_invalid');
+        }
+
+        $itemId = InputValidator::integer($data, 'item_id', 0);
+        if ($itemId <= 0) {
+            $this->failValidation('Oggetto non valido', 'item_invalid');
+        }
+
+        $quantity = InputValidator::integer($data, 'quantity', 1);
+        if ($quantity < 1) {
+            $quantity = 1;
+        } elseif ($quantity > 9999) {
+            $quantity = 9999;
+        }
+
+        $this->assertCharacterExists((int) $targetCharacterId);
+        $result = $this->inventoryService()->revokeItemReward((int) $targetCharacterId, (int) $itemId, (int) $quantity);
+
+        AuditLogService::write(
+            'profile',
+            'staff_remove_item',
+            [
+                'target_character_id' => (int) $targetCharacterId,
+                'item_id' => (int) $itemId,
+                'quantity' => (int) $quantity,
+                'result' => $result,
+                'actor_user_id' => (int) $actorUserId,
+                'actor_character_id' => (int) $actorCharacterId,
+            ],
+            'game/location',
+            \Core\Router::currentUri(),
+            (int) $actorUserId,
+        );
+
+        $this->emitJson([
+            'success' => true,
+            'dataset' => $result,
+        ]);
+    }
+
+    public function staffSetRestriction()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+
+        $guard = \Core\AuthGuard::api();
+        $guard->requireUserCharacter();
+        $actorUserId = (int) $guard->requireUser();
+        $actorCharacterId = (int) $guard->requireCharacter();
+
+        if (!$this->isAdminOrSuperuser()) {
+            $this->failUnauthorized('Operazione non autorizzata', 'profile_staff_restriction_forbidden');
+        }
+
+        $userService = new UserService();
+        if (!$userService->isRestrictionFeatureAvailable()) {
+            $this->failValidation('Funzione restrizione non disponibile. Manca la colonna users.is_restricted', 'user_restriction_feature_unavailable');
+        }
+
+        $data = $this->requestDataObject((object) [], true);
+        if ($data === null) {
+            $this->failValidation('Dati mancanti', 'payload_missing');
+        }
+
+        $targetCharacterId = InputValidator::integer($data, 'character_id', 0);
+        if ($targetCharacterId <= 0) {
+            $targetCharacterId = InputValidator::integer($data, 'id', 0);
+        }
+        if ($targetCharacterId <= 0) {
+            $this->failValidation('Personaggio non valido', 'character_invalid');
+        }
+
+        $targetUserId = $this->resolveCharacterUserId((int) $targetCharacterId);
+        if ($targetUserId <= 0) {
+            $this->failValidation('Utente non valido', 'user_invalid');
+        }
+
+        $mode = strtolower(trim(InputValidator::string($data, 'mode', '')));
+        if ($mode === 'get') {
+            $scopes = $userService->getRestrictionScopes((int) $targetUserId);
+            $this->emitJson([
+                'success' => true,
+                'dataset' => [
+                    'character_id' => (int) $targetCharacterId,
+                    'user_id' => (int) $targetUserId,
+                    'is_restricted' => (int) ($scopes['is_restricted'] ?? 0),
+                    'restrict_chat' => (int) ($scopes['restrict_chat'] ?? 0),
+                    'restrict_whisper' => (int) ($scopes['restrict_whisper'] ?? 0),
+                    'restrict_commands' => (int) ($scopes['restrict_commands'] ?? 0),
+                ],
+            ]);
+            return;
+        }
+
+        if ($targetUserId === $actorUserId) {
+            $this->failValidation('Non puoi restringere il tuo account attuale', 'user_self_restrict_forbidden');
+        }
+
+        $isRestricted = InputValidator::boolean($data, 'is_restricted', false) ? 1 : 0;
+        $hasGlobalToggle = property_exists($data, 'is_restricted');
+        if ($hasGlobalToggle) {
+            $userService->setUserRestriction((int) $targetUserId, (int) $isRestricted);
+        }
+
+        $hasScopedToggle = property_exists($data, 'restrict_chat')
+            || property_exists($data, 'restrict_whisper')
+            || property_exists($data, 'restrict_commands');
+        if ($hasScopedToggle) {
+            $restrictChat = property_exists($data, 'restrict_chat')
+                ? (InputValidator::boolean($data, 'restrict_chat', false) ? 1 : 0)
+                : null;
+            $restrictWhisper = property_exists($data, 'restrict_whisper')
+                ? (InputValidator::boolean($data, 'restrict_whisper', false) ? 1 : 0)
+                : null;
+            $restrictCommands = property_exists($data, 'restrict_commands')
+                ? (InputValidator::boolean($data, 'restrict_commands', false) ? 1 : 0)
+                : null;
+            $userService->setUserRestrictionScopes(
+                (int) $targetUserId,
+                $restrictChat,
+                $restrictWhisper,
+                $restrictCommands,
+            );
+        }
+
+        $scopes = $userService->getRestrictionScopes((int) $targetUserId);
+        $isRestrictedOut = (int) ($scopes['is_restricted'] ?? 0);
+
+        AuditLogService::write(
+            'profile',
+            'staff_set_restriction',
+            [
+                'target_character_id' => (int) $targetCharacterId,
+                'target_user_id' => (int) $targetUserId,
+                'is_restricted' => $isRestrictedOut,
+                'restrict_chat' => (int) ($scopes['restrict_chat'] ?? 0),
+                'restrict_whisper' => (int) ($scopes['restrict_whisper'] ?? 0),
+                'restrict_commands' => (int) ($scopes['restrict_commands'] ?? 0),
+                'actor_user_id' => (int) $actorUserId,
+                'actor_character_id' => (int) $actorCharacterId,
+            ],
+            'game/location',
+            \Core\Router::currentUri(),
+            (int) $actorUserId,
+        );
+
+        $this->emitJson([
+            'success' => true,
+            'dataset' => [
+                'character_id' => (int) $targetCharacterId,
+                'user_id' => (int) $targetUserId,
+                'is_restricted' => $isRestrictedOut,
+                'restrict_chat' => (int) ($scopes['restrict_chat'] ?? 0),
+                'restrict_whisper' => (int) ($scopes['restrict_whisper'] ?? 0),
+                'restrict_commands' => (int) ($scopes['restrict_commands'] ?? 0),
+            ],
+        ]);
+    }
+
     public function setAvailability()
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
@@ -1364,6 +1859,15 @@ class Characters extends Character
             throw \Core\Http\AppError::notFound('Personaggio non trovato', [], 'character_not_found');
         }
 
+        if (class_exists('\\Core\\Hooks')) {
+            $row = \Core\Hooks::filter('character.admin.dataset', $row, [
+                'scope' => 'admin',
+                'target_character_id' => (int) ($row->id ?? $characterId),
+                'viewer_is_staff' => true,
+                'viewer_is_superuser' => $isSuperuser,
+            ]);
+        }
+
         $this->emitJson([
             'success' => true,
             'dataset' => $row,
@@ -1645,7 +2149,12 @@ class Characters extends Character
         }
 
         if (property_exists($data, 'rank') && trim((string) $data->rank) !== '') {
-            $this->characterProfileService()->adminUpdateRank($characterId, InputValidator::integer($data, 'rank', 0));
+            $this->characterProfileService()->adminUpdateRank(
+                $characterId,
+                InputValidator::integer($data, 'rank', 0),
+                (int) $actorUserId,
+                'admin_edit',
+            );
         }
 
         $this->emitJson(['success' => true]);
@@ -1876,6 +2385,7 @@ class Characters extends Character
             $post = (object) [];
         }
         $query = InputValidator::string($post, 'query', '');
+        $includeSelf = InputValidator::boolean($post, 'include_self', false);
 
         if ($query === '' || strlen($query) < 2) {
             $response = [
@@ -1899,7 +2409,15 @@ class Characters extends Character
             }
         }
 
-        $dataset = $this->characterDirectoryService()->search((int) $me, (string) $query, 10, $searchLocationId, $this->isStaffUser());
+        $viewerIsStaff = $this->isStaffUser();
+        $dataset = $this->characterDirectoryService()->search(
+            (int) $me,
+            (string) $query,
+            10,
+            $searchLocationId,
+            $viewerIsStaff,
+            $viewerIsStaff && $includeSelf,
+        );
 
         $response = [
             'dataset' => $dataset,
@@ -1936,5 +2454,3 @@ class Characters extends Character
     {
     }
 }
-
-

@@ -162,6 +162,10 @@ function Paginator() {
 		setNav: function (obj) {
 			obj = (obj && typeof obj === 'object') ? obj : {};
 
+			if (typeof obj.tot === 'number') {
+				obj.tot = { count: obj.tot };
+			}
+
 			if (obj.results == null && obj.results_page != null) {
 				obj.results = obj.results_page;
 			}

@@ -3,13 +3,14 @@
 {% block content %}
 {% set is_owner = (character_id == session('character_id')) %}
 {% set is_staff = (session('user_is_administrator') == 1 or session('user_is_moderator') == 1 or session('user_is_master') == 1) %}
+{% set is_narrative_staff = (session('user_is_administrator') == 1 or session('user_is_master') == 1 or session('user_is_superuser') == 1) %}
 {% set can_view_events = true %}
-{% set can_manage_events = (is_owner or is_staff) %}
-{% set can_view_private_logs = (is_owner or is_staff) %}
-{% set can_view_session_logs = (session('user_is_administrator') == 1 or session('user_is_moderator') == 1) %}
+{% set can_manage_events = (is_owner or is_narrative_staff) %}
+{% set can_view_private_logs = (is_owner or is_narrative_staff) %}
+{% set can_view_session_logs = is_narrative_staff %}
 {% set can_view_registration_date = (is_owner or session('user_is_administrator') == 1 or session('user_is_moderator') == 1) %}
-{% set can_edit_master_notes = is_staff %}
-{% set can_edit_profile_metrics = is_staff %}
+{% set can_edit_master_notes = is_narrative_staff %}
+{% set can_edit_profile_metrics = is_narrative_staff %}
 
 <main id="profile-page" class="row ui-page pb-3" data-character-id="{{ character_id|e('html_attr') }}" data-is-owner="{{ is_owner ? 1 : 0 }}">
     <section class="col-12">
@@ -60,7 +61,7 @@
                     {% if is_owner %}
                     <div id="profile-lifecycle-section" class="px-2"></div>
                     {% endif %}
-                    {% if is_owner or is_staff %}
+                    {% if is_owner or is_narrative_staff %}
                     <div id="profile-narrative-states-section" class="px-2" data-character-id="{{ character_id|e('html_attr') }}"></div>
                     {% endif %}
                 </div>
@@ -86,13 +87,13 @@
                         <div class="row g-2 mb-3">
                             <div class="col-6">
                                 <div class="border rounded p-2 text-center bg-secondary">
-                                    <div class="small text-muted">Rank attuale</div>
+                                    <div class="small text-muted">Grado attuale</div>
                                     <div class="fw-bold" data-role="profile-rank-current">1</div>
                                 </div>
                             </div>
                             <div class="col-6">
                                 <div class="border rounded p-2 text-center bg-secondary">
-                                    <div class="small text-muted">Prossimo rank</div>
+                                    <div class="small text-muted">Prossimo grado</div>
                                     <div class="fw-bold" data-role="profile-rank-next">2</div>
                                 </div>
                             </div>
@@ -109,6 +110,9 @@
                             <div class="d-flex justify-content-end mb-1">
                                 <button type="button" class="btn btn-sm btn-outline-primary" data-action="profile-open-health-edit" data-requires-staff title="Modifica salute/vita" aria-label="Modifica salute/vita">
                                     <i class="bi bi-pencil-square"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary ms-1" data-action="profile-open-narrative-state-edit" data-requires-staff title="Gestisci stati narrativi" aria-label="Gestisci stati narrativi">
+                                    <i class="bi bi-lightning-charge"></i>
                                 </button>
                             </div>
                             {% endif %}
@@ -140,13 +144,13 @@
                                 <div class="progress-bar bg-primary" data-role="profile-experience-bar" style="width: 0%" aria-valuenow="0"></div>
                             </div>
                             <div class="small text-muted mt-1 d-flex justify-content-between">
-                                <span>Progresso livello: <span data-role="profile-experience-percent">0%</span></span>
-                                <span>Totale exp: <span data-role="profile-experience-total">0</span></span>
+                                <span>Progresso grado: <span data-role="profile-experience-percent">0%</span></span>
+                                <span>Totale EXP: <span data-role="profile-experience-total">0</span></span>
                             </div>
                             <div class="row g-2 mt-1">
                                 <div class="col-12">
                                     <div class="border rounded p-2 bg-secondary">
-                                        Mancano <b data-role="profile-next-rank-remaining">0</b> EXP al prossimo rank
+                                        Mancano <b data-role="profile-next-rank-remaining">0</b> EXP al prossimo grado
                                     </div>
                                 </div>
                             </div>
@@ -154,44 +158,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="card mb-2" data-role="profile-attributes-card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Attributi personaggio</h5>
-                        {% if can_edit_profile_metrics %}
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-outline-primary"
-                            data-action="profile-open-attributes-edit"
-                            data-requires-staff
-                            title="Gestione attributi personaggio"
-                            aria-label="Gestione attributi personaggio">
-                            <i class="bi bi-sliders"></i>
-                        </button>
-                        {% endif %}
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-secondary py-2 mb-2 d-none" data-role="profile-attributes-disabled">
-                            Sistema attributi non attivo.
-                        </div>
-                        <div class="mb-2" data-role="profile-attributes-group-primary-wrap">
-                            <h6 class="mb-1">Primari</h6>
-                            <ul class="list-group list-group-flush" data-role="profile-attributes-group-primary"></ul>
-                            <div class="small text-muted d-none" data-role="profile-attributes-group-primary-empty">Nessun attributo.</div>
-                        </div>
-
-                        <div class="mb-2" data-role="profile-attributes-group-secondary-wrap">
-                            <h6 class="mb-1">Secondari</h6>
-                            <ul class="list-group list-group-flush" data-role="profile-attributes-group-secondary"></ul>
-                            <div class="small text-muted d-none" data-role="profile-attributes-group-secondary-empty">Nessun attributo.</div>
-                        </div>
-
-                        <div class="mb-0" data-role="profile-attributes-group-narrative-wrap">
-                            <h6 class="mb-1">Narrativi</h6>
-                            <ul class="list-group list-group-flush" data-role="profile-attributes-group-narrative"></ul>
-                            <div class="small text-muted d-none" data-role="profile-attributes-group-narrative-empty">Nessun attributo.</div>
-                        </div>
-                    </div>
-                </div>
+                {{ slot('game.profile.metrics.cards', {'character_id': character_id}) }}
             </div>
             <div class="col-md-6 col-xl-3">
                 <div class="card mb-2">
@@ -383,6 +350,7 @@
 {% if can_edit_profile_metrics %}
 {% include 'app/modals/profile/edit-health.twig' %}
 {% include 'app/modals/profile/assign-experience.twig' %}
+{% include 'app/modals/profile/edit-narrative-states.twig' %}
 {{ slot('game.profile.modals', {'character_id': character_id}) }}
 {% endif %}
 {% if can_view_private_logs %}

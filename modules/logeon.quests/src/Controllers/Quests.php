@@ -109,6 +109,14 @@ class Quests
         return \Core\AppContext::authContext()->isStaff();
     }
 
+    private function requireStaffUser(): void
+    {
+        AuthGuard::api()->requireUser();
+        if (!$this->isStaff()) {
+            throw AppError::unauthorized('Operazione riservata allo staff', [], 'quest_staff_forbidden');
+        }
+    }
+
     private function requireStaffCharacter(): int
     {
         $characterId = $this->requireCharacter();
@@ -229,7 +237,7 @@ class Quests
 
     public function staffInstancesList($echo = true)
     {
-        $this->requireStaffCharacter();
+        $this->requireStaffUser();
         $data = $this->requestDataObject();
         $filters = [
             'status' => InputValidator::string($data, 'status', ''),

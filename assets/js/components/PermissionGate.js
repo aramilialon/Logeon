@@ -10,7 +10,8 @@ function PermissionGate(extension) {
             userId: 'userId',
             isAdmin: 'userIsAdministrator',
             isModerator: 'userIsModerator',
-            isMaster: 'userIsMaster'
+            isMaster: 'userIsMaster',
+            isSuperuser: 'userIsSuperuser'
         },
         roleAliases: {
             admin: 'admin',
@@ -19,6 +20,7 @@ function PermissionGate(extension) {
             mod: 'moderator',
             master: 'master',
             gm: 'master',
+            superuser: 'superuser',
             staff: 'staff'
         },
         _memoryStorage: {},
@@ -190,6 +192,11 @@ function PermissionGate(extension) {
             return this.toBool(this._getStorageValue(key, 0));
         },
 
+        isSuperuser: function () {
+            var key = this.storageKeys && this.storageKeys.isSuperuser ? this.storageKeys.isSuperuser : 'userIsSuperuser';
+            return this.toBool(this._getStorageValue(key, 0));
+        },
+
         isStaff: function () {
             return this.isAdmin() || this.isModerator() || this.isMaster();
         },
@@ -205,6 +212,7 @@ function PermissionGate(extension) {
                 isAdmin: this.isAdmin(),
                 isModerator: this.isModerator(),
                 isMaster: this.isMaster(),
+                isSuperuser: this.isSuperuser(),
                 isStaff: this.isStaff()
             };
         },
@@ -219,6 +227,9 @@ function PermissionGate(extension) {
             }
             if (this.isMaster()) {
                 roles.push('master');
+            }
+            if (this.isSuperuser()) {
+                roles.push('superuser');
             }
             if (roles.length > 1 || (roles.length === 1 && roles[0] !== 'staff')) {
                 if (this.isStaff()) {
@@ -244,6 +255,8 @@ function PermissionGate(extension) {
                     return this.isModerator();
                 case 'master':
                     return this.isMaster();
+                case 'superuser':
+                    return this.isSuperuser();
                 case 'staff':
                     return this.isStaff();
                 default:
@@ -282,7 +295,7 @@ function PermissionGate(extension) {
                 case 'forum.admin':
                     return this.canAdminForum();
                 case 'forum.moderate':
-                    return this.isStaff();
+                    return this.canAdminForum();
                 case 'staff':
                     return this.isStaff();
                 case 'admin':
@@ -299,7 +312,7 @@ function PermissionGate(extension) {
         },
 
         canAdminForum: function () {
-            return this.isAdmin();
+            return this.isAdmin() || this.isModerator() || this.isSuperuser();
         },
 
         setFromUser: function (user, options) {
@@ -327,7 +340,8 @@ function PermissionGate(extension) {
             var mappings = [
                 { field: 'is_administrator', key: this.storageKeys.isAdmin || 'userIsAdministrator' },
                 { field: 'is_moderator', key: this.storageKeys.isModerator || 'userIsModerator' },
-                { field: 'is_master', key: this.storageKeys.isMaster || 'userIsMaster' }
+                { field: 'is_master', key: this.storageKeys.isMaster || 'userIsMaster' },
+                { field: 'is_superuser', key: this.storageKeys.isSuperuser || 'userIsSuperuser' }
             ];
 
             for (var i = 0; i < mappings.length; i++) {
@@ -368,7 +382,8 @@ function PermissionGate(extension) {
             var roleKeys = [
                 this.storageKeys.isAdmin || 'userIsAdministrator',
                 this.storageKeys.isModerator || 'userIsModerator',
-                this.storageKeys.isMaster || 'userIsMaster'
+                this.storageKeys.isMaster || 'userIsMaster',
+                this.storageKeys.isSuperuser || 'userIsSuperuser'
             ];
 
             for (var i = 0; i < roleKeys.length; i++) {

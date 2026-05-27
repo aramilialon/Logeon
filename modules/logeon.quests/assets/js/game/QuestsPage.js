@@ -166,7 +166,7 @@ function GameQuestsPage(extension) {
         init: function () {
             this.offcanvas = document.getElementById('offcanvasQuests');
             if (!this.offcanvas) { return this; }
-            this.detailModal = document.getElementById('quest-detail-modal');
+            this.detailPanel = document.getElementById('quest-detail-panel');
             this.bind();
             this.bindStaff();
             this.startIndicatorPoll();
@@ -198,19 +198,9 @@ function GameQuestsPage(extension) {
                 if (action === 'quest-join') { self.handleParticipation('join', parseInt(trigger.getAttribute('data-id') || '0', 10) || 0); return; }
                 if (action === 'quest-leave') { self.handleParticipation('leave', parseInt(trigger.getAttribute('data-id') || '0', 10) || 0); return; }
                 if (action === 'quests-open-staff') { self.openStaffModal(); return; }
+                if (action === 'quest-back') { self.resetDetail(); return; }
             });
 
-            if (self.detailModal) {
-                self.detailModal.addEventListener('click', function (event) {
-                    var trigger = event.target && event.target.closest ? event.target.closest('[data-action]') : null;
-                    if (!trigger) { return; }
-                    var action = String(trigger.getAttribute('data-action') || '');
-                    if (!action) { return; }
-                    event.preventDefault();
-                    if (action === 'quest-join') { self.handleParticipation('join', parseInt(trigger.getAttribute('data-id') || '0', 10) || 0); return; }
-                    if (action === 'quest-leave') { self.handleParticipation('leave', parseInt(trigger.getAttribute('data-id') || '0', 10) || 0); return; }
-                });
-            }
 
             ['quests-status-filter', 'quests-scope-filter', 'quests-tag-filter'].forEach(function (id) {
                 var node = document.getElementById(id);
@@ -420,39 +410,19 @@ function GameQuestsPage(extension) {
             if (!list) { return; }
 
             list.innerHTML = rows.map(function (row) {
-                var id = parseInt(row.id || '0', 10) || 0;
+                var id     = parseInt(row.id || '0', 10) || 0;
                 var status = String(row.instance_status || 'available');
-                var canJoin = parseInt(row.can_join || '0', 10) === 1;
-                var canLeave = parseInt(row.can_leave || '0', 10) === 1;
                 var intensity = intensityMeta(row);
-                var actionButton = '';
+                var isActive  = id === self.selectedQuestId;
 
-                if (canJoin) {
-                    actionButton = '<button type="button" class="btn btn-sm btn-primary" data-action="quest-join" data-id="' + id + '">Aderisci</button>';
-                } else if (canLeave) {
-                    actionButton = '<button type="button" class="btn btn-sm btn-outline-danger" data-action="quest-leave" data-id="' + id + '">Ritira</button>';
-                } else {
-                    actionButton = '<span class="small text-muted">Nessuna azione</span>';
-                }
-
-                return '<div class="list-group-item px-3 py-3">'
-                    + '<div class="d-flex justify-content-between align-items-start gap-2 mb-1">'
-                    + '  <div class="small fw-bold">' + escapeHtml(row.title || ('Quest #' + id)) + '</div>'
-                    + '  <div class="d-flex flex-wrap align-items-center justify-content-end gap-1">'
-                    + (intensity ? ('<span class="badge ' + intensity.badgeClass + '" data-bs-toggle="tooltip" data-bs-title="Pressione narrativa e peso delle conseguenze" title="Pressione narrativa e peso delle conseguenze">' + escapeHtml(intensity.label) + '</span>') : '')
-                    + '<span class="badge ' + statusBadge(status) + '">' + escapeHtml(statusLabel(status)) + '</span>'
-                    + '  </div>'
-                    + '</div>'
-                    + '<div class="small text-muted mb-2">'
-                    + escapeHtml(scopeLabel(row.scope_type)) + (row.scope_id ? (' #' + escapeHtml(row.scope_id)) : '')
-                    + '</div>'
-                    + self.renderTagBadges(row.narrative_tags)
-                    + (row.summary ? '<p class="small mb-2">' + escapeHtml(shortText(row.summary, 140)) + '</p>' : '')
-                    + '<div class="d-flex justify-content-between align-items-center gap-2">'
-                    + '  <button type="button" class="btn btn-sm btn-outline-secondary" data-action="quest-open-detail" data-id="' + id + '">Dettaglio</button>'
-                    + '  ' + actionButton
-                    + '</div>'
-                    + '</div>';
+                return '<button type="button" class="quest-list-item' + (isActive ? ' is-active' : '') + '"'
+                    + ' data-action="quest-open-detail" data-id="' + id + '">'
+                    + '<span class="quest-list-item__name">' + escapeHtml(row.title || ('Quest #' + id)) + '</span>'
+                    + '<span class="quest-list-item__meta">'
+                    + (intensity ? '<span class="quest-list-item__intensity">' + escapeHtml(intensity.label) + '</span>' : '')
+                    + '<span class="quest-list-item__status">' + escapeHtml(statusLabel(status)) + '</span>'
+                    + '</span>'
+                    + '</button>';
             }).join('');
             refreshTooltips(list);
         },
@@ -460,13 +430,15 @@ function GameQuestsPage(extension) {
         resetDetail: function () {
             this.selectedQuestId = 0;
             this.selectedQuest = null;
-            var body = document.getElementById('quest-detail-modal-body');
-            if (body) { body.innerHTML = ''; }
-            var el = document.getElementById('quest-detail-modal');
-            if (el && window.bootstrap && window.bootstrap.Modal) {
-                var modal = window.bootstrap.Modal.getInstance(el);
-                if (modal) { modal.hide(); }
+            var panel = document.getElementById('quest-detail-panel');
+            if (panel) {
+                panel.innerHTML = '<div class="quest-detail-panel__empty">'
+                    + '<span class="bi bi-journal-text"></span>'
+                    + '<span>Seleziona una quest</span>'
+                    + '</div>';
             }
+            var oc = document.getElementById('offcanvasQuests');
+            if (oc) { oc.classList.remove('quest-detail-open'); }
         },
 
         openDetail: function (questId) {
@@ -491,59 +463,72 @@ function GameQuestsPage(extension) {
         },
 
         renderDetail: function (ds) {
-            var el = document.getElementById('quest-detail-modal');
-            var detail = document.getElementById('quest-detail-modal-body');
-            if (!el || !detail) { return; }
+            var panel = document.getElementById('quest-detail-panel');
+            if (!panel) { return; }
 
-            var def = ds.definition || {};
+            var def      = ds.definition || {};
             var instance = ds.instance || null;
-            var steps = Array.isArray(ds.steps) ? ds.steps : [];
-            var status = instance ? String(instance.current_status || 'available') : 'available';
-            var canJoin = parseInt(ds.can_join || '0', 10) === 1;
+            var steps    = Array.isArray(ds.steps) ? ds.steps : [];
+            var status   = instance ? String(instance.current_status || 'available') : 'available';
+            var canJoin  = parseInt(ds.can_join  || '0', 10) === 1;
             var canLeave = parseInt(ds.can_leave || '0', 10) === 1;
+            var defId    = parseInt(def.id || '0', 10) || 0;
             var intensity = intensityMeta({
-                intensity_visibility: ds.intensity_visibility || def.intensity_visibility,
-                intensity_level: ds.intensity_level || def.intensity_level,
-                effective_intensity_level: ds.effective_intensity_level || instance && instance.effective_intensity_level
+                intensity_visibility:    ds.intensity_visibility    || def.intensity_visibility,
+                intensity_level:         ds.intensity_level         || def.intensity_level,
+                effective_intensity_level: ds.effective_intensity_level || (instance && instance.effective_intensity_level)
             });
 
+            /* active item highlight in sidebar */
+            var items = document.querySelectorAll('#quests-list .quest-list-item');
+            for (var j = 0; j < items.length; j += 1) {
+                items[j].classList.toggle('is-active', parseInt(items[j].getAttribute('data-id') || '0', 10) === defId);
+            }
+
+            var statusBandClass = 'quest-detail__status-band--' + status;
             var actionButton = '';
             if (canJoin) {
-                actionButton = '<button type="button" class="btn btn-sm btn-primary" data-action="quest-join" data-id="' + (parseInt(def.id || '0', 10) || 0) + '">Aderisci</button>';
+                actionButton = '<button type="button" class="quest-detail__cta" data-action="quest-join" data-id="' + defId + '">Accetta mandato</button>';
             } else if (canLeave) {
-                actionButton = '<button type="button" class="btn btn-sm btn-outline-danger" data-action="quest-leave" data-id="' + (parseInt(def.id || '0', 10) || 0) + '">Ritira adesione</button>';
+                actionButton = '<button type="button" class="quest-detail__cta quest-detail__cta--danger" data-action="quest-leave" data-id="' + defId + '">Ritira adesione</button>';
             }
 
             var stepsHtml = '';
             if (steps.length) {
-                stepsHtml = '<div class="text-muted mt-3 mb-2">Step</div><ul class="list-group list-group-flush mb-3">';
+                stepsHtml = '<div class="quest-detail__section-label">Step</div>';
                 for (var i = 0; i < steps.length; i += 1) {
                     var step = steps[i] || {};
                     var stepStatus = String(step.progress_status || 'locked');
-                    stepsHtml += '<li class="list-group-item px-0 py-1 d-flex justify-content-between align-items-start">'
-                        + '<span class="small">' + escapeHtml(step.step_title || step.title || ('Step #' + (i + 1))) + '</span>'
+                    stepsHtml += '<div class="quest-step">'
+                        + '<span class="quest-step__title">' + escapeHtml(step.step_title || step.title || ('Step #' + (i + 1))) + '</span>'
                         + '<span class="badge ' + statusBadge(stepStatus) + '">' + escapeHtml(statusLabel(stepStatus)) + '</span>'
-                        + '</li>';
+                        + '</div>';
                 }
-                stepsHtml += '</ul>';
-            } else {
-                stepsHtml = '<div class="small text-muted">Nessuno step configurato.</div>';
             }
 
-            detail.innerHTML = '<h4>' + escapeHtml(def.title || ('Quest #' + (def.id || '-'))) + '</h4>'
-                + '<div class="small text-muted mb-1">Stato: <b>' + escapeHtml(statusLabel(status)) + '</b> - Ambito: <b>' + escapeHtml(scopeLabel(def.scope_type)) + '</b></div>'
-                + (intensity ? ('<div class="small text-muted mb-2">Intensita narrativa: <span class="badge ' + intensity.badgeClass + '" data-bs-toggle="tooltip" data-bs-title="Pressione narrativa e peso delle conseguenze" title="Pressione narrativa e peso delle conseguenze">' + escapeHtml(intensity.label) + '</span></div>') : '')
+            var backBtn = '<button type="button" class="quest-detail__back" data-action="quest-back">'
+                + '<span class="bi bi-arrow-left me-1"></span>Lista</button>';
+
+            panel.innerHTML = backBtn
+                + '<div class="quest-detail__status-band ' + statusBandClass + '">' + escapeHtml(statusLabel(status)) + '</div>'
+                + '<h2 class="quest-detail__title">' + escapeHtml(def.title || ('Quest #' + (def.id || '-'))) + '</h2>'
+                + '<div class="quest-detail__chips">'
+                + (intensity ? '<span class="quest-chip quest-chip--diff">' + escapeHtml(intensity.label) + '</span>' : '')
+                + '<span class="quest-chip">' + escapeHtml(scopeLabel(def.scope_type)) + '</span>'
                 + this.renderTagBadges(def.narrative_tags)
-                + (def.summary ? '<p class="mb-2">' + escapeHtml(def.summary) + '</p>' : '')
-                + (def.description ? '<div class="mb-2">' + escapeHtml(def.description) + '</div>' : '')
+                + '</div>'
+                + (def.summary     ? '<p class="quest-detail__desc">' + escapeHtml(def.summary) + '</p>' : '')
+                + (def.description ? '<div class="quest-detail__body">' + escapeHtml(def.description) + '</div>' : '')
                 + stepsHtml
-                + '<hr/>'
-                + '<div class="d-flex justify-content-end">' + actionButton + '</div>';
+                + '<div class="quest-detail__lore">'
+                + '<div class="quest-detail__lore-rule"></div>'
+                + '</div>'
+                + (actionButton ? '<div class="mt-auto pt-4">' + actionButton + '</div>' : '');
 
-            if (window.bootstrap && window.bootstrap.Modal) {
-                window.bootstrap.Modal.getOrCreateInstance(el).show();
-            }
-            refreshTooltips(detail);
+            var oc = document.getElementById('offcanvasQuests');
+            if (oc) { oc.classList.add('quest-detail-open'); }
+
+            refreshTooltips(panel);
         },
 
         renderTagBadges: function (tags) {

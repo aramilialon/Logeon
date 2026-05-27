@@ -11,7 +11,6 @@ use Core\Http\InputValidator;
 use Core\Http\RequestData;
 use Core\Http\ResponseEmitter;
 
-
 use Core\Logging\LoggerInterface;
 
 class Storyboards extends Storyboard
@@ -152,5 +151,3 @@ class Storyboards extends Storyboard
         return ResponseEmitter::emit(ApiResponse::json($response));
     }
 }
-
-

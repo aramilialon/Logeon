@@ -11,6 +11,7 @@ const SHARED_FEATURES = [
 
 const DEFAULT_PAGE_FEATURE_SCRIPTS = [
     '/assets/js/app/features/game/NotificationsPage.js',
+    '/assets/js/app/features/game/NewsPage.js',
     '/assets/js/app/features/game/MessagesModal.js',
     '/assets/js/app/features/game/MessagesPage.js',
     '/assets/js/app/features/game/NarrativeEventsPage.js',
@@ -19,6 +20,7 @@ const DEFAULT_PAGE_FEATURE_SCRIPTS = [
 
 const PAGE_FEATURE_SCRIPTS = {
     home: [
+        '/assets/js/app/features/game/HomePage.js',
         '/assets/js/app/features/game/NotificationsPage.js',
         '/assets/js/app/features/game/NewsPage.js',
         '/assets/js/app/features/game/MessagesModal.js',
@@ -83,6 +85,7 @@ const PAGE_FEATURE_SCRIPTS = {
         '/assets/js/app/features/game/NarrativeEventsPage.js',
         '/assets/js/app/features/game/SystemEventsPage.js',
         '/assets/js/app/features/game/location/LocationPage.js',
+        '/assets/js/app/features/game/location/LocationAmbientMusic.js',
         '/assets/js/app/features/game/location/LocationChatPage.js',
         '/assets/js/app/features/game/location/LocationSidebarPage.js',
         '/assets/js/app/features/game/location/LocationWhispersPage.js',
@@ -214,6 +217,32 @@ const PAGE_BUNDLE_SCRIPTS = {
 let resolved = false;
 let resolving = null;
 
+function appBundleVersion() {
+    if (typeof document !== 'undefined') {
+        const meta = document.querySelector('meta[name="app-bundle-version"]');
+        if (meta && typeof meta.getAttribute === 'function') {
+            const value = String(meta.getAttribute('content') || '').trim();
+            if (value) {
+                return value;
+            }
+        }
+    }
+
+    return String(globalWindow.__APP_BUNDLE_VERSION || '').trim();
+}
+
+function versionedSrc(src) {
+    const value = String(src || '').trim();
+    if (!value) {
+        return '';
+    }
+    if (value.indexOf('?') !== -1) {
+        return value;
+    }
+    const version = appBundleVersion();
+    return version ? (value + '?v=' + encodeURIComponent(version)) : value;
+}
+
 function normalizePageKey(value) {
     return String(value || '')
         .trim()
@@ -255,6 +284,17 @@ function getCurrentPageKey() {
 }
 
 function shouldUsePageBundles() {
+    const root = document.getElementById('page-content');
+    if (root && typeof root.getAttribute === 'function') {
+        const value = String(root.getAttribute('data-app-use-page-bundles') || '').trim();
+        if (value === '1' || value.toLowerCase() === 'true') {
+            return true;
+        }
+        if (value === '0' || value.toLowerCase() === 'false') {
+            return false;
+        }
+    }
+
     return globalWindow.__APP_USE_PAGE_BUNDLES === true;
 }
 
@@ -306,7 +346,7 @@ function insertUniqueWithOrder(list, value, opts) {
 function loadSequence(srcs) {
     let chain = Promise.resolve();
     for (let i = 0; i < srcs.length; i += 1) {
-        const src = srcs[i];
+        const src = versionedSrc(srcs[i]);
         chain = chain.then(function () {
             return import(src).catch(function () {});
         });
@@ -327,13 +367,13 @@ export function loadForCurrentPage() {
             const key = normalizePageKey(getCurrentPageKey());
             const pageSrcs = PAGE_FEATURE_SCRIPTS[key] || DEFAULT_PAGE_FEATURE_SCRIPTS;
             if (!shouldUsePageBundles()) {
-                return loadSequence(uniqSrcs(SHARED_FEATURES.concat(pageSrcs)));
+                return loadSequence(uniqSrcs(SHARED_FEATURES.concat(DEFAULT_PAGE_FEATURE_SCRIPTS, pageSrcs)));
             }
             const bundleSrc = PAGE_BUNDLE_SCRIPTS[key] || '';
             if (!bundleSrc) {
                 return loadSequence(uniqSrcs(pageSrcs));
             }
-            return import(bundleSrc)
+            return import(versionedSrc(bundleSrc))
                 .then(function () {})
                 .catch(function () {
                     return loadSequence(uniqSrcs(pageSrcs));

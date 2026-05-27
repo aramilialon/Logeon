@@ -39,10 +39,12 @@ function initAppConfig() {
     var idleMinutes = readMeta('app-config-availability-idle-minutes');
     var autoToast = readMeta('app-config-onlines-auto-toast');
     var chatCommands = readJsonScript('app-config-chat-commands', []);
+    var defaultDiceFaces = toInt(readMeta('app-config-default-dice-faces'), 20);
 
     window.APP_CONFIG.availability_idle_minutes = toInt(idleMinutes, 20);
     window.APP_CONFIG.onlines_auto_toast = toInt(autoToast, 0);
     window.APP_CONFIG.chat_commands = Array.isArray(chatCommands) ? chatCommands : [];
+    window.APP_CONFIG.default_dice_faces = (defaultDiceFaces >= 2 && defaultDiceFaces <= 1000) ? defaultDiceFaces : 20;
 }
 
 function initModuleEndpoints() {

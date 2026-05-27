@@ -331,7 +331,7 @@ function questsCutoverAssertCoreJsIsClean(string $root): void
         ],
         [
             'path' => '/assets/js/app/core/admin.feature-loader.js',
-            'needle' => "/assets/js/app/features/admin/Quests.js",
+            'needle' => '/assets/js/app/features/admin/Quests.js',
             'message' => 'Feature script Admin Quests ancora hardcoded nel core admin.feature-loader.js.',
         ],
         [

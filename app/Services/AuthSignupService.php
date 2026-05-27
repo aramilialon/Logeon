@@ -142,16 +142,7 @@ class AuthSignupService
             return false;
         }
 
-        $from = trim((string) APP['support_email']);
-        $headers = [];
-        $headers[] = 'MIME-Version: 1.0';
-        $headers[] = 'Content-type: text/html; charset=UTF-8';
-        if ($from !== '' && $from !== '-') {
-            $headers[] = 'From: ' . $from;
-            $headers[] = 'Reply-To: ' . $from;
-        }
-
-        return @mail($to, $subject, $htmlBody, implode("\r\n", $headers));
+        return (new MailService())->send($to, $subject, $htmlBody);
     }
 
     private function isHttps(): bool
@@ -320,6 +311,8 @@ class AuthSignupService
         $email = strtolower(trim((string) ($data->email ?? '')));
         $password = (string) ($data->password ?? '');
         $passwordConfirm = (string) ($data->password_confirm ?? '');
+        $acceptPrivacy = !empty($data->accept_privacy);
+        $newsletterOptIn = !empty($data->newsletter_opt_in);
         $ip = (string) $this->getServerValue('REMOTE_ADDR', '0.0.0.0');
         $identity = 'signup:' . $ip . ':' . $email;
 
@@ -330,6 +323,15 @@ class AuthSignupService
                 'Troppi tentativi',
                 'Hai superato il limite di registrazioni. Riprova tra ' . (int) $rate['retry_after'] . ' secondi.',
                 'signup_rate_limited',
+            );
+            return;
+        }
+
+        if (!$acceptPrivacy) {
+            $this->responseError(
+                'Consenso obbligatorio',
+                'Devi accettare la privacy policy e i termini del servizio per registrarti.',
+                'signup_privacy_required',
             );
             return;
         }
@@ -415,6 +417,25 @@ class AuthSignupService
         }
 
         try {
+            $ua = (string) $this->getServerValue('HTTP_USER_AGENT', '');
+            (new GdprService($this->db))->recordSignupLegalAcceptances(
+                $userId,
+                $ip,
+                $ua !== '' ? mb_substr($ua, 0, 500) : null,
+                'signup',
+            );
+        } catch (\Throwable $e) {
+            $this->trace('[Signup] consenso legale non registrato', ['user_id' => $userId, 'error' => $e->getMessage()]);
+            $this->execPrepared('DELETE FROM users WHERE id = ? LIMIT 1', [$userId]);
+            $this->responseError(
+                'Registrazione non completata',
+                'Impossibile registrare il consenso ai documenti legali. Riprova.',
+                'signup_legal_consent_failed',
+            );
+            return;
+        }
+
+        try {
             $token = $this->createEmailVerificationToken($userId, 48);
         } catch (\Throwable $e) {
             $this->trace('[Signup] token verifica non creato', [
@@ -456,11 +477,19 @@ class AuthSignupService
         }
 
         RateLimiter::clear('auth.signup', $identity);
+
+        if ($newsletterOptIn) {
+            try {
+                $ua = (string) $this->getServerValue('HTTP_USER_AGENT', '');
+                (new MailConsentService())->setNewsletterOptIn($userId, true, 'signup', $ip, $ua !== '' ? $ua : null);
+            } catch (\Throwable $e) {
+                $this->trace('[Signup] consenso newsletter non registrato', ['user_id' => $userId, 'error' => $e->getMessage()]);
+            }
+        }
+
         $this->responseSuccess(
             'Registrazione completata',
             'Ti abbiamo inviato un link di verifica email. Conferma l\'account prima di accedere.',
         );
     }
 }
-
-

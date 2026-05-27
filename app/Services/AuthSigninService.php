@@ -26,6 +26,8 @@ class AuthSigninService
     private $logger;
     /** @var bool|null */
     private $superuserColumnExists = null;
+    /** @var bool|null */
+    private $superuserRoleColumnExists = null;
 
     public function __construct(DbAdapterInterface $db = null, LoggerInterface $logger = null)
     {
@@ -260,6 +262,12 @@ class AuthSigninService
         $this->setSessionValue('user_is_superuser', isset($user->is_superuser) ? ((int) $user->is_superuser) : 0);
         $this->setSessionValue('user_is_moderator', isset($user->is_moderator) ? $user->is_moderator : 0);
         $this->setSessionValue('user_is_master', isset($user->is_master) ? $user->is_master : 0);
+        $superuserRole = isset($user->superuser_role) ? strtolower(trim((string) $user->superuser_role)) : '';
+        if ($superuserRole === '' && isset($user->is_superuser) && (int) $user->is_superuser === 1) {
+            $superuserRole = $this->hasSuperuserRoleColumn() ? 'gestore' : 'creatore';
+        }
+        $this->setSessionValue('user_superuser_role', $superuserRole);
+        $this->setSessionValue('user_is_superuser_creator', ((int) ($user->is_superuser ?? 0) === 1 && $superuserRole === 'creatore') ? 1 : 0);
         $this->setSessionValue('user_session_version', isset($user->session_version) ? $user->session_version : 1);
     }
 
@@ -283,6 +291,28 @@ class AuthSigninService
 
         $this->superuserColumnExists = !empty($row);
         return $this->superuserColumnExists;
+    }
+
+    private function hasSuperuserRoleColumn(): bool
+    {
+        if ($this->superuserRoleColumnExists !== null) {
+            return $this->superuserRoleColumnExists;
+        }
+
+        $dbName = (string) DB['mysql']['db_name'];
+
+        $row = $this->firstPrepared(
+            'SELECT 1 AS ok
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ?
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1',
+            [$dbName, 'users', 'superuser_role'],
+        );
+
+        $this->superuserRoleColumnExists = !empty($row);
+        return $this->superuserRoleColumnExists;
     }
 
     private function setSessionsCharacter($character): void
@@ -516,13 +546,17 @@ class AuthSigninService
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
 
-        $superuserSelect = $this->hasSuperuserColumn()
+        $superuserFlagExpression = $this->hasSuperuserColumn()
             ? 'is_superuser'
-            : 'is_administrator AS is_superuser';
+            : 'is_administrator';
+        $superuserSelect = $superuserFlagExpression . ' AS is_superuser';
+        $superuserRoleSelect = $this->hasSuperuserRoleColumn()
+            ? 'superuser_role'
+            : 'CASE WHEN ' . $superuserFlagExpression . ' = 1 THEN "creatore" ELSE NULL END AS superuser_role';
 
         $cryptKey = $this->cryptKey();
         $user = $this->firstPrepared(
-            'SELECT id, CAST(AES_DECRYPT(email, ?) AS CHAR(255)) AS email, password, is_administrator, ' . $superuserSelect . ', is_moderator, is_master, gender, date_actived, date_last_pass, session_version FROM users '
+            'SELECT id, CAST(AES_DECRYPT(email, ?) AS CHAR(255)) AS email, password, is_administrator, ' . $superuserSelect . ', ' . $superuserRoleSelect . ', is_moderator, is_master, gender, date_actived, date_last_pass, session_version FROM users '
             . 'WHERE email = AES_ENCRYPT(?, ?)',
             [$cryptKey, strtolower(trim((string) ($data->email ?? ''))), $cryptKey],
         );
@@ -544,13 +578,17 @@ class AuthSigninService
             return false;
         }
 
-        $superuserSelect = $this->hasSuperuserColumn()
+        $superuserFlagExpression = $this->hasSuperuserColumn()
             ? 'is_superuser'
-            : 'is_administrator AS is_superuser';
+            : 'is_administrator';
+        $superuserSelect = $superuserFlagExpression . ' AS is_superuser';
+        $superuserRoleSelect = $this->hasSuperuserRoleColumn()
+            ? 'superuser_role'
+            : 'CASE WHEN ' . $superuserFlagExpression . ' = 1 THEN "creatore" ELSE NULL END AS superuser_role';
 
         $cryptKey = $this->cryptKey();
         $user = $this->firstPrepared(
-            'SELECT id, CAST(AES_DECRYPT(email, ?) AS CHAR(255)) AS email, password, is_administrator, ' . $superuserSelect . ', is_moderator, is_master, gender, date_actived, date_last_pass, session_version FROM users '
+            'SELECT id, CAST(AES_DECRYPT(email, ?) AS CHAR(255)) AS email, password, is_administrator, ' . $superuserSelect . ', ' . $superuserRoleSelect . ', is_moderator, is_master, gender, date_actived, date_last_pass, session_version FROM users '
             . 'WHERE id = ? LIMIT 1',
             [$cryptKey, $userId],
         );
@@ -743,5 +781,3 @@ class AuthSigninService
         );
     }
 }
-
-

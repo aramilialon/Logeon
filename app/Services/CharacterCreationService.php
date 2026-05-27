@@ -33,6 +33,33 @@ class CharacterCreationService
         $this->db->executePrepared($sql, $params);
     }
 
+    private function assertUserCanCreateCharacter(int $userId): void
+    {
+        if ($userId <= 0) {
+            throw AppError::validation('Utente non valido', [], 'user_invalid');
+        }
+
+        $user = $this->firstPrepared(
+            'SELECT id, date_actived
+             FROM `users`
+             WHERE `id` = ?
+             LIMIT 1',
+            [$userId],
+        );
+
+        if (empty($user) || (int) ($user->id ?? 0) <= 0) {
+            throw AppError::validation('Utente non valido', [], 'user_invalid');
+        }
+
+        if (empty($user->date_actived)) {
+            throw AppError::validation(
+                'Devi attivare il tuo account prima di creare un personaggio',
+                [],
+                'user_inactive',
+            );
+        }
+    }
+
     private function isArchetypeProviderContract($provider): bool
     {
         if (!is_object($provider)) {
@@ -68,6 +95,7 @@ class CharacterCreationService
         bool $multipleAllowed,
         ?object $archetypeProvider,
     ): object {
+        $this->assertUserCanCreateCharacter($userId);
         $this->validateMultiCharacterPolicy($userId);
 
         $this->execPrepared(

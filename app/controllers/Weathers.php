@@ -365,4 +365,3 @@ class Weathers
         return $map[$message] ?? 'not_found';
     }
 }
-

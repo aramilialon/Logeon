@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Core\Router;
 use Core\Redirect;
@@ -7,6 +7,7 @@ use Core\ModuleRuntime;
 use Core\Csrf;
 use Core\Http\AppError;
 use App\Services\InstallerService;
+use App\Services\MailRuntimeService;
 
 $route = new Router();
 
@@ -34,21 +35,6 @@ if ($isInstallUri) {
     }
 }
 
-if (is_file($maintenancePath)) {
-    $allowedDuringMaintenance = (
-        preg_match('#^/admin(?:/.*)?$#', $currentUri) === 1
-        || preg_match('#^/install(?:/.*)?$#', $currentUri) === 1
-    );
-
-    if (!$allowedDuringMaintenance) {
-        throw AppError::validation(
-            'Piattaforma temporaneamente in manutenzione per aggiornamento core',
-            [],
-            'update_maintenance_active',
-        );
-    }
-}
-
 $customRoutes = __DIR__ . '/../custom/routes.php';
 if (file_exists($customRoutes)) {
     require_once $customRoutes;
@@ -73,4 +59,25 @@ if (class_exists('\\Core\\ModuleRuntime')) {
     ModuleRuntime::instance()->registerRoutes($route);
 }
 
+if (is_file($maintenancePath)) {
+    $allowedDuringMaintenance = (
+        preg_match('#^/admin(?:/.*)?$#', $currentUri) === 1
+        || preg_match('#^/install(?:/.*)?$#', $currentUri) === 1
+    );
+
+    if (!$allowedDuringMaintenance) {
+        throw AppError::validation(
+            'Piattaforma temporaneamente in manutenzione per aggiornamento core',
+            [],
+            'update_maintenance_active',
+        );
+    }
+}
+
+MailRuntimeService::maybeTick(2, 5);
+
 $route->run();
+
+
+
+

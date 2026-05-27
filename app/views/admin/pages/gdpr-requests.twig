@@ -1,0 +1,122 @@
+<div data-admin-page="gdpr-requests">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <header class="mt-3">
+            <h4 class="display-6">Richieste GDPR</h4>
+            <h6>Gestione richieste privacy utente: esportazione dati e cancellazione account</h6>
+        </header>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-gdpr-retention-run">
+                <i class="bi bi-broom me-1"></i>Retention GDPR
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" data-action="admin-gdpr-requests-reload">
+                <i class="bi bi-arrow-clockwise me-1"></i>Aggiorna
+            </button>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form id="admin-gdpr-requests-filters" class="row g-2 align-items-end" autocomplete="off" novalidate>
+                <div class="col-auto">
+                    <label for="admin-gdpr-filter-status" class="form-label mb-1">Stato</label>
+                    <select id="admin-gdpr-filter-status" name="status" class="form-select">
+                        <option value="all" selected>Tutti</option>
+                        <option value="pending">In attesa</option>
+                        <option value="in_review">In revisione</option>
+                        <option value="completed">Completata</option>
+                        <option value="rejected">Rifiutata</option>
+                        <option value="cancelled">Annullata</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label for="admin-gdpr-filter-type" class="form-label mb-1">Tipo richiesta</label>
+                    <select id="admin-gdpr-filter-type" name="request_type" class="form-select">
+                        <option value="" selected>Tutti</option>
+                        <option value="export_data">Esportazione dati</option>
+                        <option value="delete_account">Cancellazione account</option>
+                    </select>
+                </div>
+                <div class="col-auto d-flex gap-2">
+                    <button type="submit" class="btn btn-outline-secondary">Filtra</button>
+                    <button type="button" class="btn btn-outline-secondary" data-action="admin-gdpr-requests-reset">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="grid-admin-gdpr-requests"></div>
+
+    <div class="modal fade" id="admin-gdpr-request-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Gestisci richiesta GDPR</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">ID richiesta</label>
+                            <div class="form-control" data-role="gdpr-request-id">-</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Utente</label>
+                            <div class="form-control" data-role="gdpr-request-user">-</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Tipo</label>
+                            <div class="form-control" data-role="gdpr-request-type">-</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Stato attuale</label>
+                            <div class="form-control" data-role="gdpr-request-status">-</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-1">Nota utente</label>
+                            <div class="form-control" data-role="gdpr-request-note" style="min-height: 90px;"></div>
+                        </div>
+                    </div>
+
+                    <form id="admin-gdpr-request-update-form" autocomplete="off" novalidate>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="admin-gdpr-new-status" class="form-label">Nuovo stato</label>
+                                <select id="admin-gdpr-new-status" name="status" class="form-select" required>
+                                    <option value="" selected>Seleziona</option>
+                                    <option value="pending">In attesa</option>
+                                    <option value="in_review">In revisione</option>
+                                    <option value="completed">Completata</option>
+                                    <option value="rejected">Rifiutata</option>
+                                    <option value="cancelled">Annullata</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label for="admin-gdpr-resolution-note" class="form-label">Nota di risoluzione (facoltativa)</label>
+                                <textarea
+                                    id="admin-gdpr-resolution-note"
+                                    name="resolution_note"
+                                    class="form-control"
+                                    rows="2"
+                                    maxlength="2000"
+                                    placeholder="Dettagli visibili allo staff..."
+                                ></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-outline-primary d-none" data-action="admin-gdpr-request-download">
+                        <i class="bi bi-download me-1"></i>Scarica export
+                    </button>
+                    <button type="button" class="btn btn-warning d-none" data-action="admin-gdpr-request-execute">
+                        <i class="bi bi-play-circle me-1"></i>Esegui operazione
+                    </button>
+                    <button type="button" class="btn btn-primary" data-action="admin-gdpr-request-save">
+                        <i class="bi bi-check2-circle me-1"></i>Salva stato
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

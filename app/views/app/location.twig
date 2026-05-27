@@ -1,7 +1,14 @@
 {% extends theme_shell('game', 'app/layouts/layout.twig') %}
 
 {% block content %}
-{% set is_staff = session('user_is_administrator') == 1 or session('user_is_moderator') == 1 or session('user_is_master') == 1 %}
+{% set is_staff = session('user_is_administrator') == 1 or session('user_is_moderator') == 1 or session('user_is_master') == 1 or session('user_is_superuser') == 1 %}
+
+<input id="location-music-state" type="hidden" value="{{ music_state_json|default('{}')|e('html_attr') }}">
+
+<audio id="location-ambient-music-player" loop preload="none" class="d-none"></audio>
+
+<div id="location-yt-music-container"
+     style="position:fixed;bottom:0;left:-9999px;width:320px;height:180px;pointer-events:none;z-index:-1;overflow:hidden;"></div>
 
 <section id="location-page" class="row g-3 ui-page location-page-bootstrap">
     <header class="col-12 border-bottom pb-2">
@@ -134,6 +141,30 @@
             <div id="location-chat-column" class="col-12 col-xl-8 d-flex flex-column order-1 order-xl-2 mt-0">
                 <div id="location-chat-card" class="shadow-sm flex-grow-1 mb-2">
                     <div class="p-0 d-flex flex-column">
+                        <div id="location-music-bar" class="location-music-bar d-none" role="region" aria-label="Musica di sottofondo">
+                            <span class="location-music-bar__icon"><i class="bi bi-music-note-beamed"></i></span>
+                            <div class="location-music-bar__info">
+                                <span id="location-music-bar-title" class="location-music-bar__title"></span>
+                                <span id="location-music-bar-status" class="location-music-bar__badge"></span>
+                            </div>
+                            <div class="location-music-bar__controls">
+                                <button id="location-music-play-btn" class="btn btn-sm btn-primary d-none" type="button">
+                                    <i class="bi bi-play-fill"></i><span class="ms-1">Avvia</span>
+                                </button>
+                                <button id="location-music-mute-btn" class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="tooltip" data-bs-title="Silenzia">
+                                    <i class="bi bi-volume-up-fill"></i>
+                                </button>
+                                {% if is_staff %}
+                                <button id="location-music-muteall-btn" class="btn btn-sm btn-outline-warning" type="button" data-bs-toggle="tooltip" data-bs-title="Silenzia per tutti">
+                                    <i class="bi bi-volume-mute-fill"></i>
+                                </button>
+                                <button id="location-music-stop-btn" class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="tooltip" data-bs-title="Ferma per tutti">
+                                    <i class="bi bi-stop-fill"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+
                         <div id="chat_display">
                             <div id="chat_messages"></div>
                             <div id="chat_empty" class="alert alert-info d-none text-center m-3">
@@ -182,6 +213,10 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <div id="location-chat-visible-states-wrap" class="mt-3 d-none">
+                            <div id="location-chat-visible-states-list" class="d-flex flex-wrap gap-2"></div>
                         </div>
 
                         <input type="hidden" name="location_id" value="{{ location_id }}">
@@ -322,6 +357,7 @@
 
 <template name="template_location_message_system">
     <article class="location-chat-message location-chat-message--system chat-message alert alert-secondary text-center py-3 px-3 mb-2">
+        <div class="chat-meta small text-muted mb-2"></div>
         <div class="chat-body"></div>
     </article>
 </template>

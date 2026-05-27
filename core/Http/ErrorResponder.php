@@ -150,5 +150,3 @@ class ErrorResponder
         return $payload;
     }
 }
-
-

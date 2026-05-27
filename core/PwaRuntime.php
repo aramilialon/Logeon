@@ -15,7 +15,7 @@ class PwaRuntime
     {
         $app = self::appConfig();
         $pwa = self::pwaConfig($app);
-        $frontend = self::frontendConfig($app);
+        $assetVersion = FrontendAssetVersion::resolve($app);
         $basePath = self::resolveBasePath((string) ($app['baseurl'] ?? ''));
         $enabled = self::toBool($pwa['enabled'] ?? false);
 
@@ -39,16 +39,16 @@ class PwaRuntime
         $scope = self::normalizeScope(self::resolveAppPath($basePath, $pwa['scope'] ?? '/', '/'));
         $startUrl = self::resolveAppPath($basePath, $pwa['start_path'] ?? '/', '/');
         $manifestUrl = self::resolveAppPath($basePath, '/manifest.webmanifest', '/manifest.webmanifest');
-        $serviceWorkerUrl = self::resolveAppPath($basePath, '/service-worker.js', '/service-worker.js');
+        $serviceWorkerUrl = self::appendVersion(
+            self::resolveAppPath($basePath, '/service-worker.js', '/service-worker.js'),
+            $assetVersion,
+        );
         $themeColor = self::normalizeColor($pwa['theme_color'] ?? '#0d6efd', '#0d6efd');
         $backgroundColor = self::normalizeColor($pwa['background_color'] ?? '#ffffff', '#ffffff');
         $display = self::normalizeEnum($pwa['display'] ?? 'standalone', ['fullscreen', 'standalone', 'minimal-ui', 'browser'], 'standalone');
         $orientation = self::normalizeEnum($pwa['orientation'] ?? 'portrait', ['any', 'natural', 'landscape', 'landscape-primary', 'landscape-secondary', 'portrait', 'portrait-primary', 'portrait-secondary'], 'portrait');
         $cacheEnabled = self::toBool($pwa['cache_enabled'] ?? true);
-        $cacheVersion = self::normalizeText(
-            $pwa['cache_version'] ?? '',
-            (string) ($frontend['pilot_bundle_version'] ?? date('Ymd')),
-        );
+        $cacheVersion = self::normalizeText($assetVersion, date('YmdHis'));
 
         $runtime = [
             'enabled' => $enabled,
@@ -61,6 +61,7 @@ class PwaRuntime
             'start_url' => $startUrl,
             'manifest_url' => $manifestUrl,
             'service_worker_url' => $serviceWorkerUrl,
+            'asset_version' => $assetVersion,
             'theme_color' => $themeColor,
             'background_color' => $backgroundColor,
             'display' => $display,
@@ -192,7 +193,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((cached) => {
+    caches.match(event.request).then((cached) => {
       if (cached) {
         return cached;
       }
@@ -238,16 +239,6 @@ JS;
     }
 
     /**
-     * @param array<string,mixed> $app
-     * @return array<string,mixed>
-     */
-    private static function frontendConfig(array $app): array
-    {
-        $raw = $app['frontend'] ?? null;
-        return is_array($raw) ? $raw : [];
-    }
-
-    /**
      * @return array<string, mixed>
      */
     private static function loadStoredPwaConfig(): array
@@ -274,7 +265,6 @@ JS;
             'pwa_icon_512_path' => 'icon_512_path',
             'pwa_icon_maskable_path' => 'icon_maskable_path',
             'pwa_cache_enabled' => 'cache_enabled',
-            'pwa_cache_version' => 'cache_version',
         ];
 
         try {
@@ -295,8 +285,7 @@ JS;
                     'pwa_icon_192_path',
                     'pwa_icon_512_path',
                     'pwa_icon_maskable_path',
-                    'pwa_cache_enabled',
-                    'pwa_cache_version'
+                    'pwa_cache_enabled'
                 )",
             );
 
@@ -348,6 +337,17 @@ JS;
 
         $normalized = strtolower(trim((string) $value));
         return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private static function appendVersion(string $url, string $version): string
+    {
+        $cleanUrl = trim($url);
+        $cleanVersion = trim($version);
+        if ($cleanUrl === '' || $cleanVersion === '') {
+            return $cleanUrl;
+        }
+
+        return $cleanUrl . (strpos($cleanUrl, '?') === false ? '?' : '&') . 'v=' . rawurlencode($cleanVersion);
     }
 
     private static function normalizeText($value, string $default = ''): string

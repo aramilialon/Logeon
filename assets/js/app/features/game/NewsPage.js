@@ -57,9 +57,29 @@ function callGameModule(moduleName, method, payload, onSuccess, onError) {
     return true;
 }
 
+function normalizeNewsRows(response) {
+    if (!response) {
+        return [];
+    }
+
+    if (Array.isArray(response.dataset)) {
+        return response.dataset;
+    }
+
+    if (response.dataset && Array.isArray(response.dataset.rows)) {
+        return response.dataset.rows;
+    }
+
+    if (Array.isArray(response.rows)) {
+        return response.rows;
+    }
+
+    return [];
+}
+
 function GameNewsPage(extension) {
         let widget = {
-            dataset: null,
+            dataset: [],
             type: null,
 
             init: function() {
@@ -67,8 +87,19 @@ function GameNewsPage(extension) {
 
                 return this;
             },
+            renderMessage: function(message) {
+                let block = $('#news-modal-body').empty();
+                $('<div class="text-muted text-center"></div>').text(message).appendTo(block);
+            },
+            showLoading: function() {
+                this.renderMessage('Caricamento...');
+            },
+            showEmpty: function() {
+                this.renderMessage('Non ci sono news al momento.');
+            },
             get: function() {
                 var self = this;
+                self.showLoading();
                 let payload = {
                     cache: true,
                     cache_ttl: 120
@@ -79,13 +110,11 @@ function GameNewsPage(extension) {
                     };
                 }
                 callGameModule('game.news', 'list', payload, function (response) {
-                    if (null == response) {
-                        return;
-                    }
-
-                    self.dataset = response.dataset;
+                    self.dataset = normalizeNewsRows(response);
                     self.build();
                 }, function (error) {
+                    self.dataset = [];
+                    self.showEmpty();
                     Toast.show({
                         body: normalizeNewsError(error, 'Errore durante caricamento news'),
                         type: 'error'
@@ -94,17 +123,29 @@ function GameNewsPage(extension) {
             },
             build: function() {
                 let block = $('#news-modal-body').empty();
-                if (!this.dataset || this.dataset.length === 0) {
-                    block.append('<div class="text-muted text-center">Nessuna novita.</div>');
+                let rows = Array.isArray(this.dataset) ? this.dataset : [];
+                if (rows.length === 0) {
+                    this.showEmpty();
                     return;
                 }
 
-                for (var i in this.dataset) {
-                    let row = this.dataset[i];
-                    let template = $($('template[name="template_news_list"]').html());
+                let templateHtml = $('template[name="template_news_list"]').html();
+                if (typeof templateHtml !== 'string' || templateHtml.trim() === '') {
+                    this.showEmpty();
+                    return;
+                }
+
+                for (var i = 0; i < rows.length; i += 1) {
+                    let row = rows[i] || {};
+                    let template = $(templateHtml);
                     let image = (row.image && row.image !== '') ? row.image : '/assets/imgs/defaults-images/default-location.png';
                     let date = row.date_published || row.date_publish || row.date_created;
-                    let dateLabel = date ? ('Pubblicato il: ' + Dates().formatHumanDateTime(date)) : '';
+                    let dateLabel = '';
+                    if (date) {
+                        dateLabel = (typeof Dates === 'function')
+                            ? ('Pubblicato il: ' + Dates().formatHumanDateTime(date))
+                            : ('Pubblicato il: ' + date);
+                    }
 
                     template.find('[name="image"]').attr('src', image);
                     template.find('[name="title"]').text(row.title || '');
@@ -116,7 +157,7 @@ function GameNewsPage(extension) {
                     }
 
                     block.append(template);
-                    if (i < this.dataset.length - 1) {
+                    if (i < rows.length - 1) {
                         block.append('<hr class="w-25 mx-auto" />');
                     }
                 }

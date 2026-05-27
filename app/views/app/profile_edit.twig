@@ -3,18 +3,13 @@
 {% block content %}
 {% set is_owner = (character_id == session('character_id')) %}
 
-<main id="profile-edit-page" class="row g-3 ui-page pb-3" data-character-id="{{ character_id|e('html_attr') }}" data-is-owner="{{ is_owner ? 1 : 0 }}">
-    <header class="col-12">
-        <div class="card">
-            <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
-                <div>
-                    <h1 class="h4 mb-1">Modifica la scheda personaggio</h1>
-                    <p class="text-muted mb-0">Aggiorna identita fisica, narrativa e immagine del personaggio.</p>
-                </div>
-                <a href="/game/profile" class="btn btn-outline-secondary btn-sm">Torna al profilo</a>
-            </div>
-        </div>
+<main class="container-fluid">
+<section id="profile-edit-page" class="row g-3 ui-page pb-3" data-character-id="{{ character_id|e('html_attr') }}" data-is-owner="{{ is_owner ? 1 : 0 }}">
+    <header class="col-12 ui-page-header">
+        <h4 class="display-6 mt-3">Modifica scheda personaggio</h4>
+        <h6>Aggiorna identità fisica, narrativa e immagine del personaggio.</h6>
     </header>
+    <hr class="w-75 ms-2" />
 
     {% if is_owner %}
     <aside class="col-12 col-xl-4">
@@ -268,6 +263,7 @@
         <div class="alert alert-warning" data-requires-page-owner="0">Operazione non consentita.</div>
     </section>
     {% endif %}
+</section>
 </main>
 
 {% endblock %}

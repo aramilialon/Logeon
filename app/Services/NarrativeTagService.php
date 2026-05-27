@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Services\FactionProviderRegistry;
 use Core\Database\DbAdapterFactory;
 use Core\Database\DbAdapterInterface;
 use Core\Http\AppError;
@@ -57,6 +56,28 @@ class NarrativeTagService
             return (array) $row;
         }
         return is_array($row) ? $row : [];
+    }
+
+    private function normalizeEntityAliasMap($raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($raw as $alias => $canonical) {
+            $a = strtolower(trim((string) $alias));
+            $c = strtolower(trim((string) $canonical));
+            if ($a === '' || $c === '') {
+                continue;
+            }
+            if (preg_match('/^[a-z0-9_\-]+$/', $a) !== 1 || preg_match('/^[a-z0-9_\-]+$/', $c) !== 1) {
+                continue;
+            }
+            $normalized[$a] = $c;
+        }
+
+        return $normalized;
     }
 
     private function normalizeCategory($value): string
@@ -123,10 +144,10 @@ class NarrativeTagService
     {
         $value = strtolower(trim($raw));
         $map = [
-            'quest' => self::ENTITY_QUEST_DEFINITION,
-            'quests' => self::ENTITY_QUEST_DEFINITION,
             'quest_definition' => self::ENTITY_QUEST_DEFINITION,
             'quest_definitions' => self::ENTITY_QUEST_DEFINITION,
+            'quest' => self::ENTITY_QUEST_DEFINITION,
+            'quests' => self::ENTITY_QUEST_DEFINITION,
             'narrative_event' => self::ENTITY_NARRATIVE_EVENT,
             'narrative_events' => self::ENTITY_NARRATIVE_EVENT,
             'activity' => self::ENTITY_NARRATIVE_EVENT,
@@ -142,6 +163,11 @@ class NarrativeTagService
             'faction' => self::ENTITY_FACTION,
             'factions' => self::ENTITY_FACTION,
         ];
+
+        if (class_exists('\\Core\\Hooks')) {
+            $dynamic = \Core\Hooks::filter('narrative_tags.entity_type_aliases', []);
+            $map = array_merge($map, $this->normalizeEntityAliasMap($dynamic));
+        }
 
         if (!isset($map[$value])) {
             throw AppError::validation('Tipo entita tag non valido', [], 'narrative_tag_entity_invalid');
@@ -172,16 +198,21 @@ class NarrativeTagService
         }
 
         $row = null;
-        if ($entityType === self::ENTITY_QUEST_DEFINITION) {
-            $row = $this->firstPrepared('SELECT id FROM quest_definitions WHERE id = ? LIMIT 1', [$entityId]);
-        } elseif ($entityType === self::ENTITY_NARRATIVE_EVENT) {
+        if ($entityType === self::ENTITY_NARRATIVE_EVENT) {
             $row = $this->firstPrepared('SELECT id FROM narrative_events WHERE id = ? LIMIT 1', [$entityId]);
+        } elseif ($entityType === self::ENTITY_QUEST_DEFINITION) {
+            $row = $this->firstPrepared('SELECT id FROM quest_definitions WHERE id = ? LIMIT 1', [$entityId]);
         } elseif ($entityType === self::ENTITY_SYSTEM_EVENT) {
             $row = $this->firstPrepared('SELECT id FROM system_events WHERE id = ? LIMIT 1', [$entityId]);
         } elseif ($entityType === self::ENTITY_SCENE) {
             $row = $this->firstPrepared('SELECT id FROM locations WHERE id = ? AND date_deleted IS NULL LIMIT 1', [$entityId]);
         } elseif ($entityType === self::ENTITY_FACTION) {
             $row = FactionProviderRegistry::existsById($entityId) ? (object) ['id' => $entityId] : null;
+        } elseif (class_exists('\\Core\\Hooks')) {
+            $exists = \Core\Hooks::filter('narrative_tags.entity_exists', null, $entityType, $entityId, $this->db);
+            if ($exists === true) {
+                $row = (object) ['id' => $entityId];
+            }
         }
 
         if (empty($row)) {
@@ -744,25 +775,7 @@ class NarrativeTagService
         $limit = max(1, min(50, (int) $limit));
         $needle = trim($query);
 
-        if ($entityType === self::ENTITY_QUEST_DEFINITION) {
-            if ($needle !== '') {
-                $like = '%' . $needle . '%';
-                $rows = $this->fetchPrepared(
-                    'SELECT q.id, q.title AS label, q.slug AS secondary
-                     FROM quest_definitions q
-                     WHERE q.title LIKE ? OR q.slug LIKE ?
-                     ORDER BY q.title ASC LIMIT ?',
-                    [$like, $like, $limit],
-                );
-            } else {
-                $rows = $this->fetchPrepared(
-                    'SELECT q.id, q.title AS label, q.slug AS secondary
-                     FROM quest_definitions q
-                     ORDER BY q.title ASC LIMIT ?',
-                    [$limit],
-                );
-            }
-        } elseif ($entityType === self::ENTITY_NARRATIVE_EVENT) {
+        if ($entityType === self::ENTITY_NARRATIVE_EVENT) {
             if ($needle !== '') {
                 $like = '%' . $needle . '%';
                 $rows = $this->fetchPrepared(
@@ -777,6 +790,24 @@ class NarrativeTagService
                     'SELECT n.id, n.title AS label, n.event_type AS secondary
                      FROM narrative_events n
                      ORDER BY n.created_at DESC LIMIT ?',
+                    [$limit],
+                );
+            }
+        } elseif ($entityType === self::ENTITY_QUEST_DEFINITION) {
+            if ($needle !== '') {
+                $like = '%' . $needle . '%';
+                $rows = $this->fetchPrepared(
+                    'SELECT q.id, q.title AS label, q.status AS secondary
+                     FROM quest_definitions q
+                     WHERE q.title LIKE ? OR q.slug LIKE ? OR q.summary LIKE ?
+                     ORDER BY q.id DESC LIMIT ?',
+                    [$like, $like, $like, $limit],
+                );
+            } else {
+                $rows = $this->fetchPrepared(
+                    'SELECT q.id, q.title AS label, q.status AS secondary
+                     FROM quest_definitions q
+                     ORDER BY q.id DESC LIMIT ?',
                     [$limit],
                 );
             }
@@ -819,8 +850,15 @@ class NarrativeTagService
                     [$limit],
                 );
             }
-        } else {
+        } elseif ($entityType === self::ENTITY_FACTION) {
             return FactionProviderRegistry::search($needle, $limit);
+        } else {
+            $rows = class_exists('\\Core\\Hooks')
+                ? \Core\Hooks::filter('narrative_tags.search_entities', [], $entityType, $needle, $limit, $this->db)
+                : [];
+            if (!is_array($rows)) {
+                $rows = [];
+            }
         }
 
         $out = [];

@@ -1,0 +1,76 @@
+<div class="modal fade" id="profile-narrative-state-modal" tabindex="-1" aria-hidden="true" data-requires-staff>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="d-flex justify-content-end my-3 mx-4">
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <h4 class="display-6 text-center mt-3 mb-2">Gestione stati narrativi</h4>
+                <h6 class="text-center text-muted">Solo Master, Admin e Superuser possono applicare o rimuovere stati narrativi.</h6>
+                <hr class="my-4" />
+
+                <div class="alert alert-info py-2 mb-3 d-none" data-role="profile-narrative-state-feedback"></div>
+
+                <form id="profile-narrative-state-apply-form">
+                    <input type="hidden" name="character_id">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Stato narrativo</label>
+                            <select class="form-select" name="state_id" required>
+                                <option value="">Seleziona uno stato...</option>
+                            </select>
+                            <div class="form-text">Puoi filtrare dall'elenco digitando nel campo sotto.</div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Filtra elenco</label>
+                            <input type="text" class="form-control" name="state_filter" autocomplete="off" placeholder="Nome, codice, categoria">
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Intensita</label>
+                            <input type="number" class="form-control" name="intensity" min="0.01" step="0.01" value="1">
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Durata valore</label>
+                            <input type="number" class="form-control" name="duration_value" min="0" step="1" value="0">
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Durata unita</label>
+                            <select class="form-select" name="duration_unit">
+                                <option value="scene">Scena</option>
+                                <option value="turn">Turno</option>
+                                <option value="minute">Minuto</option>
+                                <option value="hour">Ora</option>
+                                <option value="day">Giorno</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-outline-secondary" data-action="profile-narrative-states-refresh">Aggiorna elenco</button>
+                        <button type="submit" class="btn btn-primary" data-narrative-state-apply-save>Applica stato</button>
+                    </div>
+                </form>
+
+                <hr class="my-4" />
+
+                <form id="profile-narrative-state-remove-form">
+                    <input type="hidden" name="character_id">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Stati attivi sul personaggio</label>
+                            <select class="form-select" name="applied_state_id" required>
+                                <option value="">Nessuno stato attivo</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Motivazione</label>
+                            <input type="text" class="form-control" name="reason" maxlength="120" value="manual_remove">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="submit" class="btn btn-outline-danger" data-narrative-state-remove-save>Rimuovi stato</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

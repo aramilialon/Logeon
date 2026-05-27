@@ -316,7 +316,7 @@ class LocationService
                 ? SocialStatusProviderRegistry::getById((int) $location->min_socialstatus_id)
                 : null;
             $location->required_status_name = $status->name ?? null;
-            $location->required_status_min  = $status->min ?? null;
+            $location->required_status_min = $status->min ?? null;
         }
 
         return $location;

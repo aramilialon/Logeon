@@ -49,6 +49,10 @@ function DocsRender(containerSelector, options) {
         return fallback || 'Impossibile caricare il contenuto.';
     }
 
+    function readVisualUrl(value) {
+        return (typeof value === 'string') ? value.trim() : '';
+    }
+
     function createSettings(selector, opts) {
         var base = {
             url: null,
@@ -88,6 +92,119 @@ function DocsRender(containerSelector, options) {
             $content: null,
             $filter: null,
             _filterNs: null,
+
+            buildChapterLabel: function (chapter, chapterKey) {
+                var label = chapter.label || (this.settings.label + ' ' + chapterKey);
+                if (!chapter.label && chapter.title) {
+                    label += ' - ' + chapter.title;
+                }
+                return label;
+            },
+
+            getChapterIconUrl: function (chapter) {
+                if (!chapter || typeof chapter !== 'object') {
+                    return '';
+                }
+                var icon = readVisualUrl(chapter.icon);
+                if (icon !== '') {
+                    return icon;
+                }
+                return readVisualUrl(chapter.media);
+            },
+
+            getChapterMediaUrl: function (chapter) {
+                if (!chapter || typeof chapter !== 'object') {
+                    return '';
+                }
+                var media = readVisualUrl(chapter.media);
+                if (media !== '') {
+                    return media;
+                }
+                return readVisualUrl(chapter.image);
+            },
+
+            createLabelNode: function (label, chapter, options) {
+                var iconUrl = this.getChapterIconUrl(chapter);
+                var settings = Object.assign({
+                    iconSize: '2.4rem',
+                    iconBorderRadius: '999px',
+                    gap: '0.75rem',
+                    textClass: ''
+                }, options || {});
+
+                var $text = $('<span></span>').text(label);
+                if (settings.textClass) {
+                    $text.addClass(settings.textClass);
+                }
+
+                if (iconUrl === '') {
+                    return $text;
+                }
+
+                var $wrap = $('<span class="d-inline-flex align-items-center"></span>').css('gap', settings.gap);
+                var $icon = $('<img alt="" aria-hidden="true">');
+                $icon.attr('src', iconUrl);
+                $icon.css({
+                    width: settings.iconSize,
+                    height: settings.iconSize,
+                    objectFit: 'cover',
+                    borderRadius: settings.iconBorderRadius,
+                    flexShrink: '0',
+                    boxShadow: '0 0 0 1px rgba(255,255,255,.12)'
+                });
+
+                $wrap.append($icon);
+                $wrap.append($text);
+                return $wrap;
+            },
+
+            appendChapterBody: function ($target, chapter, bodyClass) {
+                if (!$target || !$target.length || !chapter || typeof chapter !== 'object') {
+                    return this;
+                }
+
+                var bodyHtml = (typeof chapter.body === 'string') ? chapter.body : '';
+                var mediaUrl = this.getChapterMediaUrl(chapter);
+                if (bodyHtml.trim() === '' && mediaUrl === '') {
+                    return this;
+                }
+
+                var bodyAlt = readVisualUrl(chapter.media_alt) || readVisualUrl(chapter.label) || readVisualUrl(chapter.title) || 'Illustrazione';
+                var $body = $('<div class="docs-chapter-body"></div>').css('display', 'flow-root');
+                if (bodyClass) {
+                    $body.addClass(bodyClass);
+                }
+
+                if (mediaUrl !== '') {
+                    var $figure = $('<figure class="docs-chapter-media"></figure>').css({
+                        float: 'right',
+                        width: 'min(38vw, 240px)',
+                        maxWidth: '42%',
+                        minWidth: '140px',
+                        margin: '0 0 1rem 1.25rem'
+                    });
+                    var $image = $('<img class="img-fluid" loading="lazy">');
+                    $image.attr({
+                        src: mediaUrl,
+                        alt: bodyAlt
+                    });
+                    $image.css({
+                        width: '100%',
+                        display: 'block',
+                        borderRadius: '0.9rem',
+                        objectFit: 'cover'
+                    });
+                    $figure.append($image);
+                    $body.append($figure);
+                }
+
+                if (bodyHtml.trim() !== '') {
+                    $body.append($('<div></div>').html(bodyHtml));
+                }
+
+                $target.append($body);
+                return this;
+            },
 
             reconfigure: function (nextOptions) {
                 if (nextOptions && typeof nextOptions === 'object') {
@@ -287,10 +404,9 @@ function DocsRender(containerSelector, options) {
                     var isActive = (i === 0);
                     var chapterKey = (chapter.chapter != null) ? chapter.chapter : (i + 1);
                     var chapterId = prefix + '-chapter-' + String(chapterKey).replace(/[^a-z0-9_-]+/gi, '-');
-                    var label = chapter.label || (this.settings.label + ' ' + chapterKey);
-                    if (!chapter.label && chapter.title) {
-                        label += ' - ' + chapter.title;
-                    }
+                    var label = this.buildChapterLabel(chapter, chapterKey);
+                    var hasChapterBody = ((typeof chapter.body === 'string') && chapter.body.trim() !== '')
+                        || this.getChapterMediaUrl(chapter) !== '';
 
                     var $navItem = $('<li class="nav-item" role="presentation"></li>');
                     var $button = $('<button class="nav-link" type="button" role="tab"></button>');
@@ -306,7 +422,10 @@ function DocsRender(containerSelector, options) {
                         'aria-controls': chapterId + '-pane'
                     });
                     $button.attr('data-doc-label', label);
-                    $button.text(label);
+                    $button.append(this.createLabelNode(label, chapter, {
+                        iconSize: '1.6rem',
+                        gap: '0.6rem'
+                    }));
                     $navItem.append($button);
                     this.$nav.append($navItem);
 
@@ -321,11 +440,11 @@ function DocsRender(containerSelector, options) {
                         tabindex: i
                     });
 
-                    $pane.append($('<h5></h5>').text(label));
+                    var $heading = $('<h5></h5>');
+                    $heading.append(this.createLabelNode(label, chapter));
+                    $pane.append($heading);
 
-                    if (chapter.body) {
-                        $pane.append($('<div class="p-2"></div>').html(chapter.body));
-                    }
+                    this.appendChapterBody($pane, chapter, 'p-2');
 
                     if (Array.isArray(chapter.subchapters) && chapter.subchapters.length) {
                         for (var s = 0; s < chapter.subchapters.length; s++) {
@@ -344,7 +463,7 @@ function DocsRender(containerSelector, options) {
                         }
                     }
 
-                    if (!chapter.body && (!Array.isArray(chapter.subchapters) || chapter.subchapters.length === 0)) {
+                    if (!hasChapterBody && (!Array.isArray(chapter.subchapters) || chapter.subchapters.length === 0)) {
                         $pane.append('<div class="text-muted py-3">' + this.settings.emptyText + '</div>');
                     }
 
@@ -374,17 +493,17 @@ function DocsRender(containerSelector, options) {
                 for (var i = 0; i < chapters.length; i++) {
                     var chapter = chapters[i] || {};
                     var chapterKey = (chapter.chapter != null) ? chapter.chapter : (i + 1);
-                    var label = chapter.label || (this.settings.label + ' ' + chapterKey);
-                    if (!chapter.label && chapter.title) {
-                        label += ' - ' + chapter.title;
-                    }
+                    var label = this.buildChapterLabel(chapter, chapterKey);
 
                     var $section = $('<section class="docs-monolithic-chapter mb-5"></section>');
-                    $section.append($('<h2 class="h4 mb-3 border-bottom pb-2"></h2>').text(label));
+                    var $title = $('<h2 class="h4 mb-3 border-bottom pb-2"></h2>');
+                    $title.append(this.createLabelNode(label, chapter, {
+                        iconSize: '2.8rem',
+                        gap: '0.85rem'
+                    }));
+                    $section.append($title);
 
-                    if (chapter.body) {
-                        $section.append($('<div class="p-2 mb-2"></div>').html(chapter.body));
-                    }
+                    this.appendChapterBody($section, chapter, 'p-2 mb-2');
 
                     if (Array.isArray(chapter.subchapters) && chapter.subchapters.length) {
                         for (var s = 0; s < chapter.subchapters.length; s++) {

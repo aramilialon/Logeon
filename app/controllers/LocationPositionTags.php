@@ -71,7 +71,7 @@ class LocationPositionTags
         $this->trace('Richiamato il metodo: ' . __METHOD__);
         \Core\AuthGuard::api()->requireCharacter();
 
-        $data       = $this->requestDataObject();
+        $data = $this->requestDataObject();
         $locationId = isset($data->location_id) ? (int) $data->location_id : 0;
 
         if ($locationId <= 0) {
@@ -89,16 +89,16 @@ class LocationPositionTags
         $this->trace('Richiamato il metodo: ' . __METHOD__);
         $this->requireAdmin();
 
-        $data  = $this->requestDataObject();
+        $data = $this->requestDataObject();
         $query = (isset($data->query) && is_object($data->query)) ? $data->query : $data;
 
         $filters = [
-            'search'      => isset($query->search) ? (string) $query->search : '',
+            'search' => isset($query->search) ? (string) $query->search : '',
             'location_id' => isset($query->location_id) ? (int) $query->location_id : 0,
-            'is_active'   => isset($query->is_active) && $query->is_active !== '' ? $query->is_active : '',
+            'is_active' => isset($query->is_active) && $query->is_active !== '' ? $query->is_active : '',
         ];
-        $limit   = isset($data->results) ? (int) $data->results : (isset($data->results_page) ? (int) $data->results_page : 25);
-        $page    = isset($data->page) ? (int) $data->page : 1;
+        $limit = isset($data->results) ? (int) $data->results : (isset($data->results_page) ? (int) $data->results_page : 25);
+        $page = isset($data->page) ? (int) $data->page : 1;
         $orderBy = isset($data->orderBy) ? (string) $data->orderBy : 'lpt.name|ASC';
 
         $result = $this->tagService()->adminList($filters, $limit, $page, $orderBy);
@@ -106,11 +106,11 @@ class LocationPositionTags
         $this->emitJson([
             'dataset' => $result['rows'],
             'properties' => [
-                'query'        => $filters['search'],
-                'page'         => $result['page'],
+                'query' => $filters['search'],
+                'page' => $result['page'],
                 'results_page' => $result['limit'],
-                'orderBy'      => $orderBy,
-                'tot'          => $result['total'],
+                'orderBy' => $orderBy,
+                'tot' => $result['total'],
             ],
         ]);
     }
@@ -121,7 +121,7 @@ class LocationPositionTags
         $this->requireAdmin();
 
         $data = $this->requestDataObject();
-        $tag  = $this->tagService()->adminCreate((array) $data);
+        $tag = $this->tagService()->adminCreate((array) $data);
         $this->emitJson(['status' => 'ok', 'dataset' => $tag]);
     }
 
@@ -131,7 +131,7 @@ class LocationPositionTags
         $this->requireAdmin();
 
         $data = $this->requestDataObject();
-        $id   = isset($data->id) ? (int) $data->id : 0;
+        $id = isset($data->id) ? (int) $data->id : 0;
         if ($id <= 0) {
             throw AppError::validation('ID tag mancante', [], 'missing_id');
         }
@@ -146,7 +146,7 @@ class LocationPositionTags
         $this->requireAdmin();
 
         $data = $this->requestDataObject();
-        $id   = isset($data->id) ? (int) $data->id : 0;
+        $id = isset($data->id) ? (int) $data->id : 0;
         if ($id <= 0) {
             throw AppError::validation('ID tag mancante', [], 'missing_id');
         }

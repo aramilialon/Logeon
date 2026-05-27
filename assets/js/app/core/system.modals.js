@@ -440,7 +440,11 @@ function initSignupModal() {
                 var formData = {};
                 var inputs = formEl.querySelectorAll('[name]');
                 for (var i = 0; i < inputs.length; i++) {
-                    formData[inputs[i].name] = inputs[i].value;
+                    if (inputs[i].type === 'checkbox') {
+                        formData[inputs[i].name] = inputs[i].checked ? 1 : 0;
+                    } else {
+                        formData[inputs[i].name] = inputs[i].value;
+                    }
                 }
                 self.onSubmit(formData);
             });
@@ -457,6 +461,8 @@ function initSignupModal() {
             var email = String(formData.email || '').trim().toLowerCase();
             var password = String(formData.password || '');
             var passwordConfirm = String(formData.password_confirm || '');
+            var acceptPrivacy = formData.accept_privacy ? 1 : 0;
+            var newsletterOptIn = formData.newsletter_opt_in ? 1 : 0;
             var passwordRules = [];
 
             if (password.length < 10) {
@@ -476,6 +482,13 @@ function initSignupModal() {
             }
             if (password.length > 72) {
                 passwordRules.push('massimo 72 caratteri');
+            }
+
+            if (!acceptPrivacy) {
+                if (window.Toast && typeof window.Toast.show === 'function') {
+                    window.Toast.show({ body: 'Devi accettare la privacy policy e i termini del servizio per continuare.', type: 'warning' });
+                }
+                return false;
             }
 
             if (email === '' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -506,7 +519,9 @@ function initSignupModal() {
             requestPost('/signup', {
                 email: email,
                 password: password,
-                password_confirm: passwordConfirm
+                password_confirm: passwordConfirm,
+                accept_privacy: acceptPrivacy,
+                newsletter_opt_in: newsletterOptIn
             }, 'signup', function (response) {
                 var success = response && response.success ? response.success : null;
                 if (window.Toast && typeof window.Toast.show === 'function') {

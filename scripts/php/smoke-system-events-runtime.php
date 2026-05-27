@@ -31,9 +31,9 @@ if (is_file($customBootstrap)) {
     require_once $customBootstrap;
 }
 
-use App\Services\SystemEventService;
-use App\Services\FactionProviderRegistry;
 use App\Contracts\FactionProviderInterface;
+use App\Services\FactionProviderRegistry;
+use App\Services\SystemEventService;
 use Core\Database\DbAdapterFactory;
 use Core\Database\MysqliDbAdapter;
 

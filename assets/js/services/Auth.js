@@ -219,6 +219,7 @@ function Auth(action, url, redirectUrl, form, extension) {
                     Storage().set('userIsAdministrator', (parseInt(user.is_administrator, 10) === 1) ? 1 : 0);
                     Storage().set('userIsModerator', (parseInt(user.is_moderator, 10) === 1) ? 1 : 0);
                     Storage().set('userIsMaster', (parseInt(user.is_master, 10) === 1) ? 1 : 0);
+                    Storage().set('userIsSuperuser', (parseInt(user.is_superuser, 10) === 1) ? 1 : 0);
                 }
             }
 

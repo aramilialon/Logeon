@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Contracts\ConflictResolverInterface;
-use App\Services\AttributeProviderRegistry;
 use Core\Database\DbAdapterFactory;
 use Core\Database\DbAdapterInterface;
 use Core\Http\AppError;

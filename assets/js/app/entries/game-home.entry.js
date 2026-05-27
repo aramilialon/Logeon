@@ -1,3 +1,4 @@
+import '../features/game/HomePage.js';
 import '../features/game/NotificationsPage.js';
 import '../features/game/NewsPage.js';
 import '../features/game/MessagesModal.js';

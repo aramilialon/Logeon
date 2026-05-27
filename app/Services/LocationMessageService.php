@@ -17,6 +17,10 @@ class LocationMessageService
     private $whisperReadStateSupported = null;
     /** @var bool|null */
     private $whisperPolicySupported = null;
+    /** @var bool|null */
+    private $locationStaffFlagsSupported = null;
+    /** @var bool|null */
+    private $locationStaffNotesSupported = null;
     /** @var array */
     private $settingsCache = [];
 
@@ -279,7 +283,17 @@ class LocationMessageService
     public function fetchMessageById($id)
     {
         return $this->firstPrepared(
-            'SELECT lm.*, c.name AS character_name, c.surname AS character_surname, c.avatar AS character_avatar, c.gender AS character_gender
+            'SELECT lm.*, c.name AS character_name, c.surname AS character_surname, c.avatar AS character_avatar, c.gender AS character_gender,
+                    (
+                        SELECT GROUP_CONCAT(ns.name ORDER BY ns.priority DESC, ns.id ASC SEPARATOR "||")
+                        FROM applied_narrative_states ans
+                        INNER JOIN narrative_states ns ON ns.id = ans.state_id
+                        WHERE ans.target_type = "character"
+                          AND ans.target_id = lm.character_id
+                          AND ans.status = "active"
+                          AND ns.is_active = 1
+                          AND ns.visible_to_players = 1
+                    ) AS visible_state_names
              FROM locations_messages lm
              JOIN characters c ON c.id = lm.character_id
              WHERE lm.id = ?
@@ -288,7 +302,7 @@ class LocationMessageService
         );
     }
 
-    public function listLocationMessages($locationId, $sinceId, $limit, $historyHours, $whisperType): array
+    public function listLocationMessages($locationId, $sinceId, $limit, $historyHours, $whisperType, bool $includeStaffFlags = false): array
     {
         $locationId = (int) $locationId;
         $sinceId = (int) $sinceId;
@@ -301,10 +315,46 @@ class LocationMessageService
         }
         $cutoffAt = date('Y-m-d H:i:s', strtotime('-' . $historyHours . ' hours'));
 
+        $staffFlagSelect = 'NULL AS staff_character_flag, NULL AS staff_character_flag_note, NULL AS staff_character_note';
+        if ($includeStaffFlags && $this->hasLocationStaffFlagsTable()) {
+            $staffNoteSelect = 'NULL';
+            if ($this->hasLocationStaffNotesTable()) {
+                $staffNoteSelect = '(SELECT n.note_text
+                    FROM location_staff_notes n
+                    WHERE n.location_id = lm.location_id
+                      AND n.author_character_id = lm.character_id
+                    ORDER BY n.date_updated DESC, n.id DESC
+                    LIMIT 1)';
+            }
+
+            $staffFlagSelect = '(SELECT f.flag
+                    FROM location_staff_character_flags f
+                    WHERE f.location_id = lm.location_id
+                      AND f.character_id = lm.character_id
+                    LIMIT 1) AS staff_character_flag,
+                (SELECT f.note_text
+                    FROM location_staff_character_flags f
+                    WHERE f.location_id = lm.location_id
+                      AND f.character_id = lm.character_id
+                    LIMIT 1) AS staff_character_flag_note,
+                ' . $staffNoteSelect . ' AS staff_character_note';
+        }
+
         $rows = [];
         if ($sinceId > 0) {
             $rows = $this->fetchPrepared(
-                'SELECT lm.*, c.name AS character_name, c.surname AS character_surname, c.avatar AS character_avatar, c.gender AS character_gender
+                'SELECT lm.*, c.name AS character_name, c.surname AS character_surname, c.avatar AS character_avatar, c.gender AS character_gender,
+                        (
+                            SELECT GROUP_CONCAT(ns.name ORDER BY ns.priority DESC, ns.id ASC SEPARATOR "||")
+                            FROM applied_narrative_states ans
+                            INNER JOIN narrative_states ns ON ns.id = ans.state_id
+                            WHERE ans.target_type = "character"
+                              AND ans.target_id = lm.character_id
+                              AND ans.status = "active"
+                              AND ns.is_active = 1
+                              AND ns.visible_to_players = 1
+                        ) AS visible_state_names,
+                        ' . $staffFlagSelect . '
                  FROM locations_messages lm
                  JOIN characters c ON c.id = lm.character_id
                  WHERE lm.location_id = ?
@@ -320,7 +370,18 @@ class LocationMessageService
         }
 
         $rows = $this->fetchPrepared(
-            'SELECT lm.*, c.name AS character_name, c.surname AS character_surname, c.avatar AS character_avatar, c.gender AS character_gender
+            'SELECT lm.*, c.name AS character_name, c.surname AS character_surname, c.avatar AS character_avatar, c.gender AS character_gender,
+                    (
+                        SELECT GROUP_CONCAT(ns.name ORDER BY ns.priority DESC, ns.id ASC SEPARATOR "||")
+                        FROM applied_narrative_states ans
+                        INNER JOIN narrative_states ns ON ns.id = ans.state_id
+                        WHERE ans.target_type = "character"
+                          AND ans.target_id = lm.character_id
+                          AND ans.status = "active"
+                          AND ns.is_active = 1
+                          AND ns.visible_to_players = 1
+                    ) AS visible_state_names,
+                    ' . $staffFlagSelect . '
              FROM locations_messages lm
              JOIN characters c ON c.id = lm.character_id
              WHERE lm.location_id = ?
@@ -332,6 +393,52 @@ class LocationMessageService
         );
 
         return array_reverse($rows ?: []);
+    }
+
+    public function hasLocationStaffFlagsTable(): bool
+    {
+        if ($this->locationStaffFlagsSupported !== null) {
+            return $this->locationStaffFlagsSupported;
+        }
+
+        try {
+            $row = $this->firstPrepared(
+                'SELECT 1
+                 FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = ?
+                 LIMIT 1',
+                ['location_staff_character_flags'],
+            );
+            $this->locationStaffFlagsSupported = !empty($row);
+        } catch (\Throwable $error) {
+            $this->locationStaffFlagsSupported = false;
+        }
+
+        return $this->locationStaffFlagsSupported;
+    }
+
+    public function hasLocationStaffNotesTable(): bool
+    {
+        if ($this->locationStaffNotesSupported !== null) {
+            return $this->locationStaffNotesSupported;
+        }
+
+        try {
+            $row = $this->firstPrepared(
+                'SELECT 1
+                 FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = ?
+                 LIMIT 1',
+                ['location_staff_notes'],
+            );
+            $this->locationStaffNotesSupported = !empty($row);
+        } catch (\Throwable $error) {
+            $this->locationStaffNotesSupported = false;
+        }
+
+        return $this->locationStaffNotesSupported;
     }
 
     public function listWhisperThread($locationId, $characterId, $recipientId, $whisperType, $limit = 100): array
@@ -919,6 +1026,51 @@ class LocationMessageService
             [$locationId],
         );
         return $rows;
+    }
+
+    public function getCharactersInLocation(int $locationId, int $limit = 200): array
+    {
+        if ($locationId <= 0) {
+            return [];
+        }
+
+        $limit = max(1, min(500, $limit));
+
+        $rows = $this->fetchPrepared(
+            'SELECT id, name, surname
+             FROM characters
+             WHERE last_location = ?
+             ORDER BY id ASC
+             LIMIT ?',
+            [$locationId, $limit],
+        );
+
+        return $rows ?: [];
+    }
+
+    public function findCharacterLabelById(int $characterId): string
+    {
+        if ($characterId <= 0) {
+            return '';
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT name, surname
+             FROM characters
+             WHERE id = ?
+             LIMIT 1',
+            [$characterId],
+        );
+
+        if (empty($row)) {
+            return '';
+        }
+
+        $name = trim((string) ($row->name ?? ''));
+        $surname = trim((string) ($row->surname ?? ''));
+        $label = trim($name . ' ' . $surname);
+
+        return $label;
     }
 
     public function insertMessage(

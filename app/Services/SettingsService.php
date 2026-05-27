@@ -6,6 +6,7 @@ namespace App\Services;
 
 use Core\Database\DbAdapterFactory;
 use Core\Database\DbAdapterInterface;
+use Core\FrontendAssetVersion;
 use Core\Http\AppError;
 use Core\SessionStore;
 
@@ -133,6 +134,7 @@ class SettingsService
         $appOauthClientId = trim((string) ($appOauth['client_id'] ?? ''));
         $appOauthClientSecret = trim((string) ($appOauth['client_secret'] ?? ''));
         $appOauthRedirectUri = trim((string) ($appOauth['redirect_uri'] ?? ''));
+        $docsViewModeDefaults = $this->docsViewModeDefaults();
 
         $dataset = [
             'upload_max_mb' => 5,
@@ -158,15 +160,12 @@ class SettingsService
             'rate_location_chat_window_seconds' => 15,
             'rate_location_whisper_limit' => 6,
             'rate_location_whisper_window_seconds' => 20,
-            'storyboard_view_mode' => 'navigation',
-            'rules_view_mode' => 'navigation',
-            'how_to_play_view_mode' => 'navigation',
-            'archetypes_view_mode' => 'navigation',
             'auth_google_enabled' => $appOauthEnabled,
             'auth_google_client_id' => $appOauthClientId,
             'auth_google_client_secret' => $appOauthClientSecret,
             'auth_google_redirect_uri' => $appOauthRedirectUri,
         ];
+        $dataset = array_merge($dataset, $docsViewModeDefaults);
 
         $settingsRows = $this->fetchPrepared(
             "SELECT `key`, `value` FROM sys_settings WHERE `key` IN ('upload_max_mb', 'upload_max_concurrency', 'upload_max_avatar_mb', 'upload_max_audio_mb')",
@@ -205,11 +204,7 @@ class SettingsService
                 'auth_google_client_secret',
                 'auth_google_redirect_uri',
                 'multi_character_enabled',
-                'multi_character_max_per_user',
-                'storyboard_view_mode',
-                'rules_view_mode',
-                'how_to_play_view_mode',
-                'archetypes_view_mode'
+                'multi_character_max_per_user'
             )",
         );
 
@@ -234,10 +229,6 @@ class SettingsService
                     $row->key === 'auth_google_client_id'
                     || $row->key === 'auth_google_client_secret'
                     || $row->key === 'auth_google_redirect_uri'
-                    || $row->key === 'storyboard_view_mode'
-                    || $row->key === 'rules_view_mode'
-                    || $row->key === 'how_to_play_view_mode'
-                    || $row->key === 'archetypes_view_mode'
                 ) {
                     $dataset[$row->key] = (string) $row->value;
                     continue;
@@ -245,6 +236,7 @@ class SettingsService
                 $dataset[$row->key] = (int) $row->value;
             }
         }
+        $dataset = $this->loadDocsViewModesFromConfigs($dataset);
 
         return $this->normalizeUploadDataset($dataset);
     }
@@ -282,15 +274,7 @@ class SettingsService
         $dataset['auth_google_client_secret'] = trim((string) ($dataset['auth_google_client_secret'] ?? ''));
         $dataset['auth_google_redirect_uri'] = trim((string) ($dataset['auth_google_redirect_uri'] ?? ''));
 
-        $allowedViewModes = ['navigation', 'monolithic'];
-        $dataset['storyboard_view_mode'] = in_array($dataset['storyboard_view_mode'] ?? '', $allowedViewModes, true)
-            ? $dataset['storyboard_view_mode'] : 'navigation';
-        $dataset['rules_view_mode'] = in_array($dataset['rules_view_mode'] ?? '', $allowedViewModes, true)
-            ? $dataset['rules_view_mode'] : 'navigation';
-        $dataset['how_to_play_view_mode'] = in_array($dataset['how_to_play_view_mode'] ?? '', $allowedViewModes, true)
-            ? $dataset['how_to_play_view_mode'] : 'navigation';
-        $dataset['archetypes_view_mode'] = in_array($dataset['archetypes_view_mode'] ?? '', $allowedViewModes, true)
-            ? $dataset['archetypes_view_mode'] : 'navigation';
+        $dataset = $this->normalizeDocsViewModes($dataset);
 
         if ((int) $dataset['location_invite_expiry_hours'] < 0) {
             $dataset['location_invite_expiry_hours'] = 48;
@@ -532,34 +516,109 @@ class SettingsService
         SessionStore::set('config_rate_location_whisper_window_seconds', (int) $dataset['rate_location_whisper_window_seconds']);
         SessionStore::set('config_multi_character_enabled', (int) ($dataset['multi_character_enabled'] ?? 0));
         SessionStore::set('config_multi_character_max_per_user', (int) ($dataset['multi_character_max_per_user'] ?? 1));
+        if (isset($dataset['location_chat_max_chars'])) {
+            SessionStore::set('config_location_chat_max_chars', (int) $dataset['location_chat_max_chars']);
+        }
+        if (isset($dataset['default_dice_faces'])) {
+            SessionStore::set('config_default_dice_faces', (int) $dataset['default_dice_faces']);
+        }
     }
 
     // ─── Docs View Modes ─────────────────────────────────────────────────────
 
     /**
-     * @return array{storyboard_view_mode: string, rules_view_mode: string, how_to_play_view_mode: string, archetypes_view_mode: string}
+     * @return array<string, string>
      */
-    public function getDocsViewModes(): array
+    private function docsViewModeDefaults(): array
     {
-        $allowed = ['navigation', 'monolithic'];
         $defaults = [
             'storyboard_view_mode' => 'navigation',
             'rules_view_mode' => 'navigation',
             'how_to_play_view_mode' => 'navigation',
-            'archetypes_view_mode' => 'navigation',
         ];
 
-        $rows = $this->fetchPrepared(
-            "SELECT `key`, `value` FROM sys_configs WHERE `key` IN ('storyboard_view_mode', 'rules_view_mode', 'how_to_play_view_mode', 'archetypes_view_mode')",
-        );
+        $extra = \Core\Hooks::filter('settings.docs_view_modes.defaults', []);
+        if (!is_array($extra)) {
+            $extra = [];
+        }
 
-        foreach ($rows as $row) {
-            if (isset($defaults[$row->key]) && in_array($row->value, $allowed, true)) {
-                $defaults[$row->key] = $row->value;
+        foreach ($extra as $key => $value) {
+            $name = strtolower(trim((string) $key));
+            if ($name === '' || !preg_match('/^[a-z0-9_]+_view_mode$/', $name)) {
+                continue;
             }
+            $mode = strtolower(trim((string) $value));
+            $defaults[$name] = in_array($mode, ['navigation', 'monolithic'], true) ? $mode : 'navigation';
         }
 
         return $defaults;
+    }
+
+    /**
+     * @param array<string, mixed> $dataset
+     * @return array<string, mixed>
+     */
+    private function normalizeDocsViewModes(array $dataset): array
+    {
+        $allowed = ['navigation', 'monolithic'];
+        foreach ($this->docsViewModeDefaults() as $key => $fallback) {
+            $value = strtolower(trim((string) ($dataset[$key] ?? '')));
+            $dataset[$key] = in_array($value, $allowed, true) ? $value : $fallback;
+        }
+
+        return $dataset;
+    }
+
+    /**
+     * @param array<string, mixed> $dataset
+     * @return array<string, mixed>
+     */
+    private function loadDocsViewModesFromConfigs(array $dataset): array
+    {
+        $defaults = $this->docsViewModeDefaults();
+        $keys = array_keys($defaults);
+        if ($keys === []) {
+            return $dataset;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($keys), '?'));
+        $rows = $this->fetchPrepared(
+            "SELECT `key`, `value` FROM sys_configs WHERE `key` IN ($placeholders)",
+            $keys,
+        );
+
+        foreach ($rows as $row) {
+            $key = (string) ($row->key ?? '');
+            if (!array_key_exists($key, $defaults)) {
+                continue;
+            }
+            $value = strtolower(trim((string) ($row->value ?? '')));
+            if (in_array($value, ['navigation', 'monolithic'], true)) {
+                $dataset[$key] = $value;
+            }
+        }
+
+        foreach ($defaults as $key => $fallback) {
+            if (!isset($dataset[$key])) {
+                $dataset[$key] = $fallback;
+            }
+        }
+
+        return $this->normalizeDocsViewModes($dataset);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getDocsViewModes(): array
+    {
+        $dataset = $this->loadDocsViewModesFromConfigs([]);
+        $normalized = [];
+        foreach ($this->docsViewModeDefaults() as $key => $_default) {
+            $normalized[$key] = (string) ($dataset[$key] ?? $_default);
+        }
+
+        return $normalized;
     }
 
     // ─── Admin Settings Page ─────────────────────────────────────────────────
@@ -715,8 +774,6 @@ class SettingsService
         $runtimeConfig = $this->runtimeConfig();
         $inventoryConfigRaw = $runtimeConfig['inventory'] ?? [];
         $inventoryConfig = is_array($inventoryConfigRaw) ? $inventoryConfigRaw : [];
-        $frontendConfigRaw = $appConfig['frontend'] ?? [];
-        $frontendConfig = is_array($frontendConfigRaw) ? $frontendConfigRaw : [];
 
         // Legge da sys_settings con fallback a config
         $inventoryCapacityFallback = isset($inventoryConfig['capacity_max'])
@@ -737,9 +794,28 @@ class SettingsService
         $base['inventory_stack_max'] = ($inventoryStack >= 1) ? $inventoryStack : $inventoryStackFallback;
         $base['location_chat_history_hours'] = ($chatHistory >= 1 && $chatHistory <= 24) ? $chatHistory : $chatHistoryFallback;
         $base['location_whisper_retention_hours'] = ($whisperRetention >= 1 && $whisperRetention <= 168) ? $whisperRetention : $whisperRetentionFallback;
+        $base['location_chat_max_chars'] = $this->getConfigInt('location_chat_max_chars', 0);
+        $base['default_dice_faces'] = $this->getConfigInt('default_dice_faces', 20);
 
         $base['narrative_delegation_enabled'] = $this->getConfigInt('narrative_delegation_enabled', 0);
         $base['narrative_delegation_level'] = $this->getConfigInt('narrative_delegation_level', 0);
+
+        // SMTP
+        $base['smtp_enabled'] = $this->getConfigInt('mail_enabled', $this->getConfigInt('smtp_enabled', 0));
+        $base['smtp_host'] = $this->getConfigString('mail_smtp_host', $this->getConfigString('smtp_host', ''));
+        $base['smtp_port'] = $this->getConfigInt('mail_smtp_port', $this->getConfigInt('smtp_port', 587));
+        $base['smtp_encryption'] = $this->getConfigString('mail_smtp_encryption', $this->getConfigString('smtp_encryption', 'tls'));
+        $base['smtp_username'] = $this->getConfigString('mail_smtp_username', $this->getConfigString('smtp_username', ''));
+        $base['smtp_password'] = $this->getConfigString('mail_smtp_password', $this->getConfigString('smtp_password', '')) !== '' ? '********' : '';
+        $base['smtp_from_email'] = $this->getConfigString('mail_from_email', $this->getConfigString('smtp_from_email', (string) ($appConfig['support_email'] ?? '')));
+        $base['smtp_from_name'] = $this->getConfigString('mail_from_name', $this->getConfigString('smtp_from_name', (string) ($appConfig['support_name'] ?? '')));
+        $base['mail_smtp_timeout'] = $this->getConfigInt('mail_smtp_timeout', 30);
+        $base['mail_batch_size'] = $this->getConfigInt('mail_batch_size', 10);
+        $base['mail_rate_per_minute'] = $this->getConfigInt('mail_rate_per_minute', 60);
+        $base['mail_retry_attempts'] = $this->getConfigInt('mail_retry_attempts', 3);
+
+        // Account
+        $base['character_delete_days'] = $this->getConfigInt('character_delete_days', 10);
         $base['pwa_enabled'] = $this->getConfigInt('pwa_enabled', $this->normalizeFlag($pwaConfig['enabled'] ?? false));
         $base['pwa_name'] = $this->getConfigString(
             'pwa_name',
@@ -794,13 +870,7 @@ class SettingsService
             $this->normalizeOptionalPwaAssetPath($pwaConfig['icon_maskable_path'] ?? ''),
         );
         $base['pwa_cache_enabled'] = $this->getConfigInt('pwa_cache_enabled', $this->normalizeFlag($pwaConfig['cache_enabled'] ?? true));
-        $base['pwa_cache_version'] = $this->getConfigString(
-            'pwa_cache_version',
-            $this->normalizePwaText(
-                $pwaConfig['cache_version'] ?? ($frontendConfig['pilot_bundle_version'] ?? date('Ymd')),
-                64,
-            ),
-        );
+        $base['pwa_cache_version'] = FrontendAssetVersion::resolve($appConfig);
 
         return $base;
     }
@@ -842,15 +912,29 @@ class SettingsService
             $this->failValidation('Ore retention sussurri non valide', 'location_whisper_retention_hours_invalid');
         }
 
+        $chatMaxChars = isset($payload['location_chat_max_chars']) ? (int) $payload['location_chat_max_chars'] : 0;
+        if ($chatMaxChars < 0 || $chatMaxChars > 10000) {
+            $this->failValidation('Limite caratteri chat non valido', 'location_chat_max_chars_invalid');
+        }
+
+        $defaultDiceFaces = isset($payload['default_dice_faces']) ? (int) $payload['default_dice_faces'] : 20;
+        if ($defaultDiceFaces < 2 || $defaultDiceFaces > 1000) {
+            $this->failValidation('Facce dado default non valide', 'default_dice_faces_invalid');
+        }
+
         $this->upsertSysSetting('inventory_capacity_max', (string) $capacityMax);
         $this->upsertSysSetting('inventory_stack_max', (string) $stackMax);
         $this->upsertSysSetting('location_chat_history_hours', (string) $chatHistoryHours);
         $this->upsertSysSetting('location_whisper_retention_hours', (string) $whisperRetentionHours);
+        $this->upsertSysConfig('location_chat_max_chars', (string) $chatMaxChars, 'number');
+        $this->upsertSysConfig('default_dice_faces', (string) $defaultDiceFaces, 'number');
 
         $dataset['inventory_capacity_max'] = $capacityMax;
         $dataset['inventory_stack_max'] = $stackMax;
         $dataset['location_chat_history_hours'] = $chatHistoryHours;
         $dataset['location_whisper_retention_hours'] = $whisperRetentionHours;
+        $dataset['location_chat_max_chars'] = $chatMaxChars;
+        $dataset['default_dice_faces'] = $defaultDiceFaces;
 
         // Multi-personaggio
         $multiCharacterEnabled = isset($payload['multi_character_enabled']) ? (int) $payload['multi_character_enabled'] : 0;
@@ -918,7 +1002,6 @@ class SettingsService
         $pwaIconMaskablePath = $this->normalizeOptionalPwaAssetPath($payload['pwa_icon_maskable_path'] ?? '');
         $pwaCacheEnabled = isset($payload['pwa_cache_enabled']) ? (int) $payload['pwa_cache_enabled'] : 0;
         $pwaCacheEnabled = ($pwaCacheEnabled === 1) ? 1 : 0;
-        $pwaCacheVersion = $this->normalizePwaText($payload['pwa_cache_version'] ?? '', 64);
 
         if (!$this->isValidPwaPath($pwaStartPath)) {
             $this->failValidation('Start path PWA non valido', 'pwa_start_path_invalid');
@@ -950,10 +1033,6 @@ class SettingsService
         if (!$this->isValidPwaAssetPath($pwaIconMaskablePath)) {
             $this->failValidation('Icona PWA maskable non valida', 'pwa_icon_maskable_path_invalid');
         }
-        if ($pwaCacheVersion === '' || preg_match('/^[A-Za-z0-9._-]{1,64}$/', $pwaCacheVersion) !== 1) {
-            $this->failValidation('Versione cache PWA non valida', 'pwa_cache_version_invalid');
-        }
-
         $this->upsertSysConfig('pwa_enabled', (string) $pwaEnabled, 'number');
         $this->upsertSysConfig('pwa_name', $pwaName, 'string');
         $this->upsertSysConfig('pwa_short_name', $pwaShortName, 'string');
@@ -969,7 +1048,6 @@ class SettingsService
         $this->upsertSysConfig('pwa_icon_512_path', $pwaIcon512Path, 'string');
         $this->upsertSysConfig('pwa_icon_maskable_path', $pwaIconMaskablePath, 'string');
         $this->upsertSysConfig('pwa_cache_enabled', (string) $pwaCacheEnabled, 'number');
-        $this->upsertSysConfig('pwa_cache_version', $pwaCacheVersion, 'string');
 
         $dataset['pwa_enabled'] = $pwaEnabled;
         $dataset['pwa_name'] = $pwaName;
@@ -986,25 +1064,15 @@ class SettingsService
         $dataset['pwa_icon_512_path'] = $pwaIcon512Path;
         $dataset['pwa_icon_maskable_path'] = $pwaIconMaskablePath;
         $dataset['pwa_cache_enabled'] = $pwaCacheEnabled;
-        $dataset['pwa_cache_version'] = $pwaCacheVersion;
+        $dataset['pwa_cache_version'] = FrontendAssetVersion::resolve($this->appConfig());
 
         $allowedViewModes = ['navigation', 'monolithic'];
-        $storyboardViewMode = in_array($payload['storyboard_view_mode'] ?? '', $allowedViewModes, true)
-            ? $payload['storyboard_view_mode'] : 'navigation';
-        $rulesViewMode = in_array($payload['rules_view_mode'] ?? '', $allowedViewModes, true)
-            ? $payload['rules_view_mode'] : 'navigation';
-        $howToPlayViewMode = in_array($payload['how_to_play_view_mode'] ?? '', $allowedViewModes, true)
-            ? $payload['how_to_play_view_mode'] : 'navigation';
-        $archetypesViewMode = in_array($payload['archetypes_view_mode'] ?? '', $allowedViewModes, true)
-            ? $payload['archetypes_view_mode'] : 'navigation';
-        $this->upsertSysConfig('storyboard_view_mode', $storyboardViewMode, 'string');
-        $this->upsertSysConfig('rules_view_mode', $rulesViewMode, 'string');
-        $this->upsertSysConfig('how_to_play_view_mode', $howToPlayViewMode, 'string');
-        $this->upsertSysConfig('archetypes_view_mode', $archetypesViewMode, 'string');
-        $dataset['storyboard_view_mode'] = $storyboardViewMode;
-        $dataset['rules_view_mode'] = $rulesViewMode;
-        $dataset['how_to_play_view_mode'] = $howToPlayViewMode;
-        $dataset['archetypes_view_mode'] = $archetypesViewMode;
+        foreach ($this->docsViewModeDefaults() as $key => $fallback) {
+            $incoming = strtolower(trim((string) ($payload[$key] ?? '')));
+            $mode = in_array($incoming, $allowedViewModes, true) ? $incoming : $fallback;
+            $this->upsertSysConfig($key, $mode, 'string');
+            $dataset[$key] = $mode;
+        }
 
         $ndEnabled = isset($payload['narrative_delegation_enabled']) ? (int) $payload['narrative_delegation_enabled'] : 0;
         $ndEnabled = ($ndEnabled === 1) ? 1 : 0;
@@ -1018,6 +1086,95 @@ class SettingsService
         $dataset['narrative_delegation_level'] = $ndLevel;
         SessionStore::set('config_narrative_delegation_enabled', $ndEnabled);
         SessionStore::set('config_narrative_delegation_level', $ndLevel);
+
+        // Account deletion days
+        $characterDeleteDays = isset($payload['character_delete_days']) ? (int) $payload['character_delete_days'] : 10;
+        if ($characterDeleteDays < 1 || $characterDeleteDays > 365) {
+            $this->failValidation('Giorni cancellazione personaggio non validi', 'character_delete_days_invalid');
+        }
+        $this->upsertSysConfig('character_delete_days', (string) $characterDeleteDays, 'number');
+        $dataset['character_delete_days'] = $characterDeleteDays;
+
+        // SMTP
+        $smtpEnabled = isset($payload['smtp_enabled']) ? ((int) $payload['smtp_enabled'] === 1 ? 1 : 0) : 0;
+        $smtpHost = trim((string) ($payload['smtp_host'] ?? ''));
+        $smtpPort = isset($payload['smtp_port']) ? (int) $payload['smtp_port'] : 587;
+        if ($smtpPort < 1 || $smtpPort > 65535) {
+            $this->failValidation('Porta SMTP non valida', 'smtp_port_invalid');
+        }
+        $smtpEncryption = strtolower(trim((string) ($payload['smtp_encryption'] ?? 'tls')));
+        if (!in_array($smtpEncryption, ['none', 'tls', 'ssl'], true)) {
+            $smtpEncryption = 'tls';
+        }
+        $smtpUsername = trim((string) ($payload['smtp_username'] ?? ''));
+        $smtpFromEmail = trim((string) ($payload['smtp_from_email'] ?? ''));
+        $smtpFromName = trim((string) ($payload['smtp_from_name'] ?? ''));
+        $mailSmtpTimeout = isset($payload['mail_smtp_timeout']) ? (int) $payload['mail_smtp_timeout'] : 30;
+        $mailBatchSize = isset($payload['mail_batch_size']) ? (int) $payload['mail_batch_size'] : 10;
+        $mailRatePerMinute = isset($payload['mail_rate_per_minute']) ? (int) $payload['mail_rate_per_minute'] : 60;
+        $mailRetryAttempts = isset($payload['mail_retry_attempts']) ? (int) $payload['mail_retry_attempts'] : 3;
+
+        if ($smtpFromEmail !== '' && filter_var($smtpFromEmail, FILTER_VALIDATE_EMAIL) === false) {
+            $this->failValidation('Indirizzo mittente SMTP non valido', 'smtp_from_email_invalid');
+        }
+        if ($smtpEnabled === 1 && $smtpHost === '') {
+            $this->failValidation('Host SMTP obbligatorio quando SMTP e abilitato', 'smtp_host_required');
+        }
+        if ($mailSmtpTimeout < 5 || $mailSmtpTimeout > 120) {
+            $this->failValidation('Timeout SMTP non valido', 'mail_smtp_timeout_invalid');
+        }
+        if ($mailBatchSize < 1 || $mailBatchSize > 100) {
+            $this->failValidation('Batch queue non valido', 'mail_batch_size_invalid');
+        }
+        if ($mailRatePerMinute < 1 || $mailRatePerMinute > 1000) {
+            $this->failValidation('Rate limit email non valido', 'mail_rate_per_minute_invalid');
+        }
+        if ($mailRetryAttempts < 1 || $mailRetryAttempts > 10) {
+            $this->failValidation('Numero retry email non valido', 'mail_retry_attempts_invalid');
+        }
+
+        $this->upsertSysConfig('smtp_enabled', (string) $smtpEnabled, 'number');
+        $this->upsertSysConfig('smtp_host', $smtpHost, 'string');
+        $this->upsertSysConfig('smtp_port', (string) $smtpPort, 'number');
+        $this->upsertSysConfig('smtp_encryption', $smtpEncryption, 'string');
+        $this->upsertSysConfig('smtp_username', $smtpUsername, 'string');
+        $this->upsertSysConfig('smtp_from_email', $smtpFromEmail, 'string');
+        $this->upsertSysConfig('smtp_from_name', $smtpFromName, 'string');
+        $this->upsertSysConfig('mail_enabled', (string) $smtpEnabled, 'number');
+        $this->upsertSysConfig('mail_transport', $smtpEnabled === 1 ? 'smtp' : 'native', 'string');
+        $this->upsertSysConfig('mail_smtp_host', $smtpHost, 'string');
+        $this->upsertSysConfig('mail_smtp_port', (string) $smtpPort, 'number');
+        $this->upsertSysConfig('mail_smtp_encryption', $smtpEncryption, 'string');
+        $this->upsertSysConfig('mail_smtp_username', $smtpUsername, 'string');
+        $this->upsertSysConfig('mail_from_email', $smtpFromEmail, 'string');
+        $this->upsertSysConfig('mail_from_name', $smtpFromName, 'string');
+        $this->upsertSysConfig('mail_smtp_timeout', (string) $mailSmtpTimeout, 'number');
+        $this->upsertSysConfig('mail_batch_size', (string) $mailBatchSize, 'number');
+        $this->upsertSysConfig('mail_rate_per_minute', (string) $mailRatePerMinute, 'number');
+        $this->upsertSysConfig('mail_retry_attempts', (string) $mailRetryAttempts, 'number');
+
+        // Save password only if not the placeholder
+        $smtpPasswordRaw = (string) ($payload['smtp_password'] ?? '');
+        if ($smtpPasswordRaw !== '********' && $smtpPasswordRaw !== '') {
+            $this->upsertSysConfig('smtp_password', $smtpPasswordRaw, 'string');
+            $this->upsertSysConfig('mail_smtp_password', $smtpPasswordRaw, 'string');
+        } elseif ($smtpPasswordRaw === '') {
+            $this->upsertSysConfig('smtp_password', '', 'string');
+            $this->upsertSysConfig('mail_smtp_password', '', 'string');
+        }
+
+        $dataset['smtp_enabled'] = $smtpEnabled;
+        $dataset['smtp_host'] = $smtpHost;
+        $dataset['smtp_port'] = $smtpPort;
+        $dataset['smtp_encryption'] = $smtpEncryption;
+        $dataset['smtp_username'] = $smtpUsername;
+        $dataset['smtp_from_email'] = $smtpFromEmail;
+        $dataset['smtp_from_name'] = $smtpFromName;
+        $dataset['smtp_password'] = '********';
+        $dataset['mail_smtp_timeout'] = $mailSmtpTimeout;
+        $dataset['mail_batch_size'] = $mailBatchSize;
+        $dataset['mail_rate_per_minute'] = $mailRatePerMinute;
+        $dataset['mail_retry_attempts'] = $mailRetryAttempts;
 
         return $dataset;
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Logeon\Attributes\Services;
 
+use App\Services\CharacterAttributeModifierRegistry;
 use Core\Http\AppError;
 use Core\SessionStore;
 
@@ -83,7 +84,7 @@ class CharacterAttributesFacadeService extends CharacterAttributesBaseService
 
         if (!$this->isSchemaReady()) {
             throw AppError::validation(
-                'Schema attributi non disponibile: allinea il database con database/logeon_db_core.sql',
+                'Schema attributi non disponibile: applica le migration del modulo logeon.attributes',
                 [],
                 'attributes_system_disabled',
             );
@@ -230,6 +231,142 @@ class CharacterAttributesFacadeService extends CharacterAttributesBaseService
             'updated' => $updated,
             'recomputed' => $recomputed,
         ];
+    }
+
+    public function getAttributeValue(int $characterId, string $attributeSlug): ?float
+    {
+        $attributeSlug = trim($attributeSlug);
+        if ($characterId <= 0 || $attributeSlug === '') {
+            return null;
+        }
+
+        try {
+            $payload = $this->listCharacterValues($characterId);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        $rows = $payload['dataset'] ?? [];
+        if (!is_array($rows)) {
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            if (!is_object($row)) {
+                continue;
+            }
+            if (trim((string) ($row->slug ?? '')) !== $attributeSlug) {
+                continue;
+            }
+
+            if (isset($row->effective_value) && $row->effective_value !== null && $row->effective_value !== '') {
+                return (float) $row->effective_value;
+            }
+
+            if (isset($row->default_value) && $row->default_value !== null && $row->default_value !== '') {
+                return (float) $row->default_value;
+            }
+
+            if (isset($row->fallback_value) && $row->fallback_value !== null && $row->fallback_value !== '') {
+                return (float) $row->fallback_value;
+            }
+
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function getAttributeBreakdown(int $characterId, string $attributeSlug): array
+    {
+        $attributeSlug = trim($attributeSlug);
+        if ($characterId <= 0 || $attributeSlug === '') {
+            return [];
+        }
+
+        $payload = $this->listCharacterValues($characterId);
+        $rows = $payload['dataset'] ?? [];
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $modifiers = CharacterAttributeModifierRegistry::collect($characterId);
+        $modifiersBySlug = [];
+        foreach ($modifiers as $modifier) {
+            $slug = trim((string) ($modifier['attribute_slug'] ?? ''));
+            if ($slug === '') {
+                continue;
+            }
+            if (!isset($modifiersBySlug[$slug])) {
+                $modifiersBySlug[$slug] = [];
+            }
+            $modifiersBySlug[$slug][] = $modifier;
+        }
+
+        foreach ($rows as $row) {
+            if (!is_object($row)) {
+                continue;
+            }
+            if (trim((string) ($row->slug ?? '')) !== $attributeSlug) {
+                continue;
+            }
+
+            $externalModifiers = $modifiersBySlug[$attributeSlug] ?? [];
+            $externalDelta = 0.0;
+            foreach ($externalModifiers as $modifier) {
+                $externalDelta += (float) ($modifier['value'] ?? 0.0);
+            }
+
+            $finalValue = null;
+            if (isset($row->effective_value) && $row->effective_value !== null && $row->effective_value !== '') {
+                $finalValue = (float) $row->effective_value;
+            } elseif (isset($row->default_value) && $row->default_value !== null && $row->default_value !== '') {
+                $finalValue = (float) $row->default_value;
+            } elseif (isset($row->fallback_value) && $row->fallback_value !== null && $row->fallback_value !== '') {
+                $finalValue = (float) $row->fallback_value;
+            }
+
+            return [
+                'attribute' => (string) ($row->slug ?? ''),
+                'label' => (string) ($row->name ?? ''),
+                'base_value' => $row->base_value ?? null,
+                'default_value' => $row->default_value ?? null,
+                'fallback_value' => $row->fallback_value ?? null,
+                'manual_override' => $row->override_value ?? null,
+                'value_source' => (string) ($row->value_source ?? ''),
+                'resolved_value_before_external' => $finalValue !== null ? round($finalValue - $externalDelta, 4) : null,
+                'external_modifiers' => $externalModifiers,
+                'external_delta' => round($externalDelta, 4),
+                'final_value' => $finalValue,
+            ];
+        }
+
+        return [];
+    }
+
+    public function meetsRequirement(
+        int $characterId,
+        string $attributeSlug,
+        string $operator,
+        int|float $requiredValue
+    ): bool {
+        $currentValue = $this->getAttributeValue($characterId, $attributeSlug);
+        if ($currentValue === null) {
+            return false;
+        }
+
+        return match (trim($operator)) {
+            '=' => $currentValue == $requiredValue,
+            '!=' => $currentValue != $requiredValue,
+            '>' => $currentValue > $requiredValue,
+            '>=' => $currentValue >= $requiredValue,
+            '<' => $currentValue < $requiredValue,
+            '<=' => $currentValue <= $requiredValue,
+            default => false,
+        };
     }
 
     public function recomputeCharacter(int $characterId): array

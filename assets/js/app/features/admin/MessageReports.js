@@ -347,20 +347,35 @@ var AdminMessageReports = {
                 });
             return;
         }
-        if (typeof globalWindow.$ === 'function') {
+        if (typeof globalWindow.fetch === 'function') {
             var meta = document.querySelector('meta[name="csrf-token"]');
             var csrfToken = meta ? (meta.getAttribute('content') || '') : '';
-            globalWindow.$.ajax({
-                url: url,
+            var body = new URLSearchParams();
+            body.set('data', JSON.stringify(payload));
+            globalWindow.fetch(url, {
                 method: 'POST',
                 headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken },
-                data: { data: JSON.stringify(payload) },
-                success: function (r) { if (typeof onSuccess === 'function') { onSuccess(r); } },
-                error: function () {
+                body: body.toString()
+            }).then(function (response) {
+                return response.text().then(function (text) {
+                    var parsed = {};
+                    try { parsed = text ? JSON.parse(text) : {}; } catch (error) { parsed = {}; }
+                    if (!response.ok) {
+                        throw parsed;
+                    }
+                    return parsed;
+                });
+            }).then(function (r) {
+                if (typeof onSuccess === 'function') { onSuccess(r); }
+            }).catch(function (err) {
                     self.showToast('Errore nella richiesta.', 'error');
-                    if (typeof onError === 'function') { onError(); }
-                }
-            });
+                    if (typeof onError === 'function') { onError(err); }
+                });
+            return;
+        }
+
+        if (typeof onError === 'function') {
+            onError(new Error('http_unavailable'));
         }
     },
 

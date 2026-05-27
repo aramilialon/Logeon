@@ -5,10 +5,13 @@ declare(strict_types=1);
 use App\Services\ChatCommandService;
 use App\Services\ConflictChatBridgeService;
 use App\Services\CurrencyService;
+use App\Services\LocationAmbientService;
 use App\Services\LocationDropService;
 use App\Services\LocationMessageService;
+use App\Services\NarrativeStateApplicationService;
 use App\Services\NarrativeCapabilityService;
 use App\Services\NarrativeNpcService;
+use App\Services\UserService;
 use Core\Filter;
 use Core\Hooks;
 use Core\Http\ApiResponse;
@@ -40,8 +43,27 @@ class LocationMessages
     private $narrativeCapabilityService = null;
     /** @var NarrativeNpcService|null */
     private $narrativeNpcService = null;
+    /** @var LocationAmbientService|null */
+    private $locationAmbientService = null;
+    /** @var UserService|null */
+    private $userService = null;
+    /** @var NarrativeStateApplicationService|null */
+    private $narrativeStateApplicationService = null;
     /** @var LoggerInterface|null */
     private $logger = null;
+
+    /** @return array<string, mixed> */
+    private function config(): array
+    {
+        if (!defined('CONFIG')) {
+            return [];
+        }
+
+        /** @var array<string, mixed> $config */
+        $config = constant('CONFIG');
+
+        return $config;
+    }
 
     public function setLogger(LoggerInterface $logger = null)
     {
@@ -52,6 +74,18 @@ class LocationMessages
     public function setLocationMessageService(LocationMessageService $locationMessageService = null)
     {
         $this->locationMessageService = $locationMessageService;
+        return $this;
+    }
+
+    public function setUserService(UserService $userService = null)
+    {
+        $this->userService = $userService;
+        return $this;
+    }
+
+    public function setNarrativeStateApplicationService(NarrativeStateApplicationService $service = null)
+    {
+        $this->narrativeStateApplicationService = $service;
         return $this;
     }
 
@@ -86,9 +120,68 @@ class LocationMessages
         return $this->locationMessageService;
     }
 
-    private function failValidation($message, string $errorCode = 'validation_error')
+    private function locationAmbientService(): LocationAmbientService
     {
-        throw AppError::validation((string) $message, [], $errorCode);
+        if ($this->locationAmbientService instanceof LocationAmbientService) {
+            return $this->locationAmbientService;
+        }
+
+        $this->locationAmbientService = new LocationAmbientService();
+        return $this->locationAmbientService;
+    }
+
+    private function userService(): UserService
+    {
+        if ($this->userService instanceof UserService) {
+            return $this->userService;
+        }
+
+        $this->userService = new UserService();
+        return $this->userService;
+    }
+
+    private function narrativeStateApplicationService(): NarrativeStateApplicationService
+    {
+        if ($this->narrativeStateApplicationService instanceof NarrativeStateApplicationService) {
+            return $this->narrativeStateApplicationService;
+        }
+
+        $this->narrativeStateApplicationService = new NarrativeStateApplicationService();
+        return $this->narrativeStateApplicationService;
+    }
+
+    private function getVisibleStateNamesForCharacter(int $characterId, int $limit = 12): array
+    {
+        if ($characterId <= 0) {
+            return [];
+        }
+
+        try {
+            $rows = $this->narrativeStateApplicationService()->getActiveForCharacter($characterId);
+            $names = [];
+            foreach ($rows as $row) {
+                if (!is_object($row) || !isset($row->name)) {
+                    continue;
+                }
+                $name = trim((string) $row->name);
+                if ($name === '') {
+                    continue;
+                }
+                $names[] = $name;
+                if (count($names) >= $limit) {
+                    break;
+                }
+            }
+
+            return $names;
+        } catch (\Throwable $error) {
+            return [];
+        }
+    }
+
+    private function failValidation($message, string $errorCode = 'validation_error', array $payload = [])
+    {
+        throw AppError::validation((string) $message, $payload, $errorCode);
     }
 
     private function failUnauthorized($message = 'Operazione non autorizzata', string $errorCode = 'unauthorized')
@@ -192,6 +285,20 @@ class LocationMessages
         );
     }
 
+    private function failOffCommandCooldown(int $retryAfter): void
+    {
+        $seconds = (int) $retryAfter;
+        if ($seconds < 1) {
+            $seconds = 1;
+        }
+
+        $this->failValidation(
+            'Messaggio OFF in cooldown. Attendi ancora ' . $seconds . ' secondi prima del prossimo invio.',
+            'off_cooldown_active',
+            ['retry_after' => $seconds],
+        );
+    }
+
     private function normalizeLocationId($value): int
     {
         $locationId = (int) $value;
@@ -256,7 +363,34 @@ class LocationMessages
     private function enforceWritePermission()
     {
         $userId = \Core\AuthGuard::api()->requireUser();
-        \Core\AuthGuard::enforceNotRestricted($userId, 'Il tuo account e ristretto: non puoi usare la chat');
+        if (\Core\AppContext::authContext()->isAdmin()) {
+            return;
+        }
+        if ($this->userService()->isRestrictedForScope((int) $userId, 'chat')) {
+            throw AppError::unauthorized('Il tuo account e ristretto: non puoi usare la chat', [], 'chat_restricted');
+        }
+    }
+
+    private function enforceCommandPermission(): void
+    {
+        $userId = \Core\AuthGuard::api()->requireUser();
+        if (\Core\AppContext::authContext()->isAdmin()) {
+            return;
+        }
+        if ($this->userService()->isRestrictedForScope((int) $userId, 'commands')) {
+            throw AppError::unauthorized('Il tuo account e ristretto: non puoi usare comandi chat', [], 'commands_restricted');
+        }
+    }
+
+    private function enforceWhisperPermission(): void
+    {
+        $userId = \Core\AuthGuard::api()->requireUser();
+        if (\Core\AppContext::authContext()->isAdmin()) {
+            return;
+        }
+        if ($this->userService()->isRestrictedForScope((int) $userId, 'whisper')) {
+            throw AppError::unauthorized('Il tuo account e ristretto: non puoi inviare sussurri', [], 'whisper_restricted');
+        }
     }
 
     private function commandService()
@@ -349,6 +483,22 @@ class LocationMessages
         $this->failLocationWhisperRateLimited((int) ($rate['retry_after'] ?? 0));
     }
 
+    private function enforceOffCommandRateLimit(int $characterId): void
+    {
+        $rate = RateLimiter::hit(
+            'location.chat.off',
+            1,
+            60,
+            'character:' . $characterId,
+        );
+
+        if (!empty($rate['allowed'])) {
+            return;
+        }
+
+        $this->failOffCommandCooldown((int) ($rate['retry_after'] ?? 0));
+    }
+
     private function ensureAccess($location_id, $character_id = null)
     {
         if ($character_id === null) {
@@ -393,10 +543,124 @@ class LocationMessages
         ResponseEmitter::emit(ApiResponse::json($payload));
     }
 
+    private function parseMetaJson($value): ?array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_object($value)) {
+            return (array) $value;
+        }
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+        try {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : null;
+        } catch (\Throwable $error) {
+            return null;
+        }
+    }
+
+    private function isStaffOnlyMessageRow($row): bool
+    {
+        if (empty($row) || !isset($row->meta_json)) {
+            return false;
+        }
+
+        $meta = $this->parseMetaJson($row->meta_json);
+        if (empty($meta) || !is_array($meta)) {
+            return false;
+        }
+
+        return !empty($meta['staff_only']);
+    }
+
+    private function isOffEphemeralMessageRow($row): bool
+    {
+        if (empty($row) || !isset($row->meta_json)) {
+            return false;
+        }
+
+        $meta = $this->parseMetaJson($row->meta_json);
+        if (empty($meta) || !is_array($meta)) {
+            return false;
+        }
+
+        return isset($meta['command']) && (string) $meta['command'] === 'off';
+    }
+
+    private function parseOffAudienceCharacterIds($row): array
+    {
+        if (empty($row) || !isset($row->meta_json)) {
+            return [];
+        }
+
+        $meta = $this->parseMetaJson($row->meta_json);
+        if (empty($meta) || !is_array($meta)) {
+            return [];
+        }
+
+        if (!isset($meta['audience_character_ids']) || !is_array($meta['audience_character_ids'])) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($meta['audience_character_ids'] as $value) {
+            $id = (int) $value;
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    private function isMessageVisibleToCharacter($row, int $characterId, bool $isStaff): bool
+    {
+        if (empty($row)) {
+            return false;
+        }
+
+        $recipientId = isset($row->recipient_id) ? (int) $row->recipient_id : 0;
+        if ($this->isOffEphemeralMessageRow($row)) {
+            $audience = $this->parseOffAudienceCharacterIds($row);
+            if (!empty($audience)) {
+                return in_array($characterId, $audience, true);
+            }
+        }
+
+        if ($isStaff) {
+            return true;
+        }
+
+        if ($recipientId <= 0) {
+            return true;
+        }
+
+        return $recipientId === $characterId;
+    }
+
+    private function buildStaffNoticeBody(string $title, string $message, bool $staffOnly): string
+    {
+        $safeTitle = Filter::html(trim($title));
+        $safeMessage = nl2br(Filter::html(trim($message)));
+        if ($safeTitle === '') {
+            $safeTitle = $staffOnly ? 'Nota staff' : 'Aggiornamento narrativo';
+        }
+
+        return '<div class="text-start">'
+            . '<p class="mb-1"><b>' . $safeTitle . '</b></p>'
+            . '<p class="mb-0">' . $safeMessage . '</p>'
+            . '</div>';
+    }
+
     public function list($echo = true)
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
         $character_id = $this->requireCharacter();
+        $authContext = \Core\AppContext::authContext();
+        $isStaff = $authContext->isStaff() || $authContext->isSuperuser();
 
         $post = $this->requestDataObject();
         $location_id = $this->normalizeLocationId(InputValidator::integer($post, 'location_id', 0));
@@ -415,17 +679,24 @@ class LocationMessages
             $limit,
             $historyHours,
             self::TYPE_WHISPER,
+            $isStaff,
         );
 
         $dataset = [];
         $last_id = $since_id;
         if (!empty($rows)) {
             foreach ($rows as $row) {
-                $row = $this->buildMessageResponse($row);
-                $dataset[] = $row;
                 if ($row->id > $last_id) {
                     $last_id = $row->id;
                 }
+                if (!$this->isMessageVisibleToCharacter($row, (int) $character_id, $isStaff)) {
+                    continue;
+                }
+                if (!$isStaff && $this->isStaffOnlyMessageRow($row)) {
+                    continue;
+                }
+                $row = $this->buildMessageResponse($row);
+                $dataset[] = $row;
             }
         }
 
@@ -434,6 +705,84 @@ class LocationMessages
             'last_id' => $last_id,
         ];
 
+        if ($echo) {
+            $this->emitJson($response);
+        }
+        return $response;
+    }
+
+    public function staffNotice($echo = true)
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+
+        if (!\Core\AppContext::authContext()->isStaff()) {
+            $this->failUnauthorized('Operazione riservata allo staff', 'command_forbidden');
+        }
+
+        $character_id = $this->requireCharacter();
+        $post = $this->requestDataObject();
+
+        $location_id = $this->normalizeLocationId(InputValidator::integer($post, 'location_id', 0));
+        $this->ensureAccess($location_id, $character_id);
+
+        $message = $this->normalizeMessageText(
+            InputValidator::string($post, 'message', ''),
+            self::MAX_CHAT_LENGTH,
+            'Messaggio vuoto',
+            'Messaggio troppo lungo',
+            'message_empty',
+            'message_too_long',
+        );
+
+        $title = trim(InputValidator::string($post, 'title', ''));
+        if (mb_strlen($title) > 120) {
+            $title = mb_substr($title, 0, 120);
+        }
+
+        $visibility = strtolower(trim(InputValidator::string($post, 'visibility', 'staff')));
+        $staffOnly = $visibility !== 'public';
+        $kind = strtolower(trim(InputValidator::string($post, 'kind', 'generic')));
+        if (mb_strlen($kind) > 40) {
+            $kind = mb_substr($kind, 0, 40);
+        }
+        $stateName = trim(InputValidator::string($post, 'state_name', ''));
+        if (mb_strlen($stateName) > 120) {
+            $stateName = mb_substr($stateName, 0, 120);
+        }
+        $stateAction = strtolower(trim(InputValidator::string($post, 'state_action', '')));
+        if (!in_array($stateAction, ['apply', 'remove'], true)) {
+            $stateAction = '';
+        }
+        $targetCount = InputValidator::integer($post, 'target_count', 0);
+        if ($targetCount < 0) {
+            $targetCount = 0;
+        }
+
+        $body = $this->buildStaffNoticeBody($title, $message, $staffOnly);
+        $meta = json_encode([
+            'command' => 'staff_notice',
+            'staff_only' => $staffOnly ? 1 : 0,
+            'notice_kind' => $kind,
+            'notice_title' => $title,
+            'raw' => $message,
+            'state_name' => $stateName !== '' ? $stateName : null,
+            'state_action' => $stateAction !== '' ? $stateAction : null,
+            'target_count' => $targetCount > 0 ? $targetCount : null,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $row = $this->locationMessageService()->insertMessage(
+            $location_id,
+            $character_id,
+            self::TYPE_SYSTEM,
+            $body,
+            $meta,
+        );
+        $row->body_rendered = $row->body;
+
+        $response = [
+            'dataset' => $row,
+            'channel' => 'chat',
+        ];
         if ($echo) {
             $this->emitJson($response);
         }
@@ -458,6 +807,21 @@ class LocationMessages
             'message_too_long',
         );
         $this->ensureAccess($location_id, $character_id);
+
+        if (!\Core\AppContext::authContext()->isStaff()) {
+            $maxChars = 0;
+            $config = $this->config();
+            if (array_key_exists('location_chat_max_chars', $config)) {
+                $maxChars = (int) $config['location_chat_max_chars'];
+            }
+            if ($maxChars > 0 && mb_strlen($raw) > $maxChars) {
+                $this->failValidation(
+                    'Messaggio troppo lungo (max ' . $maxChars . ' caratteri)',
+                    'message_too_long',
+                );
+            }
+        }
+
         $this->enforceLocationChatRateLimit((int) $character_id, (int) $location_id);
 
         // '#' è alias di /fato
@@ -466,19 +830,24 @@ class LocationMessages
         }
 
         if (strpos($raw, '/') === 0) {
+            $this->enforceCommandPermission();
             return $this->handleCommand($raw, $location_id, $character_id, $echo);
         }
 
         $tagValue = property_exists($post, 'tag_position') ? $post->tag_position : null;
         $tag = $this->normalizeTag($tagValue);
-        $tagLabel   = property_exists($post, 'location_tag_label')   ? $this->normalizeTag($post->location_tag_label)   : null;
-        $tagDetail  = property_exists($post, 'location_tag_detail')  ? $this->normalizeTag($post->location_tag_detail)  : null;
+        $tagLabel = property_exists($post, 'location_tag_label') ? $this->normalizeTag($post->location_tag_label) : null;
+        $tagDetail = property_exists($post, 'location_tag_detail') ? $this->normalizeTag($post->location_tag_detail) : null;
         $tagDisplay = property_exists($post, 'location_tag_display') ? $this->normalizeTag($post->location_tag_display) : null;
-        $tagId      = property_exists($post, 'location_tag_id')      ? (int) $post->location_tag_id : null;
+        $tagId = property_exists($post, 'location_tag_id') ? (int) $post->location_tag_id : null;
         if ($tagId !== null && $tagId <= 0) {
             $tagId = null;
         }
-        $meta = json_encode(['raw' => $raw], JSON_UNESCAPED_UNICODE);
+        $visibleStates = $this->getVisibleStateNamesForCharacter((int) $character_id, 12);
+        $meta = json_encode([
+            'raw' => $raw,
+            'visible_states' => $visibleStates,
+        ], JSON_UNESCAPED_UNICODE);
         $row = $this->locationMessageService()->insertMessage(
             $location_id,
             $character_id,
@@ -523,6 +892,7 @@ class LocationMessages
             case 'oggetto':
                 return $this->sendSystemLabel($location_id, 'Oggetto', $args, $character_id, $echo);
             case 'conflict':
+            case 'conflitto':
                 return $this->sendConflictCommand($location_id, $args, $character_id, $echo);
             case 'whisper':
                 return $this->sendWhisperFromCommand($location_id, $args, $character_id, $echo);
@@ -534,9 +904,76 @@ class LocationMessages
                 return $this->sendLasciaCommand($location_id, $args, $character_id, $echo);
             case 'dai':
                 return $this->sendDaiCommand($location_id, $args, $character_id, $echo);
+            case 'img':
+                return $this->sendImgCommand($location_id, $args, $character_id, $echo);
+            case 'music':
+                return $this->sendMusicCommand($location_id, $args, $character_id, $echo);
+            case 'off':
+                return $this->sendOffCommand($location_id, $args, $character_id, $echo);
             default:
                 $this->failCommandInvalid();
         }
+    }
+
+    private function sendOffCommand($location_id, $args, $character_id, $echo = true)
+    {
+        $this->enforceOffCommandRateLimit((int) $character_id);
+
+        $text = $this->normalizeMessageText(
+            (string) $args,
+            self::MAX_CHAT_LENGTH,
+            'Inserisci un messaggio per il comando OFF',
+            'Messaggio OFF troppo lungo',
+            'off_message_empty',
+            'off_message_too_long',
+        );
+
+        $authorLabel = trim($this->locationMessageService()->findCharacterLabelById((int) $character_id));
+        if ($authorLabel === '') {
+            $authorLabel = 'Giocatore';
+        }
+
+        $body = '<div class="text-start">'
+            . '<p class="mb-1"><b>[OFF]</b> ' . Filter::html($authorLabel) . '</p>'
+            . '<p class="mb-0">' . nl2br(Filter::html($text)) . '</p>'
+            . '</div>';
+
+        $presentRows = $this->locationMessageService()->getCharactersInLocation((int) $location_id, 500);
+        $recipientIds = [];
+        foreach ($presentRows as $row) {
+            $id = (int) ($row->id ?? 0);
+            if ($id > 0) {
+                $recipientIds[$id] = $id;
+            }
+        }
+        if (empty($recipientIds)) {
+            $recipientIds[(int) $character_id] = (int) $character_id;
+        }
+
+        $meta = json_encode([
+            'command' => 'off',
+            'raw' => $text,
+            'author_label' => $authorLabel,
+            'audience_character_ids' => array_values($recipientIds),
+        ], JSON_UNESCAPED_UNICODE);
+
+        $senderRow = $this->locationMessageService()->insertMessage(
+            $location_id,
+            $character_id,
+            self::TYPE_SYSTEM,
+            $body,
+            $meta,
+        );
+        $senderRow->body_rendered = $senderRow->body;
+
+        $response = [
+            'dataset' => $senderRow,
+            'channel' => 'chat',
+        ];
+        if ($echo) {
+            $this->emitJson($response);
+        }
+        return $response;
     }
 
     private function parseConflictArgs(string $args): array
@@ -623,7 +1060,7 @@ class LocationMessages
             $summary = 'Proposta conflitto';
         }
 
-        $message = $this->conflictChatBridgeService()->buildProposalMessage(
+        $this->conflictChatBridgeService()->buildProposalMessage(
             (int) $location_id,
             $targetId,
             $summary,
@@ -631,7 +1068,15 @@ class LocationMessages
             \Core\AppContext::authContext()->isStaff(),
         );
 
-        return $this->insertSystemMessage($location_id, $message['body'], $message['meta'], $character_id, $echo);
+        $response = [
+            'dataset' => null,
+            'channel' => 'chat',
+        ];
+        if ($echo) {
+            $this->emitJson($response);
+        }
+
+        return $response;
     }
 
     private function sendSkillCommand($location_id, $args, $character_id, $echo = true)
@@ -969,8 +1414,95 @@ class LocationMessages
         return $response;
     }
 
+    private function sendImgCommand($location_id, $args, $character_id, $echo = true)
+    {
+        if (!\Core\AppContext::authContext()->isStaff()) {
+            throw AppError::unauthorized('Comando riservato allo staff', [], 'command_forbidden');
+        }
+
+        $url = trim((string) $args);
+        if ($url === '') {
+            $this->failValidation('URL immagine mancante', 'img_url_empty');
+        }
+        if (strlen($url) > 2048 || filter_var($url, FILTER_VALIDATE_URL) === false) {
+            $this->failValidation('URL immagine non valido', 'img_url_invalid');
+        }
+        if (!preg_match('/^https?:\/\//i', $url)) {
+            $this->failValidation('URL immagine non valido', 'img_url_invalid');
+        }
+
+        $meta = json_encode([
+            'command' => 'img',
+            'url' => $url,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return $this->insertSystemMessage($location_id, '', $meta, $character_id, $echo);
+    }
+
+    private function sendMusicCommand($location_id, $args, $character_id, $echo = true)
+    {
+        if (!\Core\AppContext::authContext()->isStaff()) {
+            throw AppError::unauthorized('Comando riservato allo staff', [], 'command_forbidden');
+        }
+
+        $args = trim((string) $args);
+        if ($args === '') {
+            $this->failValidation(
+                'Specificare un URL o: stop | mute-all | unmute-all',
+                'music_args_missing',
+            );
+        }
+
+        $svc = $this->locationAmbientService();
+        $state = ['is_active' => false];
+
+        if ($args === 'stop') {
+            $svc->stopMusic((int) $location_id);
+            $body = 'Ha fermato la musica di sottofondo.';
+
+        } elseif ($args === 'mute-all') {
+            $svc->setForceMuted((int) $location_id, true);
+            $state = $svc->getState((int) $location_id) ?: ['is_active' => false];
+            $state['force_muted'] = true;
+            $body = 'Ha silenziato la musica per tutti.';
+
+        } elseif ($args === 'unmute-all') {
+            $svc->setForceMuted((int) $location_id, false);
+            $state = $svc->getState((int) $location_id) ?: ['is_active' => false];
+            $state['force_muted'] = false;
+            $body = 'Ha riattivato la musica.';
+
+        } else {
+            $url = $args;
+            $title = null;
+            if (preg_match('/^(.+?)\s+"([^"]+)"$/', $args, $m)) {
+                $url = trim((string) $m[1]);
+                $title = trim((string) $m[2]);
+            }
+
+            try {
+                $state = $svc->setState((int) $location_id, $url, $title, (int) $character_id);
+            } catch (\InvalidArgumentException $e) {
+                $this->failValidation($e->getMessage(), 'music_url_invalid');
+            } catch (\Throwable $e) {
+                $this->failValidation('Errore avvio musica: ' . $e->getMessage(), 'music_error');
+            }
+
+            $display = ($state['title'] ?? '') ?: $url;
+            $body = 'Ha avviato la musica di sottofondo: ' . htmlspecialchars($display, ENT_QUOTES, 'UTF-8');
+        }
+
+        $meta = json_encode([
+            'command' => 'location_music',
+            'state' => $state,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return $this->insertSystemMessage($location_id, $body, $meta, $character_id, $echo);
+    }
+
     private function sendWhisperFromCommand($location_id, $args, $character_id, $echo = true)
     {
+        $this->enforceWhisperPermission();
         $parsed = $this->commandService()->parseWhisperArgs($args);
         if (empty($parsed)) {
             $this->failWhisperInvalid();
@@ -1283,6 +1815,7 @@ class LocationMessages
         $this->trace('Richiamato il metodo: ' . __METHOD__);
         $character_id = $this->requireCharacter();
         $this->enforceWritePermission();
+        $this->enforceWhisperPermission();
 
         $post = $this->requestDataObject();
         $location_id = $this->normalizeLocationId(InputValidator::integer($post, 'location_id', 0));
@@ -1311,7 +1844,7 @@ class LocationMessages
         $this->ensureAccess($location_id, $character_id);
 
         $startedAt = trim(InputValidator::string($post, 'started_at', ''));
-        $endedAt   = trim(InputValidator::string($post, 'ended_at', ''));
+        $endedAt = trim(InputValidator::string($post, 'ended_at', ''));
 
         if ($startedAt === '' || $endedAt === '') {
             throw \Core\Http\AppError::validation('Intervallo date obbligatorio', [], 'date_range_required');
@@ -1332,5 +1865,3 @@ class LocationMessages
         return $response;
     }
 }
-
-

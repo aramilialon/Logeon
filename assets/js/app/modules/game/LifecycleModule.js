@@ -26,7 +26,7 @@ function createGameLifecycleModule() {
             if (!section) { return; }
 
             this.currentPhase({}).then(function (response) {
-                var data = response && response.dataset ? response.dataset : null;
+                var data = normalizePhasePayload(response && response.dataset ? response.dataset : null);
                 self.renderPhase(section, data);
             }).catch(function () {
                 section.innerHTML = '';
@@ -66,6 +66,45 @@ function createGameLifecycleModule() {
 
 function escapeHtml(value) {
     return String(value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function normalizePhasePayload(data) {
+    if (!data || typeof data !== 'object') {
+        return null;
+    }
+
+    if (data.phase && typeof data.phase === 'object') {
+        return data;
+    }
+
+    var phaseId = parseInt(data.phase_id || data.to_phase_id || '0', 10) || 0;
+    var phaseName = String(data.phase_name || data.to_phase_name || data.name || '').trim();
+    var phaseCode = String(data.phase_code || data.to_phase_code || data.code || '').trim();
+    var phaseDescription = String(data.phase_description || '').trim();
+    var phaseColor = String(data.color_hex || data.to_phase_color || '').trim();
+    var phaseIcon = String(data.icon || '').trim();
+    var hasPhaseData = phaseId > 0
+        || phaseName !== ''
+        || phaseCode !== ''
+        || phaseDescription !== ''
+        || phaseColor !== ''
+        || phaseIcon !== '';
+
+    if (!hasPhaseData) {
+        return data;
+    }
+
+    return Object.assign({}, data, {
+        phase: {
+            id: phaseId > 0 ? phaseId : null,
+            code: phaseCode,
+            name: phaseName,
+            description: phaseDescription,
+            color_hex: phaseColor,
+            icon: phaseIcon,
+            visible_to_players: data.visible_to_players
+        }
+    });
 }
 
 globalWindow.GameLifecycleModuleFactory = createGameLifecycleModule;

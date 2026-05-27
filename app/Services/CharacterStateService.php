@@ -6,8 +6,8 @@ namespace App\Services;
 
 use Core\Database\DbAdapterFactory;
 use Core\Database\DbAdapterInterface;
-use Core\Http\AppError;
 use Core\Hooks;
+use Core\Http\AppError;
 
 class CharacterStateService
 {
@@ -221,12 +221,28 @@ class CharacterStateService
             }
         }
 
+        $deleteDays = 10;
+        try {
+            $cfg = $this->db->fetchOnePrepared(
+                "SELECT value FROM sys_configs WHERE `key` = 'character_delete_days' LIMIT 1",
+                [],
+            );
+            if (!empty($cfg) && is_numeric((string) ($cfg->value ?? ''))) {
+                $val = (int) $cfg->value;
+                if ($val >= 1 && $val <= 365) {
+                    $deleteDays = $val;
+                }
+            }
+        } catch (\Throwable $e) {
+            // use default
+        }
+
         $this->execPrepared(
             'UPDATE characters SET
                 delete_requested_at = NOW(),
-                delete_scheduled_at = DATE_ADD(NOW(), INTERVAL 10 DAY)
+                delete_scheduled_at = DATE_ADD(NOW(), INTERVAL ? DAY)
              WHERE id = ?',
-            [$characterId],
+            [$deleteDays, $characterId],
         );
 
         $updated = $this->firstPrepared(

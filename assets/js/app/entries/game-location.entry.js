@@ -1,10 +1,12 @@
 import '../features/game/NotificationsPage.js';
+import '../features/game/NewsPage.js';
 import '../features/game/MessagesModal.js';
 import '../features/game/MessagesPage.js';
 import '../features/game/NarrativeEventsPage.js';
 import '../modules/game/NarrativeEphemeralNpcsModule.js';
 import '../features/game/SystemEventsPage.js';
 import '../features/game/location/LocationPage.js';
+import '../features/game/location/LocationAmbientMusic.js';
 import '../features/game/location/LocationChatPage.js';
 import '../features/game/location/LocationSidebarPage.js';
 import '../features/game/location/LocationWhispersPage.js';

@@ -143,6 +143,55 @@ a:focus-visible,
     border-radius: 10px;
 }
 
+.lf-password-field {
+    position: relative;
+}
+
+.lf-password-field .lf-password-toggle-input.form-control {
+    padding-right: 2.6rem;
+}
+
+.lf-password-field .lf-password-toggle-btn {
+    position: absolute;
+    top: 50%;
+    right: 0.45rem;
+    transform: translateY(-50%);
+    width: 1.75rem;
+    height: 1.75rem;
+    min-width: 1.75rem;
+    padding: 0;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.45rem;
+    z-index: 5;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--lf-text-secondary);
+}
+
+.lf-password-field.form-floating .lf-password-toggle-btn {
+    top: calc(var(--bs-form-floating-height, 3.5rem) / 2);
+    right: 0.65rem;
+}
+
+.lf-password-field .lf-password-toggle-btn:hover,
+.lf-password-field .lf-password-toggle-btn:focus,
+.lf-password-field .lf-password-toggle-btn:active {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--lf-text-primary);
+}
+
+.lf-password-field .lf-password-toggle-btn > i {
+    font-size: 0.78rem;
+    line-height: 1;
+    pointer-events: none;
+}
+
 .card,
 .modal-content,
 .dropdown-menu,
@@ -154,6 +203,39 @@ a:focus-visible,
     background-color: var(--lf-surface);
     color: var(--lf-text-primary);
     border-color: var(--lf-border);
+}
+
+.list-group {
+    --bs-list-group-bg: var(--lf-surface);
+    --bs-list-group-border-color: var(--lf-border);
+    --bs-list-group-action-color: var(--lf-text-primary);
+    --bs-list-group-action-hover-color: var(--lf-text-primary);
+    --bs-list-group-action-hover-bg: var(--lf-surface-alt);
+    --bs-list-group-action-active-color: var(--lf-text-primary);
+    --bs-list-group-action-active-bg: color-mix(in srgb, var(--lf-primary) 16%, var(--lf-surface-alt));
+}
+
+.list-group-item-action:not(.active):hover,
+.list-group-item-action:not(.active):focus {
+    background-color: var(--lf-surface-alt);
+    color: var(--lf-text-primary);
+}
+
+.accordion {
+    --bs-accordion-bg: var(--lf-surface);
+    --bs-accordion-color: var(--lf-text-primary);
+    --bs-accordion-border-color: var(--lf-border);
+    --bs-accordion-btn-bg: var(--lf-surface);
+    --bs-accordion-btn-color: var(--lf-text-primary);
+    --bs-accordion-active-bg: var(--lf-surface-alt);
+    --bs-accordion-active-color: var(--lf-text-primary);
+}
+
+.accordion-button:not(.collapsed):hover,
+.accordion-button.collapsed:hover,
+.accordion-button.collapsed:focus-visible {
+    background-color: var(--lf-surface-alt);
+    color: var(--lf-text-primary);
 }
 
 .navbar {

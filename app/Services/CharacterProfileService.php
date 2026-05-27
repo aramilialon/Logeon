@@ -15,6 +15,8 @@ class CharacterProfileService
     private $db;
     /** @var NotificationService */
     private $notifService;
+    /** @var CharacterRankService|null */
+    private $rankService = null;
     /** @var array<string,string> */
     private $requestReviewerColumnCache = [];
 
@@ -56,6 +58,16 @@ class CharacterProfileService
         } catch (\Throwable $e) {
             // no-op: rollback best effort
         }
+    }
+
+    private function rankService(): CharacterRankService
+    {
+        if ($this->rankService instanceof CharacterRankService) {
+            return $this->rankService;
+        }
+
+        $this->rankService = new CharacterRankService($this->db);
+        return $this->rankService;
     }
 
     private function hasValue($value): bool
@@ -380,6 +392,123 @@ class CharacterProfileService
         }
 
         return (int) $row->user_id;
+    }
+
+    private function resolveCharacterName(int $characterId): string
+    {
+        if ($characterId <= 0) {
+            return '';
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT name
+             FROM characters
+             WHERE id = ?
+             LIMIT 1',
+            [$characterId],
+        );
+
+        if (empty($row) || !isset($row->name)) {
+            return '';
+        }
+
+        return trim((string) $row->name);
+    }
+
+    private function listActiveStaffUserIds(int $limit = 50): array
+    {
+        $limit = max(1, min(200, $limit));
+        $rows = $this->fetchPrepared(
+            'SELECT id
+             FROM users
+             WHERE is_active = 1
+               AND (is_administrator = 1 OR is_moderator = 1)
+             LIMIT ' . (int) $limit,
+        );
+
+        $ids = [];
+        foreach ($rows as $row) {
+            $userId = (int) ($row->id ?? 0);
+            if ($userId > 0) {
+                $ids[] = $userId;
+            }
+        }
+
+        return $ids;
+    }
+
+    private function notifyStaffAboutCharacterRequest(
+        int $requestId,
+        int $actorUserId,
+        int $actorCharacterId,
+        string $sourceType,
+        string $title,
+        string $message,
+    ): void {
+        if ($requestId <= 0 || $actorUserId <= 0 || $actorCharacterId <= 0) {
+            return;
+        }
+
+        $staffUserIds = $this->listActiveStaffUserIds();
+        if (empty($staffUserIds)) {
+            return;
+        }
+
+        $meta = json_encode([
+            'request_id' => $requestId,
+            'request_type' => $sourceType,
+            'character_id' => $actorCharacterId,
+        ]);
+
+        foreach ($staffUserIds as $staffUserId) {
+            try {
+                $this->notifService->create(
+                    (int) $staffUserId,
+                    null,
+                    NotificationService::KIND_ACTION_REQUIRED,
+                    'character_request',
+                    $title,
+                    [
+                        'message' => $message,
+                        'priority' => 'normal',
+                        'actor_user_id' => $actorUserId,
+                        'actor_character_id' => $actorCharacterId,
+                        'source_type' => $sourceType,
+                        'source_id' => $requestId,
+                        'source_meta_json' => $meta !== false ? $meta : null,
+                        'action_url' => '/admin/character-requests',
+                    ],
+                );
+            } catch (\Throwable $e) {
+                // Le notifiche staff non devono bloccare la richiesta utente.
+            }
+        }
+    }
+
+    private function notifyCharacterRequestDecisionResult(
+        int $ownerUserId,
+        int $characterId,
+        int $requestId,
+        string $topic,
+        string $sourceType,
+        string $title,
+    ): void {
+        if ($ownerUserId <= 0 || $characterId <= 0 || $requestId <= 0) {
+            return;
+        }
+
+        $this->notifService->create(
+            $ownerUserId,
+            $characterId,
+            NotificationService::KIND_DECISION_RESULT,
+            $topic,
+            $title,
+            [
+                'source_type' => $sourceType,
+                'source_id' => $requestId,
+                'action_url' => '/game/profile',
+            ],
+        );
     }
 
     private function normalizePage(int $page): int
@@ -1034,6 +1163,130 @@ class CharacterProfileService
         );
     }
 
+    private function normalizeNotificationPreferenceDefinitions($raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($raw as $key => $entry) {
+            $entryKey = '';
+            $entryLabel = '';
+            $entryColumn = '';
+
+            if (is_array($entry)) {
+                $entryKey = trim((string) ($entry['key'] ?? ''));
+                $entryLabel = trim((string) ($entry['label'] ?? ''));
+                $entryColumn = trim((string) ($entry['column'] ?? ''));
+            } elseif (is_object($entry)) {
+                $entryKey = trim((string) ($entry->key ?? ''));
+                $entryLabel = trim((string) ($entry->label ?? ''));
+                $entryColumn = trim((string) ($entry->column ?? ''));
+            } elseif (is_string($key) && is_string($entry)) {
+                $entryKey = trim($key);
+                $entryColumn = trim($entry);
+            }
+
+            if ($entryKey === '' && is_string($key)) {
+                $entryKey = trim($key);
+            }
+
+            if ($entryKey === '' || preg_match('/^[A-Za-z0-9_-]+$/', $entryKey) !== 1) {
+                continue;
+            }
+            if ($entryColumn === '' || !$this->isSafeSqlIdentifier($entryColumn)) {
+                continue;
+            }
+
+            $entryKey = strtolower($entryKey);
+            if ($entryLabel === '') {
+                $entryLabel = ucfirst(str_replace(['_', '-'], ' ', $entryKey));
+            }
+
+            $normalized[$entryKey] = [
+                'key' => $entryKey,
+                'label' => $entryLabel,
+                'column' => $entryColumn,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array<int,array{key:string,label:string,column:string}>
+     */
+    public function getNotificationPreferenceOptions(): array
+    {
+        $baseMap = [
+            'messages' => ['key' => 'messages', 'label' => 'Messaggi', 'column' => 'notify_messages'],
+            'invites' => ['key' => 'invites', 'label' => 'Inviti', 'column' => 'notify_invites'],
+        ];
+
+        if (class_exists('\\Core\\Hooks')) {
+            try {
+                $extra = \Core\Hooks::filter('character.settings.notification_preferences', []);
+                $extraMap = $this->normalizeNotificationPreferenceDefinitions($extra);
+                foreach ($extraMap as $key => $definition) {
+                    $baseMap[$key] = $definition;
+                }
+            } catch (\Throwable $e) {
+                // no-op: fallback to base map
+            }
+        }
+
+        return array_values($baseMap);
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function getNotificationPreferenceColumnsByKey(): array
+    {
+        $map = [];
+        foreach ($this->getNotificationPreferenceOptions() as $option) {
+            $key = isset($option['key']) ? strtolower(trim((string) $option['key'])) : '';
+            $column = isset($option['column']) ? trim((string) $option['column']) : '';
+            if ($key === '' || $column === '' || !$this->isSafeSqlIdentifier($column)) {
+                continue;
+            }
+            $map[$key] = $column;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<string,int>
+     */
+    private function readNotificationPreferencesPayload(object $data): array
+    {
+        $values = [];
+
+        if (property_exists($data, 'notification_preferences')) {
+            $raw = $data->notification_preferences;
+            if (is_array($raw) || is_object($raw)) {
+                foreach ((array) $raw as $rawKey => $rawValue) {
+                    $key = strtolower(trim((string) $rawKey));
+                    if ($key === '' || preg_match('/^[A-Za-z0-9_-]+$/', $key) !== 1) {
+                        continue;
+                    }
+                    $values[$key] = !empty($rawValue) ? 1 : 0;
+                }
+            }
+        }
+
+        foreach ($this->getNotificationPreferenceColumnsByKey() as $key => $column) {
+            $legacyField = 'notify_' . $key;
+            if (property_exists($data, $legacyField)) {
+                $values[$key] = !empty($data->{$legacyField}) ? 1 : 0;
+            }
+        }
+
+        return $values;
+    }
+
     public function updateSettings(int $characterId, object $data): void
     {
         $dmPolicy = isset($data->dm_policy) ? (int) $data->dm_policy : 0;
@@ -1046,20 +1299,28 @@ class CharacterProfileService
             throw AppError::validation('Valore inviti non valido', [], 'invite_policy_invalid');
         }
 
-        $notifyMessages = !empty($data->notify_messages) ? 1 : 0;
-        $notifyInvites = !empty($data->notify_invites) ? 1 : 0;
-        $notifyNews = !empty($data->notify_news) ? 1 : 0;
+        $preferenceColumns = $this->getNotificationPreferenceColumnsByKey();
+        $payloadValues = $this->readNotificationPreferencesPayload($data);
+
+        $updateParts = [
+            'dm_policy = ?',
+            'invite_policy = ?',
+        ];
+        $params = [$dmPolicy, $invitePolicy];
+
+        foreach ($preferenceColumns as $key => $column) {
+            $updateParts[] = $column . ' = ?';
+            $params[] = (int) ($payloadValues[$key] ?? 0);
+        }
+
+        $updateParts[] = 'date_last_seed = NOW()';
+        $params[] = $characterId;
 
         $this->execPrepared(
             'UPDATE characters SET
-                dm_policy = ?,
-                invite_policy = ?,
-                notify_messages = ?,
-                notify_invites = ?,
-                notify_news = ?,
-                date_last_seed = NOW()
+                ' . implode(",\n                ", $updateParts) . '
             WHERE id = ?',
-            [$dmPolicy, $invitePolicy, $notifyMessages, $notifyInvites, $notifyNews, $characterId],
+            $params,
         );
     }
 
@@ -1156,7 +1417,18 @@ class CharacterProfileService
                 [$characterId, $userId, (string) $current->name, $newName, $reason],
             );
 
+            $requestId = (int) $this->db->lastInsertId();
+
             $this->commit();
+
+            $this->notifyStaffAboutCharacterRequest(
+                $requestId,
+                $userId,
+                $characterId,
+                'name_request',
+                'Nuova richiesta cambio nome',
+                'Personaggio: ' . (string) $current->name . ' — Richiesto: ' . $newName,
+            );
         } catch (\Throwable $e) {
             $this->rollback();
             throw $e;
@@ -1240,7 +1512,19 @@ class CharacterProfileService
                 [$characterId, $userId, ($current->loanface ?? null), $newLoanface, $reason],
             );
 
+            $requestId = (int) $this->db->lastInsertId();
+
             $this->commit();
+
+            $characterName = $this->resolveCharacterName($characterId);
+            $this->notifyStaffAboutCharacterRequest(
+                $requestId,
+                $userId,
+                $characterId,
+                'loanface_request',
+                'Nuova richiesta cambio presta-volto',
+                'Personaggio: ' . ($characterName !== '' ? $characterName : ('#' . $characterId)) . ' — Richiesto: ' . $newLoanface,
+            );
         } catch (\Throwable $e) {
             $this->rollback();
             throw $e;
@@ -1295,17 +1579,13 @@ class CharacterProfileService
             $ownerUserId = $this->resolveCharacterUserId((int) $request->character_id);
             if ($ownerUserId !== null && $ownerUserId > 0) {
                 $label = ($decision === 'approved') ? 'approvata' : 'rifiutata';
-                $this->notifService->create(
+                $this->notifyCharacterRequestDecisionResult(
                     $ownerUserId,
                     (int) $request->character_id,
-                    NotificationService::KIND_DECISION_RESULT,
+                    $requestId,
                     'name_change_result',
+                    'name_request',
                     'Richiesta cambio nome ' . $label,
-                    [
-                        'source_type' => 'name_request',
-                        'source_id' => $requestId,
-                        'action_url' => '/game/profile',
-                    ],
                 );
             }
 
@@ -1364,17 +1644,13 @@ class CharacterProfileService
             $ownerUserId = $this->resolveCharacterUserId((int) $request->character_id);
             if ($ownerUserId !== null && $ownerUserId > 0) {
                 $label = ($decision === 'approved') ? 'approvata' : 'rifiutata';
-                $this->notifService->create(
+                $this->notifyCharacterRequestDecisionResult(
                     $ownerUserId,
                     (int) $request->character_id,
-                    NotificationService::KIND_DECISION_RESULT,
+                    $requestId,
                     'loanface_change_result',
+                    'loanface_request',
                     'Richiesta cambio volto prestato ' . $label,
-                    [
-                        'source_type' => 'loanface_request',
-                        'source_id' => $requestId,
-                        'action_url' => '/game/profile',
-                    ],
                 );
             }
 
@@ -1554,15 +1830,13 @@ class CharacterProfileService
         }
     }
 
-    public function adminUpdateRank(int $characterId, int $rank): void
-    {
-        if ($characterId <= 0) {
-            throw AppError::validation('Personaggio non valido', [], 'character_invalid');
-        }
-        if ($rank < 1) {
-            $rank = 1;
-        }
-        $this->execPrepared('UPDATE characters SET rank = ? WHERE id = ?', [$rank, $characterId]);
+    public function adminUpdateRank(
+        int $characterId,
+        int $rank,
+        ?int $changedByUserId = null,
+        string $reason = 'admin_update',
+    ): array {
+        return $this->rankService()->updateRank($characterId, $rank, $changedByUserId, $reason);
     }
 
     public function requestIdentityChange(int $characterId, int $userId, object $data): void
@@ -1631,7 +1905,39 @@ class CharacterProfileService
                 [$characterId, $userId, $surname, $height, $weight, $eyes, $hair, $skin, $reason],
             );
 
+            $requestId = (int) $this->db->lastInsertId();
+
             $this->commit();
+
+            $characterName = $this->resolveCharacterName($characterId);
+            $requestedFields = [];
+            if ($surname !== null) {
+                $requestedFields[] = 'cognome';
+            }
+            if ($height !== null) {
+                $requestedFields[] = 'altezza';
+            }
+            if ($weight !== null) {
+                $requestedFields[] = 'peso';
+            }
+            if ($eyes !== null) {
+                $requestedFields[] = 'occhi';
+            }
+            if ($hair !== null) {
+                $requestedFields[] = 'capelli';
+            }
+            if ($skin !== null) {
+                $requestedFields[] = 'pelle';
+            }
+            $this->notifyStaffAboutCharacterRequest(
+                $requestId,
+                $userId,
+                $characterId,
+                'identity_request',
+                'Nuova richiesta identità fisica',
+                'Personaggio: ' . ($characterName !== '' ? $characterName : ('#' . $characterId))
+                . (empty($requestedFields) ? '' : ' — Campi: ' . implode(', ', $requestedFields)),
+            );
         } catch (\Throwable $e) {
             $this->rollback();
             throw $e;
@@ -1707,6 +2013,19 @@ class CharacterProfileService
             $this->execPrepared($sql, $params);
 
             $this->commit();
+
+            $ownerUserId = $this->resolveCharacterUserId((int) $request->character_id);
+            if ($ownerUserId !== null && $ownerUserId > 0) {
+                $label = ($decision === 'approved') ? 'approvata' : 'rifiutata';
+                $this->notifyCharacterRequestDecisionResult(
+                    $ownerUserId,
+                    (int) $request->character_id,
+                    $requestId,
+                    'identity_change_result',
+                    'identity_request',
+                    'Richiesta identità fisica ' . $label,
+                );
+            }
         } catch (\Throwable $e) {
             $this->rollback();
             throw $e;

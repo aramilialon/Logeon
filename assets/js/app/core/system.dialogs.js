@@ -11,8 +11,8 @@ function ensureGeneralConfirm() {
 
     window.generalConfirm = window.Modal('generic-confirm', {
         settings: {
-            backdrop: 'static',
-            keyboard: false,
+            backdrop: true,
+            keyboard: true,
             viewer: true
         },
         beforeShow: function () {

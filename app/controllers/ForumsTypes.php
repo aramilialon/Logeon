@@ -8,7 +8,6 @@ use App\Services\ForumTypeAdminService;
 use Core\Http\InputValidator;
 use Core\Http\RequestData;
 
-
 use Core\Logging\LoggerInterface;
 
 class ForumsTypes extends ForumType
@@ -131,5 +130,3 @@ class ForumsTypes extends ForumType
         \Core\Http\ResponseEmitter::json(['ok' => true]);
     }
 }
-
-

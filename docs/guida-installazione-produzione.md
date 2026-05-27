@@ -6,10 +6,15 @@ Ultimo aggiornamento: 2026-04-27
 Portare Logeon in produzione in modo sicuro e ripetibile.
 
 ## Prerequisiti
-1. PHP 8.1+ (consigliato 8.2).
+1. PHP 8.2.x.
 2. MySQL/MariaDB.
 3. Composer.
 4. HTTPS attivo sul dominio pubblico.
+
+Nota:
+1. PHP 8.4 al momento non e la baseline supportata;
+2. con `CONFIG['debug'] = true` possono emergere warning di deprecazione;
+3. per produzione consigliamo PHP 8.2.x finche non viene completato il riallineamento compatibilita 8.4.
 
 ## Procedura consigliata
 1. Carica codice sorgente su server.

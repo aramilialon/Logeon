@@ -10,7 +10,6 @@ use Core\Http\InputValidator;
 use Core\Http\RequestData;
 use Core\Http\ResponseEmitter;
 
-
 use Core\Logging\LoggerInterface;
 
 class CharacterLifecycle extends LifecyclePhaseDefinition
@@ -256,5 +255,3 @@ class CharacterLifecycle extends LifecyclePhaseDefinition
         return $response;
     }
 }
-
-

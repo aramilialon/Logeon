@@ -621,9 +621,6 @@ function CommandParser(extension) {
 
         validateDiceArgsDetailed: function (args) {
             let expr = (args || '').toString().trim();
-            if (expr === '') {
-                expr = '1d20';
-            }
 
             let engine = this.getDiceEngine();
             if (!engine) {

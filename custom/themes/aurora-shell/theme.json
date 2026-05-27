@@ -9,6 +9,17 @@
     "public_layout": "layouts/theme-public.twig",
     "game_layout": "app/layouts/theme-game.twig"
   },
+  "body_class": {
+    "shared": [
+      "theme-aurora-shell"
+    ],
+    "public": [
+      "aurora-public-shell"
+    ],
+    "game": [
+      "aurora-game-shell"
+    ]
+  },
   "assets": {
     "public_css": [
       "css/public.css"

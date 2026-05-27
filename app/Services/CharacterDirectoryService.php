@@ -72,6 +72,17 @@ class CharacterDirectoryService
         return $characterAlias . '.is_visible = 1';
     }
 
+    private function buildActiveOnlineClause(string $characterAlias = 'characters', int $seedMinutes = 20): string
+    {
+        if ($seedMinutes <= 0) {
+            $seedMinutes = 20;
+        }
+
+        return '(' . $characterAlias . '.date_last_signin IS NOT NULL
+            AND ' . $characterAlias . '.date_last_signin > IFNULL(' . $characterAlias . '.date_last_signout, "1970-01-01 00:00:00")
+            AND DATE_ADD(' . $characterAlias . '.date_last_seed, INTERVAL ' . $seedMinutes . ' MINUTE) > NOW())';
+    }
+
     public function resolveIdleMinutes(): int
     {
         $idleMinutes = 0;
@@ -118,6 +129,7 @@ class CharacterDirectoryService
     {
         $viewer = $this->normalizeViewerContext($viewer);
         $visibilityClause = $this->buildOnlineVisibilityClause($viewer, 'characters', 'users');
+        $onlineClause = $this->buildActiveOnlineClause('characters', 15);
 
         $rows = $this->fetchPrepared(
             'SELECT
@@ -139,8 +151,7 @@ class CharacterDirectoryService
                 LEFT JOIN users ON characters.user_id = users.id
                 LEFT JOIN locations ON characters.last_location = locations.id
                 LEFT JOIN maps ON characters.last_map = maps.id
-            WHERE characters.date_last_signin > characters.date_last_signout
-                AND DATE_ADD(characters.date_last_seed, INTERVAL 15 MINUTE) > NOW()
+            WHERE ' . $onlineClause . '
                 AND ' . $visibilityClause . '
                 AND characters.privacy_show_online = 1
             ORDER BY characters.last_map, characters.last_location, characters.name',
@@ -215,7 +226,7 @@ class CharacterDirectoryService
         return $rows;
     }
 
-    public function search(int $excludeCharacterId, string $query, int $limit = 10, $locationId = null, bool $viewerIsStaff = false): array
+    public function search(int $excludeCharacterId, string $query, int $limit = 10, $locationId = null, bool $viewerIsStaff = false, bool $includeExcludedCharacter = false): array
     {
         $query = trim($query);
         if ($query === '' || $this->queryLength($query) < 2) {
@@ -237,12 +248,18 @@ class CharacterDirectoryService
         // Non-staff searchers cannot see invisible characters
         $visibilityClause = $viewerIsStaff ? '' : ' AND is_visible = 1';
 
+        $excludeClause = '';
+        $baseParams = [];
+        if (!$includeExcludedCharacter && $excludeCharacterId > 0) {
+            $excludeClause = 'id <> ? AND ';
+            $baseParams[] = $excludeCharacterId;
+        }
+
         $like = '%' . $query . '%';
         $rows = $this->fetchPrepared(
             'SELECT id, name, surname, avatar
             FROM characters
-            WHERE id <> ?
-              AND (
+            WHERE ' . $excludeClause . '(
                 name LIKE ?
                 OR surname LIKE ?
                 OR CONCAT(name, " ", IFNULL(surname, "")) LIKE ?
@@ -250,7 +267,7 @@ class CharacterDirectoryService
               ' . $locationClause . $visibilityClause . '
             ORDER BY name
             LIMIT ?',
-            array_merge([$excludeCharacterId, $like, $like, $like], $params, [(int) $limit]),
+            array_merge($baseParams, [$like, $like, $like], $params, [(int) $limit]),
         );
 
         return !empty($rows) ? $rows : [];
@@ -259,13 +276,13 @@ class CharacterDirectoryService
     private function totOnlines(array $viewer): array
     {
         $visibilityClause = $this->buildOnlineVisibilityClause($viewer, 'characters', 'users');
+        $onlineClause = $this->buildActiveOnlineClause('characters', 20);
         $rows = $this->fetchPrepared(
             'SELECT
             COUNT(*) AS tot_onlines
             FROM characters
             LEFT JOIN users ON characters.user_id = users.id
-            WHERE characters.date_last_signin > characters.date_last_signout
-                AND DATE_ADD(characters.date_last_seed, INTERVAL 20 MINUTE) > NOW()
+            WHERE ' . $onlineClause . '
                 AND ' . $visibilityClause . '
                 AND characters.privacy_show_online = 1',
         );
@@ -276,6 +293,7 @@ class CharacterDirectoryService
     private function inLocation(int $locationId, int $mapId, array $viewer): array
     {
         $visibilityClause = $this->buildOnlineVisibilityClause($viewer, 'characters', 'users');
+        $onlineClause = $this->buildActiveOnlineClause('characters', 20);
         $locationFilter = '';
         $params = [];
         if ($locationId > 0) {
@@ -302,9 +320,7 @@ class CharacterDirectoryService
                 LEFT JOIN users ON characters.user_id = users.id
                 LEFT JOIN locations ON characters.last_location = locations.id
                 LEFT JOIN maps ON characters.last_map = maps.id
-            WHERE (characters.date_last_signin > characters.date_last_signout
-                AND DATE_ADD(characters.date_last_seed, INTERVAL 20 MINUTE) > NOW()
-                )
+            WHERE ' . $onlineClause . '
                 AND ' . $locationFilter . '
                 AND ' . $visibilityClause . '
                 AND characters.privacy_show_online = 1

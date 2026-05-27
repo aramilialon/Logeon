@@ -2,8 +2,12 @@
 
 {% block content %}
 {% set current_page = admin_page|default('dashboard')|lower %}
-<section class="col-lg-9 col-xl-10 my-2">
-    <div class="admin-content px-2" data-admin-page="{{ current_page }}">
+<section class="col-lg-9 col-xl-10 py-2">
+    <div
+        class="admin-content px-2"
+        data-admin-page="{{ current_page }}"
+        data-current-user-is-superuser-creator="{{ (session('user_is_superuser_creator') == 1 or session('user_superuser_role') == 'creatore') ? 1 : 0 }}"
+    >
         {% if current_page == 'dashboard' %}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <header class="mt-3">
@@ -177,6 +181,14 @@
             {% include 'admin/pages/guilds-locations.twig' %}
         {% elseif current_page == 'guilds-events' %}
             {% include 'admin/pages/guilds-events.twig' %}
+        {% elseif current_page == 'mail-campaigns' %}
+            {% include 'admin/pages/mail-campaigns.twig' %}
+        {% elseif current_page == 'mail-templates' %}
+            {% include 'admin/pages/mail-templates.twig' %}
+        {% elseif current_page == 'mail-distribution-lists' %}
+            {% include 'admin/pages/mail-distribution-lists.twig' %}
+        {% elseif current_page == 'mail-logs' %}
+            {% include 'admin/pages/mail-logs.twig' %}
         {% elseif current_page == 'forums' %}
             {% include 'admin/pages/forums.twig' %}
         {% elseif current_page == 'forums-types' %}
@@ -203,6 +215,8 @@
             {% include 'admin/pages/system-update.twig' %}
         {% elseif current_page == 'narrative-tags' %}
             {% include 'admin/pages/narrative-tags.twig' %}
+        {% elseif current_page == 'media' %}
+            {% include 'admin/pages/media.twig' %}
         {% elseif current_page == 'narrative-delegation' %}
             {% include 'admin/pages/narrative-delegation.twig' %}
         {% elseif current_page == 'narrative-delegation-grants' %}
@@ -211,6 +225,8 @@
             {% include 'admin/pages/narrative-npcs.twig' %}
         {% elseif current_page == 'message-reports' %}
             {% include 'admin/pages/message-reports.twig' %}
+        {% elseif current_page == 'gdpr-requests' %}
+            {% include 'admin/pages/gdpr-requests.twig' %}
         {% elseif current_page == 'logs-conflicts' %}
             {% include 'admin/pages/logs-conflicts.twig' %}
         {% elseif current_page == 'logs-currency' %}
@@ -235,7 +251,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3 mt-3">
                 <header>
                     <h4 class="display-6 mb-1">Moduli</h4>
-                    <h6 class="mb-0">Gestione moduli first-party con stato runtime, dipendenze e compatibilitÃ  core.</h6>
+                    <h6 class="mb-0">Gestione moduli first-party con stato runtime, dipendenze e compatibilita core.</h6>
                 </header>
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     <button type="button" class="btn btn-sm btn-outline-primary" data-action="admin-modules-reload">
@@ -265,7 +281,7 @@
                             <option value="active">Attivi</option>
                             <option value="inactive">Inattivi</option>
                             <option value="detected">Rilevati</option>
-                            <option value="issues">Con criticitÃ </option>
+                            <option value="issues">Con criticita</option>
                         </select>
                     </div>
                     <div class="col-auto">
@@ -316,7 +332,67 @@
                 Per disinstallare un modulo, mettilo prima in stato inattivo.
             </div>
 
+            <div class="card mb-3">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <h6 class="mb-0">Registro capability</h6>
+                        <div class="small text-muted">Vista runtime delle capability che il core considera disponibili.</div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-modules-capabilities-reload">
+                        <i class="bi bi-arrow-repeat me-1"></i>Ricarica elenco
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-3 small mb-3">
+                        <div>Disponibili: <b data-role="modules-capabilities-available">0</b></div>
+                        <div>Non disponibili: <b data-role="modules-capabilities-unavailable">0</b></div>
+                        <div>Totale: <b data-role="modules-capabilities-total">0</b></div>
+                    </div>
+                    <div class="list-group list-group-flush" data-role="modules-capabilities-list"></div>
+                    <div class="small text-muted py-2 d-none" data-role="modules-capabilities-empty">Nessuna capability registrata.</div>
+                </div>
+            </div>
+
             <div id="grid-admin-modules"></div>
+
+            <div class="modal fade" id="admin-module-docs-modal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-fullscreen">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <div>
+                                <h5 class="modal-title mb-1" data-role="admin-module-docs-title">Documentazione modulo</h5>
+                                <div class="small text-muted" data-role="admin-module-docs-subtitle">Guide e tutorial disponibili per il modulo selezionato.</div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row g-3">
+                                <div class="col-12 col-lg-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">Documenti</h6>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="admin-module-docs-reload">
+                                            <i class="bi bi-arrow-repeat me-1"></i>Ricarica
+                                        </button>
+                                    </div>
+                                    <div class="list-group" data-role="admin-module-docs-list"></div>
+                                    <div class="small text-muted py-3 d-none" data-role="admin-module-docs-empty">Nessun file `.md` trovato nella cartella docs del modulo.</div>
+                                </div>
+                                <div class="col-12 col-lg-8">
+                                    <div class="border rounded p-3">
+                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                            <div>
+                                                <h6 class="mb-1" data-role="admin-module-doc-view-title">Seleziona un documento</h6>
+                                                <div class="small text-muted" data-role="admin-module-doc-view-meta"></div>
+                                            </div>
+                                        </div>
+                                        <article class="admin-module-doc-view" data-role="admin-module-doc-view-body"></article>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         {% else %}
             {% set hook_page_slot = slot('admin.dashboard.' ~ current_page, {'admin_page': current_page}) %}
             {% if hook_page_slot is not empty %}

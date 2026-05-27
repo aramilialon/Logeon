@@ -136,7 +136,7 @@ class ChatArchiveService
         $name = trim(
             ((string) ($row->character_name ?? ''))
             . ' '
-            . ((string) ($row->character_surname ?? ''))
+            . ((string) ($row->character_surname ?? '')),
         );
 
         if ($name !== '') {
@@ -171,7 +171,7 @@ class ChatArchiveService
         $name = trim(
             ((string) ($row->name ?? ''))
             . ' '
-            . ((string) ($row->surname ?? ''))
+            . ((string) ($row->surname ?? '')),
         );
 
         return $name !== '' ? $name : ('Personaggio #' . $characterId);
@@ -367,7 +367,7 @@ class ChatArchiveService
             return null;
         }
 
-        return $this->hydrateArchiveRow($row ?: null);
+        return $this->hydrateArchiveRow($row);
     }
 
     public function getOwnedById(int $id, int $characterId, int $userId = 0, bool $isStaff = false): ?object
@@ -387,7 +387,7 @@ class ChatArchiveService
             }
         }
 
-        return $this->hydrateArchiveRow($row ?: null);
+        return $this->hydrateArchiveRow($row);
     }
 
     /**
@@ -411,7 +411,7 @@ class ChatArchiveService
 
         return [
             'archive' => $archive,
-            'messages' => $this->hydrateMessageRows($messages ?: []),
+            'messages' => $this->hydrateMessageRows($messages),
         ];
     }
 
@@ -426,7 +426,7 @@ class ChatArchiveService
         /** @var int[] $messageIds */
         $messageIds = array_values(array_unique(array_filter(
             array_map('intval', (array) ($payload['message_ids'] ?? [])),
-            static fn(int $id): bool => $id > 0
+            static fn (int $id): bool => $id > 0,
         )));
 
         if ($title === '') {
@@ -467,7 +467,7 @@ class ChatArchiveService
                 throw AppError::validation(
                     'Uno o piu messaggi selezionati non appartengono alla scena pubblica nel range scelto',
                     [],
-                    'messages_out_of_range'
+                    'messages_out_of_range',
                 );
             }
         }
@@ -645,7 +645,7 @@ class ChatArchiveService
             throw AppError::notFound('Archivio non trovato', [], 'archive_not_found');
         }
 
-        $token = isset($archive->public_token) && $archive->public_token !== null
+        $token = isset($archive->public_token) && trim((string) $archive->public_token) !== ''
             ? (string) $archive->public_token
             : null;
 
@@ -736,7 +736,7 @@ class ChatArchiveService
 
         return [
             'archive' => $archive,
-            'messages' => $this->hydrateMessageRows($messages ?: []),
+            'messages' => $this->hydrateMessageRows($messages),
         ];
     }
 }

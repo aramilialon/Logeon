@@ -782,7 +782,9 @@ class SystemEventService
             $this->execPrepared('DELETE FROM system_event_reward_logs WHERE system_event_id = ?', [$eventId]);
             $this->execPrepared('DELETE FROM system_event_participations WHERE system_event_id = ?', [$eventId]);
             $this->execPrepared('DELETE FROM system_event_effects WHERE system_event_id = ?', [$eventId]);
-            $this->execPrepared('DELETE FROM system_event_quest_links WHERE system_event_id = ?', [$eventId]);
+            if (class_exists('\\Core\\Hooks')) {
+                \Core\Hooks::fire('system_event.delete.related', $eventId, $this->db);
+            }
             $this->execPrepared('DELETE FROM system_events WHERE id = ?', [$eventId]);
             $this->commit();
             AuditLogService::writeEvent('system_events.delete', ['id' => $eventId], 'admin');

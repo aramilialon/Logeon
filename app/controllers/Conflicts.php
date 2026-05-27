@@ -106,31 +106,16 @@ class Conflicts
         $conflictId = (int) ($data->conflict_id ?? $data->id ?? 0);
         $detail = $this->service()->getConflict($conflictId);
 
-        if (empty($session['is_staff'])) {
-            $openedBy = (int) (($detail['conflict']->opened_by ?? 0));
-            $isAllowed = $openedBy === (int) $session['character_id'];
-            if (!$isAllowed) {
-                foreach ($detail['participants'] as $p) {
-                    if ((int) ($p->character_id ?? 0) === (int) $session['character_id']) {
-                        $isAllowed = true;
-                        break;
+        if (empty($session['is_staff']) && (int) $session['character_id'] > 0 && !empty($detail['conflict'])) {
+            $locationId = (int) ($detail['conflict']->location_id ?? 0);
+            if ($locationId > 0) {
+                $sessionLocationId = (int) \Core\AppContext::session()->get('character_last_location');
+                if (!($sessionLocationId > 0 && $sessionLocationId === $locationId)) {
+                    $access = (new Locations())->canAccess($locationId, (int) $session['character_id']);
+                    if (empty($access['allowed'])) {
+                        throw AppError::unauthorized('Operazione non autorizzata sul conflitto', [], 'conflict_read_forbidden');
                     }
                 }
-            }
-            if (
-                !$isAllowed
-                && (int) $session['character_id'] > 0
-                && !empty($detail['conflict'])
-                && (int) ($detail['conflict']->location_id ?? 0) > 0
-            ) {
-                $locationId = (int) ($detail['conflict']->location_id ?? 0);
-                $access = (new Locations())->canAccess($locationId, (int) $session['character_id']);
-                if (!empty($access['allowed'])) {
-                    $isAllowed = true;
-                }
-            }
-            if (!$isAllowed) {
-                throw AppError::unauthorized('Operazione non autorizzata sul conflitto', [], 'conflict_read_forbidden');
             }
         }
 

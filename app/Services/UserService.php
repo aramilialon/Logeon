@@ -15,7 +15,15 @@ class UserService
     /** @var bool|null */
     private $restrictionColumnExists = null;
     /** @var bool|null */
+    private $restrictionChatColumnExists = null;
+    /** @var bool|null */
+    private $restrictionWhisperColumnExists = null;
+    /** @var bool|null */
+    private $restrictionCommandsColumnExists = null;
+    /** @var bool|null */
     private $superuserColumnExists = null;
+    /** @var bool|null */
+    private $superuserRoleColumnExists = null;
 
     public function __construct(DbAdapterInterface $db = null)
     {
@@ -56,17 +64,19 @@ class UserService
         return $status;
     }
 
-    private function normalizeOrderBy($raw): array
+    private function normalizeOrderBy($raw, bool $isSuperuser = false): array
     {
-        $quotedCryptKey = $this->quotedCryptKey();
         $map = [
-            'email' => 'LOWER(CAST(AES_DECRYPT(users.email, ' . $quotedCryptKey . ') AS CHAR(255)))',
             'character_name' => 'LOWER(CONCAT_WS(" ", IFNULL(ch.name, ""), IFNULL(ch.surname, "")))',
             'date_created' => 'users.date_created',
             'date_actived' => 'users.date_actived',
             'date_last_signin' => 'users.date_last_signin',
             'date_last_signout' => 'users.date_last_signout',
         ];
+        if ($isSuperuser) {
+            $quotedCryptKey = $this->quotedCryptKey();
+            $map['email'] = 'LOWER(CAST(AES_DECRYPT(users.email, ' . $quotedCryptKey . ') AS CHAR(255)))';
+        }
 
         $defaultField = 'date_created';
         $defaultDir = 'DESC';
@@ -93,6 +103,61 @@ class UserService
         throw AppError::validation($message);
     }
 
+    public function allowedSuperuserRoles(bool $includeCreator = true): array
+    {
+        $roles = ['gestore', 'sviluppatore', 'grafico'];
+        if ($includeCreator) {
+            array_unshift($roles, 'creatore');
+        }
+
+        return $roles;
+    }
+
+    public function normalizeSuperuserRole(string $rawRole, string $fallback = 'gestore', bool $allowCreator = false): string
+    {
+        $role = strtolower(trim($rawRole));
+        $allowed = $this->allowedSuperuserRoles($allowCreator);
+
+        if ($role === '' || !in_array($role, $allowed, true)) {
+            $role = strtolower(trim($fallback));
+        }
+        if ($role === '' || !in_array($role, $allowed, true)) {
+            $role = $allowCreator ? 'creatore' : 'gestore';
+        }
+
+        return $role;
+    }
+
+    public function readSuperuserRole($user): string
+    {
+        if (empty($user) || (int) ($user->is_superuser ?? 0) !== 1) {
+            return '';
+        }
+
+        $role = isset($user->superuser_role) ? strtolower(trim((string) $user->superuser_role)) : '';
+        if ($role === '') {
+            return $this->isSuperuserRoleFeatureAvailable() ? 'gestore' : 'creatore';
+        }
+
+        return $this->normalizeSuperuserRole($role, 'gestore', true);
+    }
+
+    public function isCreatorSuperuser($user): bool
+    {
+        return !empty($user)
+            && (int) ($user->is_superuser ?? 0) === 1
+            && $this->readSuperuserRole($user) === 'creatore';
+    }
+
+    private function buildSuperuserRoleSelect(string $superuserFlagExpression, string $tableAlias = 'users'): string
+    {
+        if ($this->isSuperuserRoleFeatureAvailable()) {
+            return $tableAlias . '.superuser_role';
+        }
+
+        return 'CASE WHEN ' . $superuserFlagExpression . ' = 1 THEN "creatore" ELSE NULL END AS superuser_role';
+    }
+
     public function normalizePermissionsHierarchy(int $isAdministrator, int $isModerator, int $isMaster): array
     {
         $admin = ($isAdministrator === 1);
@@ -104,6 +169,27 @@ class UserService
             'is_moderator' => $moderator ? 1 : 0,
             'is_master' => $master ? 1 : 0,
         ];
+    }
+
+    public function normalizePrivilegeAssignment(int $isSuperuser, string $superuserRole, int $isAdministrator, int $isModerator, int $isMaster, bool $allowCreatorRole = false): array
+    {
+        $superuser = $this->isSuperuserFeatureAvailable() && $isSuperuser === 1;
+
+        if ($superuser) {
+            return [
+                'is_superuser' => 1,
+                'superuser_role' => $this->normalizeSuperuserRole($superuserRole, 'gestore', $allowCreatorRole),
+                'is_administrator' => 1,
+                'is_moderator' => 1,
+                'is_master' => 1,
+            ];
+        }
+
+        $normalized = $this->normalizePermissionsHierarchy($isAdministrator, $isModerator, $isMaster);
+        $normalized['is_superuser'] = 0;
+        $normalized['superuser_role'] = null;
+
+        return $normalized;
     }
 
     private function verifyPassword(string $password, string $hash, int $userId = 0): bool
@@ -181,6 +267,66 @@ class UserService
         return $this->restrictionColumnExists;
     }
 
+    public function isRestrictionChatFeatureAvailable(): bool
+    {
+        if ($this->restrictionChatColumnExists !== null) {
+            return $this->restrictionChatColumnExists;
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT 1 AS ok
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1',
+            ['users', 'restrict_chat'],
+        );
+
+        $this->restrictionChatColumnExists = !empty($row);
+        return $this->restrictionChatColumnExists;
+    }
+
+    public function isRestrictionWhisperFeatureAvailable(): bool
+    {
+        if ($this->restrictionWhisperColumnExists !== null) {
+            return $this->restrictionWhisperColumnExists;
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT 1 AS ok
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1',
+            ['users', 'restrict_whisper'],
+        );
+
+        $this->restrictionWhisperColumnExists = !empty($row);
+        return $this->restrictionWhisperColumnExists;
+    }
+
+    public function isRestrictionCommandsFeatureAvailable(): bool
+    {
+        if ($this->restrictionCommandsColumnExists !== null) {
+            return $this->restrictionCommandsColumnExists;
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT 1 AS ok
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1',
+            ['users', 'restrict_commands'],
+        );
+
+        $this->restrictionCommandsColumnExists = !empty($row);
+        return $this->restrictionCommandsColumnExists;
+    }
+
     public function isSuperuserFeatureAvailable(): bool
     {
         if ($this->superuserColumnExists !== null) {
@@ -201,6 +347,26 @@ class UserService
         return $this->superuserColumnExists;
     }
 
+    public function isSuperuserRoleFeatureAvailable(): bool
+    {
+        if ($this->superuserRoleColumnExists !== null) {
+            return $this->superuserRoleColumnExists;
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT 1 AS ok
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?
+             LIMIT 1',
+            ['users', 'superuser_role'],
+        );
+
+        $this->superuserRoleColumnExists = !empty($row);
+        return $this->superuserRoleColumnExists;
+    }
+
     public function isRestricted(int $userId): bool
     {
         if ($userId <= 0 || !$this->isRestrictionFeatureAvailable()) {
@@ -216,6 +382,81 @@ class UserService
         );
 
         return !empty($row) && (int) $row->is_restricted === 1;
+    }
+
+    public function getRestrictionScopes(int $userId): array
+    {
+        $userId = (int) $userId;
+        if ($userId <= 0) {
+            return [
+                'is_restricted' => 0,
+                'restrict_chat' => 0,
+                'restrict_whisper' => 0,
+                'restrict_commands' => 0,
+            ];
+        }
+
+        $hasGlobal = $this->isRestrictionFeatureAvailable();
+        $hasChat = $this->isRestrictionChatFeatureAvailable();
+        $hasWhisper = $this->isRestrictionWhisperFeatureAvailable();
+        $hasCommands = $this->isRestrictionCommandsFeatureAvailable();
+
+        $columns = [];
+        $columns[] = $hasGlobal ? 'is_restricted' : '0 AS is_restricted';
+        $columns[] = $hasChat ? 'restrict_chat' : '0 AS restrict_chat';
+        $columns[] = $hasWhisper ? 'restrict_whisper' : '0 AS restrict_whisper';
+        $columns[] = $hasCommands ? 'restrict_commands' : '0 AS restrict_commands';
+
+        $row = $this->firstPrepared(
+            'SELECT ' . implode(', ', $columns) . '
+             FROM users
+             WHERE id = ?
+             LIMIT 1',
+            [$userId],
+        );
+
+        return [
+            'is_restricted' => (int) ($row->is_restricted ?? 0),
+            'restrict_chat' => (int) ($row->restrict_chat ?? 0),
+            'restrict_whisper' => (int) ($row->restrict_whisper ?? 0),
+            'restrict_commands' => (int) ($row->restrict_commands ?? 0),
+        ];
+    }
+
+    public function isRestrictedForScope(int $userId, string $scope): bool
+    {
+        if ($this->isRestricted($userId)) {
+            return true;
+        }
+
+        $scope = strtolower(trim($scope));
+        if ($scope === '' || $userId <= 0) {
+            return false;
+        }
+
+        $map = [
+            'chat' => ['restrict_chat', 'isRestrictionChatFeatureAvailable'],
+            'whisper' => ['restrict_whisper', 'isRestrictionWhisperFeatureAvailable'],
+            'commands' => ['restrict_commands', 'isRestrictionCommandsFeatureAvailable'],
+        ];
+        if (!isset($map[$scope])) {
+            return false;
+        }
+
+        [$column, $method] = $map[$scope];
+        if (!method_exists($this, $method) || !$this->{$method}()) {
+            return false;
+        }
+
+        $row = $this->firstPrepared(
+            'SELECT ' . $column . '
+             FROM users
+             WHERE id = ?
+             LIMIT 1',
+            [$userId],
+        );
+
+        return !empty($row) && (int) ($row->{$column} ?? 0) === 1;
     }
 
     public function emailExists(string $email): bool
@@ -278,9 +519,11 @@ class UserService
         $restrictionSelect = $this->isRestrictionFeatureAvailable()
             ? 'users.is_restricted'
             : '0 AS is_restricted';
-        $superuserSelect = $this->isSuperuserFeatureAvailable()
+        $superuserFlagExpression = $this->isSuperuserFeatureAvailable()
             ? 'users.is_superuser'
-            : 'users.is_administrator AS is_superuser';
+            : 'users.is_administrator';
+        $superuserSelect = $superuserFlagExpression . ' AS is_superuser';
+        $superuserRoleSelect = $this->buildSuperuserRoleSelect($superuserFlagExpression, 'users');
 
         return $this->firstPrepared(
             'SELECT users.id,
@@ -289,6 +532,7 @@ class UserService
                     users.is_moderator,
                     users.is_master,
                     ' . $superuserSelect . ',
+                    ' . $superuserRoleSelect . ',
                     users.date_created,
                     users.date_actived,
                     users.date_last_signin,
@@ -319,13 +563,20 @@ class UserService
             $results = 100;
         }
 
-        $order = $this->normalizeOrderBy($orderByRaw);
+        $order = $this->normalizeOrderBy($orderByRaw, $isSuperuser);
 
         $whereParts = [];
         $whereParams = [];
         if ($search !== '') {
             $searchLike = '%' . $search . '%';
-            $characterSql = 'LOWER(CONCAT_WS(" ", IFNULL(ch.name, ""), IFNULL(ch.surname, ""))) LIKE ?';
+            $characterSql = 'EXISTS (
+                SELECT 1
+                FROM characters c_search
+                WHERE c_search.user_id = users.id
+                  AND (c_search.delete_scheduled_at IS NULL OR c_search.delete_scheduled_at > NOW())
+                  AND LOWER(CONCAT_WS(" ", IFNULL(c_search.name, ""), IFNULL(c_search.surname, ""))) LIKE ?
+                LIMIT 1
+            )';
             if ($isSuperuser) {
                 $whereParts[] = '('
                     . 'LOWER(CAST(AES_DECRYPT(users.email, ?) AS CHAR(255))) LIKE ?'
@@ -360,9 +611,11 @@ class UserService
         $restrictionSelect = $this->isRestrictionFeatureAvailable()
             ? 'users.is_restricted'
             : '0 AS is_restricted';
-        $superuserSelect = $this->isSuperuserFeatureAvailable()
+        $superuserFlagExpression = $this->isSuperuserFeatureAvailable()
             ? 'users.is_superuser'
-            : 'users.is_administrator AS is_superuser';
+            : 'users.is_administrator';
+        $superuserSelect = $superuserFlagExpression . ' AS is_superuser';
+        $superuserRoleSelect = $this->buildSuperuserRoleSelect($superuserFlagExpression, 'users');
         $emailSelect = $isSuperuser
             ? 'CAST(AES_DECRYPT(users.email, ?) AS CHAR(255)) AS email'
             : 'NULL AS email';
@@ -379,6 +632,7 @@ class UserService
                     users.is_moderator,
                     users.is_master,
                     ' . $superuserSelect . ',
+                    ' . $superuserRoleSelect . ',
                     ch.id AS character_id,
                     ch.name AS character_name,
                     ch.surname AS character_surname,
@@ -394,13 +648,14 @@ class UserService
                         ELSE "pending"
                     END AS status
              FROM users
-             LEFT JOIN (
-                SELECT c.user_id, MIN(c.id) AS character_id
-                FROM characters c
-                WHERE c.delete_scheduled_at IS NULL OR c.delete_scheduled_at > NOW()
-                GROUP BY c.user_id
-             ) uc ON uc.user_id = users.id
-             LEFT JOIN characters ch ON ch.id = uc.character_id
+             LEFT JOIN characters ch ON ch.id = (
+                SELECT c_pick.id
+                FROM characters c_pick
+                WHERE c_pick.user_id = users.id
+                  AND (c_pick.delete_scheduled_at IS NULL OR c_pick.delete_scheduled_at > NOW())
+                ORDER BY c_pick.id ASC
+                LIMIT 1
+             )
              ' . $whereSql . '
              ' . $order['sql'] . '
              LIMIT ? OFFSET ?',
@@ -410,13 +665,6 @@ class UserService
         $count = $this->firstPrepared(
             'SELECT COUNT(*) AS count
              FROM users
-             LEFT JOIN (
-                SELECT c.user_id, MIN(c.id) AS character_id
-                FROM characters c
-                WHERE c.delete_scheduled_at IS NULL OR c.delete_scheduled_at > NOW()
-                GROUP BY c.user_id
-             ) uc ON uc.user_id = users.id
-             LEFT JOIN characters ch ON ch.id = uc.character_id
              ' . $whereSql,
             $whereParams,
         );
@@ -463,9 +711,56 @@ class UserService
         return $token;
     }
 
-    public function setAdminPermissions(int $userId, int $isAdministrator, int $isModerator, int $isMaster): void
+    public function setAdminPermissions(int $userId, int $isAdministrator, int $isModerator, int $isMaster, int $isSuperuser = 0, ?string $superuserRole = null): void
     {
-        $normalized = $this->normalizePermissionsHierarchy($isAdministrator, $isModerator, $isMaster);
+        $normalized = $this->normalizePrivilegeAssignment(
+            $isSuperuser,
+            (string) ($superuserRole ?? ''),
+            $isAdministrator,
+            $isModerator,
+            $isMaster,
+        );
+
+        if ($this->isSuperuserFeatureAvailable() && $this->isSuperuserRoleFeatureAvailable()) {
+            $this->execPrepared(
+                'UPDATE users SET
+                    is_administrator = ?,
+                    is_superuser = ?,
+                    superuser_role = ?,
+                    is_moderator = ?,
+                    is_master = ?
+                 WHERE id = ?',
+                [
+                    $normalized['is_administrator'],
+                    $normalized['is_superuser'],
+                    $normalized['superuser_role'],
+                    $normalized['is_moderator'],
+                    $normalized['is_master'],
+                    $userId,
+                ],
+            );
+            return;
+        }
+
+        if ($this->isSuperuserFeatureAvailable()) {
+            $this->execPrepared(
+                'UPDATE users SET
+                    is_administrator = ?,
+                    is_superuser = ?,
+                    is_moderator = ?,
+                    is_master = ?
+                 WHERE id = ?',
+                [
+                    $normalized['is_administrator'],
+                    $normalized['is_superuser'],
+                    $normalized['is_moderator'],
+                    $normalized['is_master'],
+                    $userId,
+                ],
+            );
+            return;
+        }
+
         $this->execPrepared(
             'UPDATE users SET
                 is_administrator = ?,
@@ -489,10 +784,25 @@ class UserService
 
     public function setUserRestriction(int $userId, int $isRestricted): void
     {
+        $hasChat = $this->isRestrictionChatFeatureAvailable();
+        $hasWhisper = $this->isRestrictionWhisperFeatureAvailable();
+        $hasCommands = $this->isRestrictionCommandsFeatureAvailable();
+
         if ($isRestricted === 1) {
+            $extraSet = '';
+            if ($hasChat) {
+                $extraSet .= ', restrict_chat = 1';
+            }
+            if ($hasWhisper) {
+                $extraSet .= ', restrict_whisper = 1';
+            }
+            if ($hasCommands) {
+                $extraSet .= ', restrict_commands = 1';
+            }
             $this->execPrepared(
                 'UPDATE users SET
                     is_restricted = 1,
+                    ' . ltrim($extraSet, ', ') . (trim($extraSet) !== '' ? ',' : '') . '
                     session_version = IFNULL(session_version, 1) + 1,
                     date_sessions_revoked = NOW()
                  WHERE id = ?',
@@ -501,11 +811,59 @@ class UserService
             return;
         }
 
+        $extraUnset = '';
+        if ($hasChat) {
+            $extraUnset .= ', restrict_chat = 0';
+        }
+        if ($hasWhisper) {
+            $extraUnset .= ', restrict_whisper = 0';
+        }
+        if ($hasCommands) {
+            $extraUnset .= ', restrict_commands = 0';
+        }
         $this->execPrepared(
             'UPDATE users SET
-                is_restricted = 0
+                is_restricted = 0' . $extraUnset . '
              WHERE id = ?',
             [$userId],
+        );
+    }
+
+    public function setUserRestrictionScopes(
+        int $userId,
+        ?int $restrictChat = null,
+        ?int $restrictWhisper = null,
+        ?int $restrictCommands = null,
+    ): void {
+        $userId = (int) $userId;
+        if ($userId <= 0) {
+            return;
+        }
+
+        $updates = [];
+        $params = [];
+        if ($restrictChat !== null && $this->isRestrictionChatFeatureAvailable()) {
+            $updates[] = 'restrict_chat = ?';
+            $params[] = ((int) $restrictChat === 1) ? 1 : 0;
+        }
+        if ($restrictWhisper !== null && $this->isRestrictionWhisperFeatureAvailable()) {
+            $updates[] = 'restrict_whisper = ?';
+            $params[] = ((int) $restrictWhisper === 1) ? 1 : 0;
+        }
+        if ($restrictCommands !== null && $this->isRestrictionCommandsFeatureAvailable()) {
+            $updates[] = 'restrict_commands = ?';
+            $params[] = ((int) $restrictCommands === 1) ? 1 : 0;
+        }
+        if (empty($updates)) {
+            return;
+        }
+
+        $params[] = $userId;
+        $this->execPrepared(
+            'UPDATE users SET
+                ' . implode(', ', $updates) . '
+             WHERE id = ?',
+            $params,
         );
     }
 

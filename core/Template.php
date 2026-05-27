@@ -47,6 +47,123 @@ class Template
         return self::$config;
     }
 
+    /** @return array<int,string> */
+    private static function resolveThemeAssetEntries(array $assets, string $channel): array
+    {
+        $channelKey = trim($channel);
+        if ($channelKey === '') {
+            return [];
+        }
+
+        $groups = [$channelKey];
+        if ($channelKey === 'public_css' || $channelKey === 'game_css') {
+            $groups = ['shared_css', $channelKey];
+        } elseif ($channelKey === 'public_js' || $channelKey === 'game_js') {
+            $groups = ['shared_js', $channelKey];
+        }
+
+        $entries = [];
+        foreach ($groups as $group) {
+            $groupEntries = $assets[$group] ?? null;
+            if (!is_array($groupEntries)) {
+                continue;
+            }
+
+            foreach ($groupEntries as $entry) {
+                $path = trim((string) $entry);
+                if ($path !== '') {
+                    $entries[] = $path;
+                }
+            }
+        }
+
+        return array_values(array_unique($entries));
+    }
+
+    private static function sanitizeThemeClassToken(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return '';
+        }
+
+        $normalized = (string) preg_replace('/[^a-z0-9_-]+/i', '-', $normalized);
+        $normalized = (string) preg_replace('/-{2,}/', '-', $normalized);
+        return trim($normalized, '-');
+    }
+
+    /** @return array<int,string> */
+    private static function resolveThemeBodyClassEntries(array $manifest, string $context): array
+    {
+        $source = $manifest['body_class'] ?? null;
+        if ($source === null) {
+            return [];
+        }
+
+        $entries = [];
+        if (is_string($source)) {
+            $entries[] = $source;
+        } elseif (is_array($source)) {
+            if (array_is_list($source)) {
+                foreach ($source as $entry) {
+                    if (is_string($entry)) {
+                        $entries[] = $entry;
+                    }
+                }
+            } else {
+                foreach (['shared', 'all', 'default', $context] as $key) {
+                    $group = $source[$key] ?? null;
+                    if (is_string($group)) {
+                        $entries[] = $group;
+                        continue;
+                    }
+                    if (!is_array($group)) {
+                        continue;
+                    }
+                    foreach ($group as $entry) {
+                        if (is_string($entry)) {
+                            $entries[] = $entry;
+                        }
+                    }
+                }
+            }
+        }
+
+        $classes = [];
+        foreach ($entries as $entry) {
+            foreach (preg_split('/\s+/', trim($entry)) ?: [] as $token) {
+                $className = self::sanitizeThemeClassToken($token);
+                if ($className !== '') {
+                    $classes[] = $className;
+                }
+            }
+        }
+
+        return array_values(array_unique($classes));
+    }
+
+    private static function buildThemeBodyClasses(array $themeRuntime, string $context): string
+    {
+        $classes = [
+            'theme-context-' . self::sanitizeThemeClassToken($context),
+        ];
+
+        if ((bool) ($themeRuntime['active'] ?? false) === true) {
+            $classes[] = 'theme-active';
+            $themeId = self::sanitizeThemeClassToken((string) ($themeRuntime['id'] ?? ''));
+            if ($themeId !== '') {
+                $classes[] = 'theme-' . $themeId;
+            }
+        } else {
+            $classes[] = 'theme-inactive';
+        }
+
+        $manifest = (array) ($themeRuntime['manifest'] ?? []);
+        $classes = array_merge($classes, self::resolveThemeBodyClassEntries($manifest, $context));
+
+        return implode(' ', array_values(array_unique(array_filter($classes))));
+    }
+
     private static function twigFactory(): TwigEnvironmentFactory
     {
         if (self::$twigFactory instanceof TwigEnvironmentFactory) {
@@ -120,6 +237,8 @@ class Template
             $twig->addGlobal('APP', $appConfig);
             $twig->addGlobal('CONFIG', $runtimeConfig);
             $twig->addGlobal('PWA', \Core\PwaRuntime::build());
+            $twig->addGlobal('APP_RELEASE', \Core\ReleaseInfo::status());
+            $twig->addGlobal('FRONTEND_ASSET_VERSION', \Core\FrontendAssetVersion::resolve($appConfig));
             $twig->addGlobal('csrf_token', \Core\Csrf::token());
             $twig->addGlobal('THEME', $themeRuntime);
             $twig->addGlobal('THEME_CONTEXT', $context);
@@ -146,6 +265,10 @@ class Template
                     return $manifest;
                 }
                 return $manifest[$k] ?? null;
+            }));
+
+            $twig->addFunction(new \Twig\TwigFunction('theme_body_classes', function () use ($themeRuntime, $context) {
+                return self::buildThemeBodyClasses($themeRuntime, $context);
             }));
 
             $twig->addFunction(new \Twig\TwigFunction('theme_shell', function ($area, $fallback) use ($themeRuntime, $viewsPaths) {
@@ -231,12 +354,8 @@ class Template
                 }
                 $manifest = (array) ($themeRuntime['manifest'] ?? []);
                 $assets = is_array($manifest['assets'] ?? null) ? (array) $manifest['assets'] : [];
-                $channelKey = trim((string) $channel);
-                if ($channelKey === '') {
-                    return '';
-                }
-                $entries = $assets[$channelKey] ?? null;
-                if (!is_array($entries) || empty($entries)) {
+                $entries = self::resolveThemeAssetEntries($assets, trim((string) $channel));
+                if ($entries === []) {
                     return '';
                 }
 

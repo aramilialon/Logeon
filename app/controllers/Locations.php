@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Location;
 use App\Services\LocationAdminService;
 use App\Services\LocationService;
+use Core\AuditLogService;
 use Core\Http\ApiResponse;
 use Core\Http\AppError;
 use Core\Http\InputValidator;
@@ -14,6 +15,7 @@ use Core\Http\ResponseEmitter;
 use Core\Logging\LoggerInterface;
 
 use Core\RateLimiter;
+use Core\SessionStore;
 
 class Locations extends Location
 {
@@ -90,6 +92,14 @@ class Locations extends Location
         \Core\AuthGuard::api()->requireAbility('settings.manage');
     }
 
+    private function requireNarrativeStaff(): void
+    {
+        $auth = \Core\AppContext::authContext();
+        if (!$auth->isAdmin() && !$auth->isMaster() && !$auth->isSuperuser()) {
+            throw AppError::unauthorized('Operazione riservata a Master, Admin e Superuser');
+        }
+    }
+
     private function enforceRate($bucket, $limit, $windowSeconds, $identifier, $message = null, string $errorCode = 'rate_limited')
     {
         $rate = RateLimiter::hit($bucket, $limit, $windowSeconds, $identifier);
@@ -124,7 +134,8 @@ class Locations extends Location
         $post->cache = false;
         $post->cache_ttl = 0;
         $response = $this->listWithPayload($post, false);
-        $dataset = $response['dataset'] ?? [];
+        $dataset = is_array($response['dataset'] ?? null) ? $response['dataset'] : [];
+        $this->enrichRequiredSocialStatusFields($dataset);
 
         if (!empty($dataset)) {
             $character = $this->getCharacter($character_id);
@@ -268,6 +279,7 @@ class Locations extends Location
             'SELECT ' . implode(', ', $this->fillable) . ' FROM ' . $this->table . $joins . $whereSql . $orderSql . ' LIMIT ? OFFSET ?',
             array_merge($params, [$results, $offset]),
         );
+        $this->enrichRequiredSocialStatusFields($dataset);
         $countRow = static::db()->fetchOnePrepared(
             'SELECT COUNT(DISTINCT locations.id) AS count FROM ' . $this->table . $joins . $whereSql,
             $params,
@@ -576,6 +588,381 @@ class Locations extends Location
         );
     }
 
+    public function staffNotesList()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
+        $actorCharacterId = \Core\AuthGuard::api()->requireCharacter();
+        $data = $this->requestDataObject();
+
+        $locationId = InputValidator::integer($data, 'location_id', 0);
+        if ($locationId <= 0) {
+            $this->failValidation('Location non valida', 'location_invalid');
+        }
+        $this->canAccess((int) $locationId, (int) $actorCharacterId);
+
+        $rows = static::db()->fetchAllPrepared(
+            'SELECT lsn.id, lsn.location_id, lsn.author_user_id, lsn.author_character_id, lsn.note_text, lsn.priority, lsn.date_created, lsn.date_updated,
+                    c.name AS author_name, c.surname AS author_surname
+             FROM location_staff_notes lsn
+             LEFT JOIN characters c ON c.id = lsn.author_character_id
+             WHERE lsn.location_id = ?
+             ORDER BY lsn.date_updated DESC, lsn.id DESC',
+            [(int) $locationId],
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+            'dataset' => !empty($rows) ? $rows : [],
+        ]));
+    }
+
+    public function staffNoteUpsert()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
+        $actorUserId = \Core\AuthGuard::api()->requireUser();
+        $actorCharacterId = \Core\AuthGuard::api()->requireCharacter();
+        $data = $this->requestDataObject();
+
+        $locationId = InputValidator::integer($data, 'location_id', 0);
+        if ($locationId <= 0) {
+            $this->failValidation('Location non valida', 'location_invalid');
+        }
+        $this->canAccess((int) $locationId, (int) $actorCharacterId);
+
+        $noteText = trim(InputValidator::string($data, 'note_text', ''));
+        if ($noteText === '') {
+            $this->failValidation('Nota non valida', 'staff_note_invalid');
+        }
+        if (mb_strlen($noteText) > 5000) {
+            $this->failValidation('Nota troppo lunga', 'staff_note_too_long');
+        }
+
+        $priority = strtolower(trim(InputValidator::string($data, 'priority', 'normal')));
+        if (!in_array($priority, ['low', 'normal', 'high'], true)) {
+            $priority = 'normal';
+        }
+
+        $id = InputValidator::integer($data, 'id', 0);
+        if ($id > 0) {
+            static::db()->executePrepared(
+                'UPDATE location_staff_notes SET
+                    note_text = ?,
+                    priority = ?,
+                    date_updated = NOW()
+                 WHERE id = ?
+                   AND location_id = ?
+                 LIMIT 1',
+                [$noteText, $priority, (int) $id, (int) $locationId],
+            );
+        } else {
+            static::db()->executePrepared(
+                'INSERT INTO location_staff_notes SET
+                    location_id = ?,
+                    author_user_id = ?,
+                    author_character_id = ?,
+                    note_text = ?,
+                    priority = ?,
+                    date_created = NOW()',
+                [(int) $locationId, (int) $actorUserId, (int) $actorCharacterId, $noteText, $priority],
+            );
+            $id = (int) static::db()->lastInsertID();
+        }
+
+        $row = static::db()->fetchOnePrepared(
+            'SELECT lsn.id, lsn.location_id, lsn.author_user_id, lsn.author_character_id, lsn.note_text, lsn.priority, lsn.date_created, lsn.date_updated,
+                    c.name AS author_name, c.surname AS author_surname
+             FROM location_staff_notes lsn
+             LEFT JOIN characters c ON c.id = lsn.author_character_id
+             WHERE lsn.id = ?
+             LIMIT 1',
+            [(int) $id],
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+            'dataset' => $row,
+        ]));
+    }
+
+    public function staffNoteDelete()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
+        \Core\AuthGuard::api()->requireCharacter();
+        $data = $this->requestDataObject();
+
+        $noteId = InputValidator::integer($data, 'id', 0);
+        if ($noteId <= 0) {
+            $this->failValidation('Nota non valida', 'staff_note_invalid');
+        }
+
+        static::db()->executePrepared(
+            'DELETE FROM location_staff_notes WHERE id = ? LIMIT 1',
+            [(int) $noteId],
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+        ]));
+    }
+
+    public function staffFlagsList()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
+        $actorCharacterId = \Core\AuthGuard::api()->requireCharacter();
+        $data = $this->requestDataObject();
+
+        $locationId = InputValidator::integer($data, 'location_id', 0);
+        if ($locationId <= 0) {
+            $this->failValidation('Location non valida', 'location_invalid');
+        }
+        $this->canAccess((int) $locationId, (int) $actorCharacterId);
+
+        $rows = static::db()->fetchAllPrepared(
+            'SELECT f.id, f.location_id, f.character_id, f.flag, f.note_text, f.created_by_user_id, f.created_by_character_id, f.date_created, f.date_updated,
+                    c.name, c.surname
+             FROM location_staff_character_flags f
+             INNER JOIN characters c ON c.id = f.character_id
+             WHERE f.location_id = ?
+             ORDER BY f.flag DESC, c.name ASC, c.surname ASC',
+            [(int) $locationId],
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+            'dataset' => !empty($rows) ? $rows : [],
+        ]));
+    }
+
+    public function staffFlagUpsert()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
+        $actorUserId = \Core\AuthGuard::api()->requireUser();
+        $actorCharacterId = \Core\AuthGuard::api()->requireCharacter();
+        $data = $this->requestDataObject();
+
+        $locationId = InputValidator::integer($data, 'location_id', 0);
+        $targetCharacterId = InputValidator::integer($data, 'character_id', 0);
+        if ($locationId <= 0 || $targetCharacterId <= 0) {
+            $this->failValidation('Dati non validi', 'staff_flag_invalid');
+        }
+        $this->canAccess((int) $locationId, (int) $actorCharacterId);
+
+        $flag = strtolower(trim(InputValidator::string($data, 'flag', 'none')));
+        if (!in_array($flag, ['none', 'monitor', 'urgent', 'critical'], true)) {
+            $flag = 'none';
+        }
+        $noteText = trim(InputValidator::string($data, 'note_text', ''));
+        if (mb_strlen($noteText) > 255) {
+            $noteText = mb_substr($noteText, 0, 255);
+        }
+        if ($noteText === '') {
+            $noteText = null;
+        }
+
+        if ($flag === 'none' && $noteText === null) {
+            static::db()->executePrepared(
+                'DELETE FROM location_staff_character_flags
+                 WHERE location_id = ?
+                   AND character_id = ?
+                 LIMIT 1',
+                [(int) $locationId, (int) $targetCharacterId],
+            );
+            ResponseEmitter::emit(ApiResponse::json([
+                'success' => true,
+                'dataset' => [
+                    'location_id' => (int) $locationId,
+                    'character_id' => (int) $targetCharacterId,
+                    'flag' => 'none',
+                    'note_text' => null,
+                ],
+            ]));
+            return;
+        }
+
+        static::db()->executePrepared(
+            'INSERT INTO location_staff_character_flags
+                (location_id, character_id, flag, note_text, created_by_user_id, created_by_character_id, date_created, date_updated)
+             VALUES
+                (?, ?, ?, ?, ?, ?, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE
+                flag = VALUES(flag),
+                note_text = VALUES(note_text),
+                created_by_user_id = VALUES(created_by_user_id),
+                created_by_character_id = VALUES(created_by_character_id),
+                date_updated = NOW()',
+            [(int) $locationId, (int) $targetCharacterId, $flag, $noteText, (int) $actorUserId, (int) $actorCharacterId],
+        );
+
+        $row = static::db()->fetchOnePrepared(
+            'SELECT f.id, f.location_id, f.character_id, f.flag, f.note_text, f.created_by_user_id, f.created_by_character_id, f.date_created, f.date_updated,
+                    c.name, c.surname
+             FROM location_staff_character_flags f
+             INNER JOIN characters c ON c.id = f.character_id
+             WHERE f.location_id = ?
+               AND f.character_id = ?
+             LIMIT 1',
+            [(int) $locationId, (int) $targetCharacterId],
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+            'dataset' => $row,
+        ]));
+    }
+
+    public function staffLocationsList()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
+        \Core\AuthGuard::api()->requireCharacter();
+
+        $rows = static::db()->fetchAllPrepared(
+            'SELECT l.id, l.name, l.map_id, m.name AS map_name
+             FROM locations l
+             LEFT JOIN maps m ON m.id = l.map_id
+             WHERE l.date_deleted IS NULL
+             ORDER BY m.name ASC, l.name ASC, l.id ASC',
+            [],
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+            'dataset' => !empty($rows) ? $rows : [],
+        ]));
+    }
+
+    public function staffTeleport()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireNarrativeStaff();
+        $actorUserId = \Core\AuthGuard::api()->requireUser();
+        $actorCharacterId = \Core\AuthGuard::api()->requireCharacter();
+        $data = $this->requestDataObject();
+
+        $targetCharacterId = InputValidator::integer($data, 'character_id', 0);
+        $targetLocationId = InputValidator::integer($data, 'target_location_id', 0);
+        $reason = trim(InputValidator::string($data, 'reason', ''));
+        if ($targetCharacterId <= 0 || $targetLocationId <= 0) {
+            $this->failValidation('Dati non validi', 'staff_teleport_invalid');
+        }
+        if ($reason === '') {
+            $this->failValidation('Motivazione obbligatoria', 'staff_teleport_reason_required');
+        }
+
+        $targetCharacter = static::db()->fetchOnePrepared(
+            'SELECT id, user_id, last_location, last_map
+             FROM characters
+             WHERE id = ?
+             LIMIT 1',
+            [(int) $targetCharacterId],
+        );
+        if (empty($targetCharacter)) {
+            $this->failValidation('Personaggio non valido', 'character_invalid');
+        }
+
+        $targetLocation = static::db()->fetchOnePrepared(
+            'SELECT id, map_id, name
+             FROM locations
+             WHERE id = ?
+               AND date_deleted IS NULL
+             LIMIT 1',
+            [(int) $targetLocationId],
+        );
+        if (empty($targetLocation)) {
+            $this->failValidation('Location non valida', 'location_invalid');
+        }
+
+        $targetMapId = (int) ($targetLocation->map_id ?? 0);
+        static::db()->executePrepared(
+            'UPDATE characters SET
+                last_location = ?,
+                last_map = ?,
+                date_last_seed = NOW()
+             WHERE id = ?
+             LIMIT 1',
+            [(int) $targetLocationId, $targetMapId > 0 ? $targetMapId : null, (int) $targetCharacterId],
+        );
+
+        if ((int) $targetCharacterId === (int) $actorCharacterId) {
+            SessionStore::set('character_last_location', (int) $targetLocationId);
+            SessionStore::set('character_last_map', $targetMapId > 0 ? $targetMapId : null);
+        }
+
+        AuditLogService::write(
+            'location',
+            'staff_teleport',
+            [
+                'target_character_id' => (int) $targetCharacterId,
+                'from_location_id' => (int) ($targetCharacter->last_location ?? 0),
+                'to_location_id' => (int) $targetLocationId,
+                'to_map_id' => $targetMapId,
+                'reason' => $reason,
+                'actor_user_id' => (int) $actorUserId,
+                'actor_character_id' => (int) $actorCharacterId,
+            ],
+            'game/location',
+            \Core\Router::currentUri(),
+            (int) $actorUserId,
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+            'dataset' => [
+                'character_id' => (int) $targetCharacterId,
+                'location_id' => (int) $targetLocationId,
+                'map_id' => $targetMapId,
+                'location_name' => (string) ($targetLocation->name ?? ''),
+            ],
+        ]));
+    }
+
+    /**
+     * @param array<int,mixed> $dataset
+     */
+    private function enrichRequiredSocialStatusFields(array &$dataset): void
+    {
+        if (empty($dataset)) {
+            return;
+        }
+
+        $statusIds = [];
+        foreach ($dataset as $row) {
+            if (!is_object($row)) {
+                continue;
+            }
+
+            $statusId = isset($row->min_socialstatus_id) ? (int) $row->min_socialstatus_id : 0;
+            if ($statusId > 0) {
+                $statusIds[$statusId] = $statusId;
+            }
+        }
+
+        $statusById = [];
+        foreach ($statusIds as $statusId) {
+            $status = \App\Services\SocialStatusProviderRegistry::getById((int) $statusId);
+            if ($status !== null) {
+                $statusById[(int) $statusId] = $status;
+            }
+        }
+
+        foreach ($dataset as $row) {
+            if (!is_object($row)) {
+                continue;
+            }
+
+            $statusId = isset($row->min_socialstatus_id) ? (int) $row->min_socialstatus_id : 0;
+            $status = $statusId > 0 && isset($statusById[$statusId]) ? $statusById[$statusId] : null;
+
+            $row->required_status_name = $status !== null ? ($status->name ?? null) : null;
+            $row->required_status_min = $status !== null ? ($status->min ?? null) : null;
+        }
+    }
+
     public function create()
     {
         $this->trace('Richiamato il metodo: ' . __METHOD__);
@@ -591,5 +978,3 @@ class Locations extends Location
     }
 
 }
-
-

@@ -1,4 +1,4 @@
-﻿const globalWindow = (typeof window !== 'undefined') ? window : globalThis;
+const globalWindow = (typeof window !== 'undefined') ? window : globalThis;
 
 const MODULE_FACTORY_MAP = {
     'admin.dashboard': 'DashboardModuleFactory',
@@ -35,6 +35,7 @@ const MODULE_FACTORY_MAP = {
     'admin.items-categories': 'AdminItemsCategoriesModuleFactory',
     'admin.settings': 'AdminSettingsModuleFactory',
     'admin.system-update': 'AdminSystemUpdateModuleFactory',
+    'admin.media': 'AdminMediaModuleFactory',
     'admin.items-rarities': 'AdminItemsRaritiesModuleFactory',
     'admin.equipment-slots': 'AdminEquipmentSlotsModuleFactory',
     'admin.item-equipment-rules': 'AdminItemEquipmentRulesModuleFactory',
@@ -52,7 +53,12 @@ const MODULE_FACTORY_MAP = {
     'admin.news': 'AdminNewsModuleFactory',
     'admin.narrative-delegation-grants': 'AdminNarrativeDelegationGrantsModuleFactory',
     'admin.narrative-npcs': 'AdminNarrativeNpcsModuleFactory',
-    'admin.location-position-tags': 'AdminLocationPositionTagsModuleFactory'
+    'admin.location-position-tags': 'AdminLocationPositionTagsModuleFactory',
+    'admin.gdpr-requests': 'AdminGdprRequestsModuleFactory',
+    'admin.mail-templates': 'AdminMailTemplatesModuleFactory',
+    'admin.mail-distribution-lists': 'AdminMailDistributionListsModuleFactory',
+    'admin.mail-campaigns': 'AdminMailCampaignsModuleFactory',
+    'admin.mail-logs': 'AdminMailLogsModuleFactory'
 };
 
 const PAGE_MODULES = {
@@ -102,12 +108,18 @@ const PAGE_MODULES = {
     'logs-narrative': ['admin.logs-narrative'],
     settings: ['admin.settings'],
     'system-update': ['admin.system-update'],
+    media: ['admin.media'],
     'narrative-tags': ['admin.narrative-tags'],
     'message-reports': ['admin.message-reports'],
+    'gdpr-requests': ['admin.gdpr-requests'],
     news: ['admin.news'],
     'narrative-delegation-grants': ['admin.narrative-delegation-grants'],
     'narrative-npcs': ['admin.narrative-npcs'],
-    'location-position-tags': ['admin.location-position-tags']
+    'location-position-tags': ['admin.location-position-tags'],
+    'mail-templates': ['admin.mail-templates'],
+    'mail-distribution-lists': ['admin.mail-distribution-lists'],
+    'mail-campaigns': ['admin.mail-campaigns'],
+    'mail-logs': ['admin.mail-logs']
 };
 
 function createNoopFactory() {
@@ -281,4 +293,3 @@ globalWindow.AdminRegistry.registerModule = registerModule;
 globalWindow.AdminRegistry.extendPage = extendPage;
 
 export default AdminRegistryApi;
-

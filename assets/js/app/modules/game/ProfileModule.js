@@ -77,6 +77,38 @@ function createProfileModule() {
             return this.request('/profile/experience/assign', 'assignExperience', payload || {});
         },
 
+        staffSearchItems: function (payload) {
+            return this.request('/profile/staff-items/search', 'staffSearchItems', payload || {});
+        },
+
+        staffGrantItem: function (payload) {
+            return this.request('/profile/staff-item/grant', 'staffGrantItem', payload || {});
+        },
+
+        staffRemoveItem: function (payload) {
+            return this.request('/profile/staff-item/remove', 'staffRemoveItem', payload || {});
+        },
+
+        staffSetRestriction: function (payload) {
+            return this.request('/profile/staff/restrict', 'staffSetRestriction', payload || {});
+        },
+
+        narrativeStatesCatalog: function (payload) {
+            return this.request('/narrative-states/catalog', 'narrativeStatesCatalog', payload || {});
+        },
+
+        narrativeStatesForCharacter: function (payload) {
+            return this.request('/narrative-states/my-states', 'narrativeStatesForCharacter', payload || {});
+        },
+
+        narrativeStateApply: function (payload) {
+            return this.request('/narrative-states/apply', 'narrativeStateApply', payload || {});
+        },
+
+        narrativeStateRemove: function (payload) {
+            return this.request('/narrative-states/remove', 'narrativeStateRemove', payload || {});
+        },
+
         listAttributes: function (payload) {
             return this.request('/profile/attributes/list', 'listAttributes', payload || {});
         },

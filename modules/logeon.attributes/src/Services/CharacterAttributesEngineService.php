@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Modules\Logeon\Attributes\Services;
 
+use App\Services\CharacterAttributeModifierRegistry;
+use Core\Hooks;
 use Core\Http\AppError;
 
 class CharacterAttributesEngineService extends CharacterAttributesBaseService
@@ -151,9 +153,63 @@ class CharacterAttributesEngineService extends CharacterAttributesBaseService
             $sources[$attributeId] = $source;
         }
 
+        $modifierDeltas = [];
+        $modifiers = CharacterAttributeModifierRegistry::collect($characterId);
+        if ($modifiers !== []) {
+            $attributeIdBySlug = [];
+            foreach ($definitions as $definition) {
+                $slug = trim((string) ($definition->slug ?? ''));
+                $id = (int) ($definition->id ?? 0);
+                if ($slug !== '' && $id > 0) {
+                    $attributeIdBySlug[$slug] = $id;
+                }
+            }
+
+            foreach ($modifiers as $modifier) {
+                $slug = trim((string) ($modifier['attribute_slug'] ?? ''));
+                if ($slug === '' || !isset($attributeIdBySlug[$slug])) {
+                    continue;
+                }
+
+                $attributeId = (int) $attributeIdBySlug[$slug];
+                $modifierDeltas[$attributeId] = ($modifierDeltas[$attributeId] ?? 0.0)
+                    + (float) ($modifier['value'] ?? 0.0);
+            }
+
+            foreach ($modifierDeltas as $attributeId => $delta) {
+                if (!isset($computed[$attributeId])) {
+                    continue;
+                }
+
+                $definition = $definitionById[$attributeId] ?? null;
+                if ($definition === null) {
+                    continue;
+                }
+
+                $computed[$attributeId] = $this->clampAndRound(
+                    (float) $computed[$attributeId] + (float) $delta,
+                    isset($definition->min_value) ? (float) $definition->min_value : null,
+                    isset($definition->max_value) ? (float) $definition->max_value : null,
+                    (string) ($definition->round_mode ?? 'none'),
+                );
+                $sources[$attributeId] = 'external';
+            }
+        }
+
         $updatedCount = $this->values->persistEffectiveValues($characterId, $computed, $sources);
 
         $healthSync = $this->syncHealthMaxFromMappedAttribute($characterId, $computed);
+        $changes = $this->detectAttributeChanges($valueIndex, $computed, $sources, $definitions);
+
+        $this->emitAttributesChanged(
+            $characterId,
+            $changes,
+            [
+                'computed_count' => $updatedCount,
+                'health_max_synced' => $healthSync['synced'],
+                'health_max' => $healthSync['health_max'],
+            ],
+        );
 
         return [
             'character_id' => $characterId,
@@ -248,6 +304,79 @@ class CharacterAttributesEngineService extends CharacterAttributesBaseService
         }
 
         return round((float) $accumulator, 4);
+    }
+
+    private function detectAttributeChanges(array $valueIndex, array $computed, array $sources, array $definitions): array
+    {
+        $changes = [];
+
+        foreach ($computed as $attributeId => $newValue) {
+            $attributeId = (int) $attributeId;
+            if ($attributeId <= 0) {
+                continue;
+            }
+
+            $row = $valueIndex[$attributeId] ?? null;
+            $oldValue = ($row !== null && isset($row->effective_value))
+                ? (float) $row->effective_value
+                : null;
+            $oldSource = ($row !== null && isset($row->value_source))
+                ? trim((string) $row->value_source)
+                : '';
+            $newSource = isset($sources[$attributeId]) ? trim((string) $sources[$attributeId]) : 'derived';
+
+            if ($oldValue !== null && abs($oldValue - (float) $newValue) < 0.0001 && $oldSource === $newSource) {
+                continue;
+            }
+
+            $definition = $definitions[$attributeId] ?? null;
+            $changes[] = [
+                'attribute_id' => $attributeId,
+                'attribute_slug' => trim((string) ($definition->slug ?? '')),
+                'attribute_name' => trim((string) ($definition->name ?? '')),
+                'old_value' => $oldValue,
+                'new_value' => (float) $newValue,
+                'old_source' => $oldSource !== '' ? $oldSource : null,
+                'new_source' => $newSource,
+            ];
+        }
+
+        return $changes;
+    }
+
+    private function emitAttributesChanged(int $characterId, array $changes, array $metadata = []): void
+    {
+        if ($characterId <= 0 || $changes === [] || !class_exists('\\Core\\Hooks')) {
+            return;
+        }
+
+        $attributeIds = [];
+        $attributeSlugs = [];
+        foreach ($changes as $change) {
+            $attributeId = (int) ($change['attribute_id'] ?? 0);
+            $attributeSlug = trim((string) ($change['attribute_slug'] ?? ''));
+            if ($attributeId > 0) {
+                $attributeIds[] = $attributeId;
+            }
+            if ($attributeSlug !== '') {
+                $attributeSlugs[] = $attributeSlug;
+            }
+        }
+
+        try {
+            Hooks::fire('character.attributes.changed', [
+                'character_id' => $characterId,
+                'changed_attribute_ids' => array_values(array_unique($attributeIds)),
+                'changed_attribute_slugs' => array_values(array_unique($attributeSlugs)),
+                'reason' => 'recompute',
+                'occurred_at' => date(DATE_ATOM),
+                'metadata' => array_merge($metadata, [
+                    'changes' => $changes,
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[character.attributes.changed] listener error: ' . $e->getMessage());
+        }
     }
 
     private function buildDerivedOrder(array $derivedIds, array $ruleMap): array

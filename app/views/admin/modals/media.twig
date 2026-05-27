@@ -1,0 +1,105 @@
+﻿<div class="modal fade" id="media-folder-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="media-folder-modal-title">Nuova cartella</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <form id="media-folder-form" novalidate>
+                <input type="hidden" name="mode" value="create">
+                <div class="modal-body">
+                    <label for="media-folder-name" class="form-label">Nome cartella</label>
+                    <input type="text" id="media-folder-name" name="folder_name" class="form-control" maxlength="80" required>
+                    <div class="form-text">Sono ammessi lettere, numeri, spazi, trattini, underscore e punti.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="submit" class="btn btn-primary" id="media-folder-submit-btn">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="media-file-rename-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rinomina file</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <form id="media-file-rename-form" novalidate>
+                <input type="hidden" name="file_id" value="0">
+                <div class="modal-body">
+                    <label for="media-file-new-name" class="form-label">Nuovo nome</label>
+                    <input type="text" id="media-file-new-name" name="new_name" class="form-control" maxlength="180" required>
+                    <div class="form-text">L'estensione viene mantenuta automaticamente e non puo essere modificata.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="submit" class="btn btn-primary">Rinomina</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="media-file-info-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Informazioni file</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12 col-lg-5">
+                        <div id="media-file-preview-wrap" class="admin-media-preview-wrap d-none">
+                            <img id="media-file-preview" src="" alt="Anteprima file" class="img-fluid rounded border">
+                        </div>
+                        <div id="media-file-preview-empty" class="small text-muted">Anteprima disponibile solo per immagini.</div>
+                    </div>
+                    <div class="col-12 col-lg-7">
+                        <dl class="row mb-0 small">
+                            <dt class="col-sm-4 text-muted">Nome</dt>
+                            <dd class="col-sm-8 fw-semibold" id="media-file-info-name"></dd>
+                            <dt class="col-sm-4 text-muted">Tipo</dt>
+                            <dd class="col-sm-8 fw-semibold" id="media-file-info-ext"></dd>
+                            <dt class="col-sm-4 text-muted">Dimensione</dt>
+                            <dd class="col-sm-8 fw-semibold" id="media-file-info-size"></dd>
+                            <dt class="col-sm-4 text-muted">Caricato il</dt>
+                            <dd class="col-sm-8 fw-semibold" id="media-file-info-date"></dd>
+                            <dt class="col-sm-4 text-muted">Autore</dt>
+                            <dd class="col-sm-8 fw-semibold" id="media-file-info-user"></dd>
+                            <dt class="col-sm-4 text-muted">Percorso</dt>
+                            <dd class="col-sm-8" id="media-file-info-path"></dd>
+                            <dt class="col-sm-4 text-muted">URL</dt>
+                            <dd class="col-sm-8"><a id="media-file-info-url" class="admin-media-url-link" href="#" target="_blank" rel="noopener">Apri file</a></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="media-confirm-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="media-confirm-title">Conferma</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <p id="media-confirm-message" class="mb-0"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="media-confirm-btn">Conferma</button>
+            </div>
+        </div>
+    </div>
+</div>

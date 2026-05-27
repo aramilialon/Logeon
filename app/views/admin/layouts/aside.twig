@@ -1,4 +1,4 @@
-﻿{% set admin_page = admin_page|default('dashboard')|lower %}
+{% set admin_page = admin_page|default('dashboard')|lower %}
 {% set module_admin_sections = module_menu_sections('admin', 'aside') %}
 
 {% set is_superuser  = session('user_is_superuser') == 1 %}
@@ -8,13 +8,13 @@
 {% set narrative_delegation_enabled = (narrative_delegation_enabled|default(0)) == 1 %}
 
 {#
-  Build a section-key â†’ items map for module entries whose section name matches a
+  Build a section-key → items map for module entries whose section name matches a
   hardcoded section already in this template.  Entries for unrecognised section names
   are rendered as standalone blocks at the bottom of the sidebar.
 #}
 {% set _known_sec_keys = [
     'utenti e personaggi', 'richieste e segnalazioni', 'oggetti',
-    'parametri ed entita',
+    'parametri ed entità',
     'commercio', 'mondo e navigazione', 'narrativa', 'economia',
     'gruppi e fazioni', 'comunicazione', 'documentazione', 'logs'
 ] %}
@@ -41,7 +41,7 @@
             <i class="bi bi-gear-fill"></i>
         </a>
         <a class="nav-link {{ admin_page in ['system-update'] ? 'active' : '' }}" href="/admin/system-update" data-bs-toggle="tooltip" data-bs-title="Aggiornamenti">
-            <i class="bi bi-cloud-arrow-up-fill"></i>
+            <i class="bi bi-cloud-arrow-down-fill"></i>
         </a>
         {% endif %}
         <a class="nav-link text-danger" href="/game/" data-bs-toggle="tooltip" data-bs-title="Torna al Gioco">
@@ -77,6 +77,9 @@
         <div class="nav flex-column nav-pills admin-menu" aria-orientation="vertical">
             <a class="nav-link {{ admin_page == 'character-requests' ? 'active' : '' }}" href="/admin/character-requests">Richieste personaggio</a>
             <a class="nav-link {{ admin_page == 'message-reports' ? 'active' : '' }}" href="/admin/message-reports">Segnalazioni messaggi</a>
+            {% if is_admin or is_superuser %}
+            <a class="nav-link {{ admin_page == 'gdpr-requests' ? 'active' : '' }}" href="/admin/gdpr-requests">Richieste GDPR</a>
+            {% endif %}
             {% for _mi in _mod_sec['richieste e segnalazioni']|default([]) %}
                 {% set _mi_active = _mi.page is not empty and admin_page == _mi.page %}
                 <a class="nav-link {{ _mi_active ? 'active' : '' }}{% if _mi.class is not empty %} {{ _mi.class }}{% endif %}" href="{{ _mi.href }}"{% if _mi.target is not empty %} target="{{ _mi.target|e('html_attr') }}"{% endif %}{% if _mi.rel is not empty %} rel="{{ _mi.rel|e('html_attr') }}"{% endif %}>{% if _mi.icon is not empty %}<i class="{{ _mi.icon|e('html_attr') }} me-1"></i>{% endif %}{{ _mi.label }}</a>
@@ -100,9 +103,9 @@
         {% endif %}
 
         {% if is_admin or is_superuser %}
-        {% set _parametri_items = _mod_sec['parametri ed entita']|default([]) %}
+        {% set _parametri_items = _mod_sec['parametri ed entità']|default([]) %}
         {% if _parametri_items is not empty %}
-        <h6 class="my-3 admin-menu-section"><i class="bi bi-chevron-double-right"></i> Parametri ed entita</h6>
+        <h6 class="my-3 admin-menu-section"><i class="bi bi-chevron-double-right"></i> Parametri ed entità</h6>
         <div class="nav flex-column nav-pills admin-menu" aria-orientation="vertical">
             {% for _mi in _parametri_items %}
                 {% set _mi_active = _mi.page is not empty and admin_page == _mi.page %}
@@ -203,10 +206,22 @@
         <div class="nav flex-column nav-pills admin-menu" aria-orientation="vertical">
             <a class="nav-link {{ admin_page == 'forums' ? 'active' : '' }}" href="/admin/forums">Forum</a>
             <a class="nav-link {{ admin_page == 'forums-types' ? 'active' : '' }}" href="/admin/forums-types">Categorie forum</a>
+            <hr class="w-75 my-1" />
+            <a class="nav-link {{ admin_page == 'mail-campaigns' ? 'active' : '' }}" href="/admin/mail-campaigns">Campagne email</a>
+            <a class="nav-link {{ admin_page == 'mail-templates' ? 'active' : '' }}" href="/admin/mail-templates">Template email</a>
+            <a class="nav-link {{ admin_page == 'mail-distribution-lists' ? 'active' : '' }}" href="/admin/mail-distribution-lists">Liste distribuzione</a>
+            <a class="nav-link {{ admin_page == 'mail-logs' ? 'active' : '' }}" href="/admin/mail-logs">Log consegna</a>
             {% for _mi in _mod_sec['comunicazione']|default([]) %}
                 {% set _mi_active = _mi.page is not empty and admin_page == _mi.page %}
                 <a class="nav-link {{ _mi_active ? 'active' : '' }}{% if _mi.class is not empty %} {{ _mi.class }}{% endif %}" href="{{ _mi.href }}"{% if _mi.target is not empty %} target="{{ _mi.target|e('html_attr') }}"{% endif %}{% if _mi.rel is not empty %} rel="{{ _mi.rel|e('html_attr') }}"{% endif %}>{% if _mi.icon is not empty %}<i class="{{ _mi.icon|e('html_attr') }} me-1"></i>{% endif %}{{ _mi.label }}</a>
             {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if is_master or is_moderator or is_admin or is_superuser %}
+        <h6 class="my-3 admin-menu-section"><i class="bi bi-chevron-double-right"></i> Contenuti</h6>
+        <div class="nav flex-column nav-pills admin-menu" aria-orientation="vertical">
+            <a class="nav-link {{ admin_page == 'media' ? 'active' : '' }}" href="/admin/media">Media Manager</a>
         </div>
         {% endif %}
 
@@ -257,4 +272,3 @@
         {% endfor %}
     </section>
 </aside>
-

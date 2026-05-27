@@ -36,7 +36,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'weather-admin-dashboard-overview-legacy',
-            'template' => 'admin/pages/weather-overview.twig',
+            'template' => 'weather/admin/pages/weather-overview.twig',
             'after' => '',
             'before' => '',
             'data' => [],
@@ -50,7 +50,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'weather-admin-dashboard-overview',
-            'template' => 'admin/pages/weather-overview.twig',
+            'template' => 'weather/admin/pages/weather-overview.twig',
             'after' => '',
             'before' => '',
             'data' => [],
@@ -64,7 +64,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'weather-admin-dashboard-catalogs',
-            'template' => 'admin/pages/weather-catalogs.twig',
+            'template' => 'weather/admin/pages/weather-catalogs.twig',
             'after' => '',
             'before' => '',
             'data' => [],
@@ -78,7 +78,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'weather-admin-dashboard-profiles',
-            'template' => 'admin/pages/weather-profiles.twig',
+            'template' => 'weather/admin/pages/weather-profiles.twig',
             'after' => '',
             'before' => '',
             'data' => [],
@@ -92,7 +92,7 @@ return static function ($moduleRuntime = null, $moduleManifest = null): void {
         }
         $fragments[] = [
             'id' => 'weather-admin-dashboard-overrides',
-            'template' => 'admin/pages/weather-overrides.twig',
+            'template' => 'weather/admin/pages/weather-overrides.twig',
             'after' => '',
             'before' => '',
             'data' => [],

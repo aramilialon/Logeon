@@ -152,7 +152,11 @@ composer install --no-dev --optimize-autoloader
 powershell -ExecutionPolicy Bypass -File scripts/release/build-core-zip.ps1
 ```
 
-Gli zip risultanti sono in `dist/release/` e possono essere caricati direttamente su Altervista o su qualsiasi hosting PHP 8.1+.
+Gli zip risultanti sono in `dist/release/` e possono essere caricati direttamente su Altervista o su qualsiasi hosting PHP 8.2.x compatibile.
+
+Nota compatibilita:
+1. la baseline release corrente e PHP `8.2.x`;
+2. PHP `8.4` non e ancora considerato target stabile del progetto perche in debug puo esporre warning di deprecazione.
 
 Nota runtime JS in `ready`:
 1. il pacchetto pronto uso usa bundle dist-only (`assets/js/dist/`);

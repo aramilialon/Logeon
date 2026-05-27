@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Logeon\SocialStatus\Controllers;
 
+use App\Services\CharacterStateService;
 use Modules\Logeon\SocialStatus\Services\SocialStatusAdminService;
 use Core\Http\ApiResponse;
 use Core\Http\AppError;
@@ -19,6 +20,8 @@ class SocialStatuses
     private $logger = null;
     /** @var SocialStatusAdminService|null */
     private $service = null;
+    /** @var CharacterStateService|null */
+    private $characterStateService = null;
 
     public function setLogger(LoggerInterface $logger = null)
     {
@@ -47,6 +50,15 @@ class SocialStatuses
         }
         $this->service = new SocialStatusAdminService();
         return $this->service;
+    }
+
+    private function characterStateService(): CharacterStateService
+    {
+        if ($this->characterStateService instanceof CharacterStateService) {
+            return $this->characterStateService;
+        }
+        $this->characterStateService = new CharacterStateService();
+        return $this->characterStateService;
     }
 
     private function requireAdmin(): void
@@ -121,6 +133,47 @@ class SocialStatuses
         $this->service()->delete($id);
 
         ResponseEmitter::emit(ApiResponse::json(['success' => true, 'message' => 'Stato sociale eliminato']));
+    }
+
+    public function setCharacterSocialStatus()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireAdmin();
+        $userId = \Core\AuthGuard::api()->requireUser();
+
+        $data = $this->requestDataObject();
+        $characterId = InputValidator::positiveInt($data, 'character_id', 'Dati mancanti', 'payload_missing');
+        $statusId = InputValidator::positiveInt($data, 'socialstatus_id', 'Dati mancanti', 'payload_missing');
+        $reason = InputValidator::string($data, 'reason', '');
+        if ($reason === '') {
+            $reason = null;
+        }
+
+        $result = $this->characterStateService()->setSocialStatusByAdmin(
+            $characterId,
+            $statusId,
+            $reason,
+            (int) $userId,
+        );
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'success' => true,
+            'character_id' => $result['character_id'],
+            'socialstatus_id' => $result['socialstatus_id'],
+            'fame' => $result['fame'],
+        ]));
+    }
+
+    public function listCharacterSocialStatus()
+    {
+        $this->trace('Richiamato il metodo: ' . __METHOD__);
+        $this->requireAdmin();
+
+        $rows = $this->characterStateService()->listSocialStatuses();
+
+        ResponseEmitter::emit(ApiResponse::json([
+            'dataset' => $rows,
+        ]));
     }
 }
 

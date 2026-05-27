@@ -1,14 +1,5 @@
 {% include 'layouts/header.twig' %}
-<link rel="stylesheet" href="/assets/css/admin.css">
-
-<section class="container-fluid p-0" id="admin-page">
-    <section class="row m-0">
-        {% include 'admin/layouts/aside.twig' %}
-
-        {% block content %}{% endblock %}
-    </section>
-</section>
-
+{% set pilot_bundle_version = FRONTEND_ASSET_VERSION|default('20260403') %}
 {% set pilot_bundle_mode = APP.frontend.pilot_bundle_mode|default('manual') %}
 {% set pilot_bundle_enabled = APP.frontend.pilot_bundle_enabled|default(false) %}
 {% if pilot_bundle_mode == 'on' %}
@@ -18,11 +9,16 @@
 {% elseif pilot_bundle_mode == 'auto' %}
     {% set pilot_bundle_enabled = (CONFIG.debug|default(true) ? false : true) %}
 {% endif %}
-{% set pilot_bundle_version = APP.frontend.pilot_bundle_version|default('20260403') %}
+<link rel="stylesheet" href="/assets/css/admin.css?v={{ pilot_bundle_version }}">
+
+<section class="container-fluid p-0" id="admin-page" data-app-use-page-bundles="{{ pilot_bundle_enabled ? '1' : '0' }}">
+    <section class="row m-0">
+        {% include 'admin/layouts/aside.twig' %}
+
+        {% block content %}{% endblock %}
+    </section>
+</section>
 <script type="module" src="/assets/js/dist/admin-core.bundle.js?v={{ pilot_bundle_version }}"></script>
-<script type="text/javascript">
-    window.__APP_USE_PAGE_BUNDLES = {{ pilot_bundle_enabled ? 'true' : 'false' }};
-</script>
 {{ hook_scripts('admin')|raw }}
 {{ module_assets('admin')|raw }}
 <script type="module" src="/assets/js/dist/admin-bootstrap.bundle.js?v={{ pilot_bundle_version }}"></script>
@@ -31,3 +27,4 @@
 {% include 'sys/dialogs/general_dialog.twig' %}
 {% include 'sys/dialogs/location_invite.twig' %}
 {% include 'sys/toasts/default_toast.twig' %}
+{% include 'admin/modals/instance-compliance-notice.twig' %}

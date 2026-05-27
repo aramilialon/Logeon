@@ -193,4 +193,3 @@ class WeatherGenerationService
         return $phase;
     }
 }
-

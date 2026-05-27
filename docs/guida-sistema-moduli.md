@@ -119,6 +119,29 @@ Tutto il codice PHP del modulo sta in `src/`. Nulla va in `/app/`.
 
 ## Manifest `module.json`
 
+Nota GDPR: oltre ai campi tecnici, il manifest dovrebbe includere anche un blocco `privacy` per dichiarare il trattamento dati del modulo. L'audit moduli verifica presenza e coerenza di questa sezione.
+
+### Blocco `privacy` consigliato
+
+```json
+{
+  "privacy": {
+    "personal_data": true,
+    "data_categories": ["email", "profilo_utente"],
+    "purposes": ["erogazione_servizio"],
+    "retention": "fino a cancellazione account o purge modulo",
+    "requires_consent": false,
+    "exports_user_data": true,
+    "supports_purge": true
+  }
+}
+```
+
+Regole pratiche:
+1. Se `personal_data=true`, valorizzare sempre `data_categories`, `purposes` e `retention`.
+2. Per moduli Classe B, dichiarare `supports_purge=true` quando il modulo e realmente disinstallabile con pulizia dati.
+3. L'audit moduli segnala manifest senza blocco privacy o con dichiarazione incompleta/incoerente.
+
 Campi principali:
 1. `id`, `name`, `version`, `vendor`
 2. `description`
@@ -225,6 +248,11 @@ Effetti (solo moduli Classe B — optional):
 ### `POST /admin/modules/audit`
 Uso: verifica coerenza runtime (stati inconsistenti, file mancanti, orfani).
 
+Controlli inclusi:
+1. moduli installati/orfani/artifact runtime;
+2. moduli attivi senza artifact;
+3. stato dichiarazione privacy (`privacy_missing_declaration`, `privacy_incomplete_declaration`).
+
 ---
 
 ## Error code modulo (core)
@@ -265,7 +293,7 @@ Il template distingue due comportamenti in base al nome della sezione:
 
 - **Sezione nota** — la voce viene iniettata in coda al gruppo hardcoded corrispondente.
   Il nome deve corrispondere esattamente (case-sensitive) a uno di questi valori:
-  `Utenti e personaggi`, `Richieste e segnalazioni`, `Oggetti`, `Parametri ed entita`,
+  `Utenti e personaggi`, `Richieste e segnalazioni`, `Oggetti`, `Parametri ed entità`,
   `Commercio`, `Mondo e navigazione`, `Narrativa`, `Economia`, `Gruppi e fazioni`,
   `Comunicazione`, `Documentazione`, `Logs`.
 
@@ -344,3 +372,4 @@ Convenzione consigliata: prefissare il `page` col nome del modulo per garantire 
 9. Test attivazione → feature operative → disattivazione senza regressioni core → reinstallazione.
 10. Per moduli Classe B: test uninstall purge + verifica DB pulito.
 11. Documentazione modulo in `docs/README.md` separata dai doc core.
+12. Blocco `privacy` nel manifest coerente con i dati trattati dal modulo.

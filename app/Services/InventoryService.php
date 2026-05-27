@@ -161,6 +161,21 @@ class InventoryService
         $this->failValidation('Personaggio non valido', 'character_invalid');
     }
 
+    private function failRecipientInvalid(): void
+    {
+        $this->failValidation('Destinatario non valido', 'recipient_invalid');
+    }
+
+    private function failRecipientNotFound(): void
+    {
+        $this->failValidation('Destinatario non trovato', 'recipient_not_found');
+    }
+
+    private function failRecipientSameCharacter(): void
+    {
+        $this->failValidation('Non puoi recapitare un oggetto a te stesso', 'recipient_same_character');
+    }
+
     private function failItemInvalid(): void
     {
         $this->failValidation('Oggetto non valido', 'item_invalid');
@@ -1486,6 +1501,146 @@ class InventoryService
         }
     }
 
+    public function revokeItemReward(int $characterId, int $itemId, int $quantity = 1): array
+    {
+        $characterId = (int) $characterId;
+        $itemId = (int) $itemId;
+        $quantity = (int) $quantity;
+
+        if ($characterId <= 0) {
+            $this->failCharacterInvalid();
+        }
+        if ($itemId <= 0) {
+            $this->failItemInvalid();
+        }
+        if ($quantity < 1) {
+            $quantity = 1;
+        }
+
+        $this->begin();
+        try {
+            $availableRow = $this->firstPrepared(
+                'SELECT COALESCE(SUM(quantity), 0) AS qty
+                 FROM inventory_items
+                 WHERE owner_type = "player"
+                   AND owner_id = ?
+                   AND item_id = ?
+                 FOR UPDATE',
+                [$characterId, $itemId],
+            );
+            $available = (int) ($availableRow->qty ?? 0);
+            if ($available < $quantity) {
+                throw AppError::validation(
+                    'Quantita non disponibile nell\'inventario del personaggio',
+                    [
+                        'available' => $available,
+                        'requested' => $quantity,
+                    ],
+                    'item_quantity_unavailable',
+                );
+            }
+
+            $rows = $this->fetchPrepared(
+                'SELECT id, quantity, legacy_instance_id
+                 FROM inventory_items
+                 WHERE owner_type = "player"
+                   AND owner_id = ?
+                   AND item_id = ?
+                 ORDER BY CASE WHEN legacy_instance_id IS NULL THEN 0 ELSE 1 END ASC, id ASC
+                 FOR UPDATE',
+                [$characterId, $itemId],
+            );
+
+            $hasCharacterEquipment = $this->tableExists('character_equipment');
+            $hasCharacterInstances = $this->tableExists('character_item_instances');
+            $remaining = $quantity;
+            $removed = 0;
+            foreach ($rows as $row) {
+                if ($remaining <= 0) {
+                    break;
+                }
+
+                $inventoryItemId = (int) ($row->id ?? 0);
+                if ($inventoryItemId <= 0) {
+                    continue;
+                }
+
+                $rowQty = (int) ($row->quantity ?? 1);
+                if ($rowQty < 1) {
+                    $rowQty = 1;
+                }
+
+                $toRemove = min($remaining, $rowQty);
+                if ($toRemove >= $rowQty) {
+                    $this->execPrepared(
+                        'DELETE FROM inventory_items
+                         WHERE id = ?
+                         LIMIT 1',
+                        [$inventoryItemId],
+                    );
+
+                    $legacyInstanceId = (int) ($row->legacy_instance_id ?? 0);
+                    if ($legacyInstanceId > 0) {
+                        if ($hasCharacterEquipment) {
+                            $this->execPrepared(
+                                'DELETE FROM character_equipment
+                                 WHERE character_id = ?
+                                   AND (character_item_instance_id = ? OR inventory_item_id = ?)',
+                                [$characterId, $legacyInstanceId, $inventoryItemId],
+                            );
+                        }
+                        if ($hasCharacterInstances) {
+                            $this->execPrepared(
+                                'DELETE FROM character_item_instances
+                                 WHERE id = ?
+                                   AND character_id = ?
+                                 LIMIT 1',
+                                [$legacyInstanceId, $characterId],
+                            );
+                        }
+                    }
+                } else {
+                    $this->execPrepared(
+                        'UPDATE inventory_items SET
+                            quantity = ?,
+                            updated_at = NOW()
+                         WHERE id = ?
+                         LIMIT 1',
+                        [$rowQty - $toRemove, $inventoryItemId],
+                    );
+                }
+
+                $remaining -= $toRemove;
+                $removed += $toRemove;
+            }
+
+            if ($remaining > 0) {
+                throw AppError::validation(
+                    'Quantita non disponibile nell\'inventario del personaggio',
+                    [
+                        'available' => $available,
+                        'requested' => $quantity,
+                        'remaining' => $remaining,
+                    ],
+                    'item_quantity_unavailable',
+                );
+            }
+
+            $this->commit();
+            return [
+                'success' => true,
+                'character_id' => $characterId,
+                'item_id' => $itemId,
+                'requested_quantity' => $quantity,
+                'removed_quantity' => $removed,
+                'remaining_quantity' => max(0, $available - $removed),
+            ];
+        } catch (\Throwable $error) {
+            $this->rollback();
+            throw $error;
+        }
+    }
+
     private function resolveItemEffectPayload($scriptEffect, $itemMetadata, $inventoryMetadata): array
     {
         $payload = [];
@@ -2483,6 +2638,24 @@ class InventoryService
         $datasetParams = array_merge($countParams, [$offset, $results]);
         $dataset = $this->fetchPrepared($datasetSql, $datasetParams);
 
+        $itemAllowedCache = [];
+        foreach ($dataset as $row) {
+            $itemId = (int) ($row->item_id ?? 0);
+            $legacySlot = (string) ($row->equip_slot ?? '');
+
+            if (!array_key_exists($itemId, $itemAllowedCache)) {
+                $allowedSlots = $this->allowedSlotsForItem($itemId, $legacySlot);
+                $itemAllowedCache[$itemId] = [
+                    'slots' => $allowedSlots,
+                    'groups' => $this->slotGroupsForKeys($allowedSlots),
+                ];
+            }
+
+            $allowed = $itemAllowedCache[$itemId];
+            $row->allowed_slot_keys = implode(',', $allowed['slots']);
+            $row->allowed_slot_groups = implode(',', $allowed['groups']);
+        }
+
         return [
             'count' => $count,
             'dataset' => $dataset,
@@ -2539,6 +2712,262 @@ class InventoryService
             }
         } else {
             throw \Core\Http\AppError::validation('Riferimento oggetto mancante', [], 'item_ref_missing');
+        }
+    }
+
+    public function transferItemToCharacter(int $fromCharacterId, int $toCharacterId, object $data): array
+    {
+        if ($fromCharacterId <= 0) {
+            $this->failCharacterInvalid();
+        }
+        if ($toCharacterId <= 0) {
+            $this->failRecipientInvalid();
+        }
+        if ($fromCharacterId === $toCharacterId) {
+            $this->failRecipientSameCharacter();
+        }
+
+        $instanceId = isset($data->character_item_instance_id) ? (int) $data->character_item_instance_id : 0;
+        $stackId = isset($data->character_item_id) ? (int) $data->character_item_id : 0;
+        $quantity = isset($data->quantity) ? max(1, (int) $data->quantity) : 1;
+        if ($instanceId <= 0 && $stackId <= 0) {
+            $this->failValidation('Riferimento oggetto mancante', 'item_ref_missing');
+        }
+
+        $this->begin();
+        try {
+            $recipient = $this->firstPrepared(
+                'SELECT id, name, surname
+                 FROM characters
+                 WHERE id = ?
+                 LIMIT 1
+                 FOR UPDATE',
+                [$toCharacterId],
+            );
+            if (empty($recipient)) {
+                $this->failRecipientNotFound();
+            }
+
+            if ($instanceId > 0) {
+                $instance = $this->firstPrepared(
+                    'SELECT
+                        cii.id,
+                        cii.character_id,
+                        cii.item_id,
+                        cii.is_equipped,
+                        i.name AS item_name
+                     FROM character_item_instances cii
+                     LEFT JOIN items i ON i.id = cii.item_id
+                     WHERE cii.id = ?
+                     LIMIT 1
+                     FOR UPDATE',
+                    [$instanceId],
+                );
+
+                if (empty($instance) || (int) ($instance->character_id ?? 0) !== $fromCharacterId) {
+                    $this->failItemNotFound();
+                }
+                if ((int) ($instance->is_equipped ?? 0) === 1) {
+                    $this->failValidation('Non puoi recapitare un oggetto equipaggiato', 'item_is_equipped');
+                }
+
+                $itemId = (int) ($instance->item_id ?? 0);
+                if ($itemId <= 0) {
+                    $this->failItemInvalid();
+                }
+
+                $this->inventoryCapacityService()->assertCanAddItem($toCharacterId, $itemId, 1, false);
+
+                if ($this->hasEquipmentSchema()) {
+                    $this->execPrepared(
+                        'DELETE FROM character_equipment
+                         WHERE character_id = ?
+                           AND character_item_instance_id = ?',
+                        [$fromCharacterId, $instanceId],
+                    );
+                }
+
+                $this->execPrepared(
+                    'UPDATE character_item_instances SET
+                        character_id = ?,
+                        is_equipped = 0,
+                        slot = NULL,
+                        date_updated = NOW()
+                     WHERE id = ?
+                       AND character_id = ?
+                     LIMIT 1',
+                    [$toCharacterId, $instanceId, $fromCharacterId],
+                );
+
+                // Compatibilità con eventuali righe legacy collegate all'istanza.
+                $this->execPrepared(
+                    'UPDATE inventory_items SET
+                        owner_id = ?,
+                        updated_at = NOW()
+                     WHERE owner_type = "player"
+                       AND owner_id = ?
+                       AND legacy_instance_id = ?',
+                    [$toCharacterId, $fromCharacterId, $instanceId],
+                );
+
+                $recipientName = trim(((string) ($recipient->name ?? '')) . ' ' . ((string) ($recipient->surname ?? '')));
+                if ($recipientName === '') {
+                    $recipientName = 'Destinatario';
+                }
+
+                $this->commit();
+                return [
+                    'success' => true,
+                    'source' => 'instance',
+                    'character_item_instance_id' => $instanceId,
+                    'item_id' => $itemId,
+                    'item_name' => (string) ($instance->item_name ?? ''),
+                    'transferred_quantity' => 1,
+                    'recipient_character_id' => $toCharacterId,
+                    'recipient_name' => $recipientName,
+                ];
+            }
+
+            $stack = $this->firstPrepared(
+                'SELECT
+                    ii.id,
+                    ii.owner_type,
+                    ii.owner_id,
+                    ii.item_id,
+                    ii.quantity,
+                    ii.legacy_instance_id,
+                    ii.metadata_json,
+                    i.name AS item_name,
+                    COALESCE(i.stackable, i.is_stackable) AS is_stackable
+                 FROM inventory_items ii
+                 LEFT JOIN items i ON i.id = ii.item_id
+                 WHERE ii.id = ?
+                 LIMIT 1
+                 FOR UPDATE',
+                [$stackId],
+            );
+
+            if (empty($stack)
+                || (string) ($stack->owner_type ?? '') !== 'player'
+                || (int) ($stack->owner_id ?? 0) !== $fromCharacterId
+            ) {
+                $this->failItemNotFound();
+            }
+            if ((int) ($stack->legacy_instance_id ?? 0) > 0) {
+                $this->failValidation('Riferimento oggetto non valido', 'item_ref_missing');
+            }
+
+            $itemId = (int) ($stack->item_id ?? 0);
+            if ($itemId <= 0) {
+                $this->failItemInvalid();
+            }
+
+            $availableQty = (int) ($stack->quantity ?? 1);
+            if ($availableQty < 1) {
+                $availableQty = 1;
+            }
+            if ($quantity > $availableQty) {
+                $this->failValidation('Quantita non disponibile', 'quantity_unavailable');
+            }
+
+            $isStackable = ((int) ($stack->is_stackable ?? 0) === 1);
+            $this->inventoryCapacityService()->assertCanAddItem($toCharacterId, $itemId, $quantity, $isStackable);
+
+            $targetStack = $this->firstPrepared(
+                'SELECT id, quantity
+                 FROM inventory_items
+                 WHERE owner_type = "player"
+                   AND owner_id = ?
+                   AND item_id = ?
+                   AND legacy_instance_id IS NULL
+                 LIMIT 1
+                 FOR UPDATE',
+                [$toCharacterId, $itemId],
+            );
+
+            if ($quantity >= $availableQty) {
+                if (!empty($targetStack) && $isStackable) {
+                    $this->execPrepared(
+                        'UPDATE inventory_items SET
+                            quantity = quantity + ?,
+                            updated_at = NOW()
+                         WHERE id = ?
+                         LIMIT 1',
+                        [$quantity, (int) $targetStack->id],
+                    );
+                    $this->execPrepared(
+                        'DELETE FROM inventory_items
+                         WHERE id = ?
+                         LIMIT 1',
+                        [$stackId],
+                    );
+                } else {
+                    $this->execPrepared(
+                        'UPDATE inventory_items SET
+                            owner_id = ?,
+                            updated_at = NOW()
+                         WHERE id = ?
+                         LIMIT 1',
+                        [$toCharacterId, $stackId],
+                    );
+                }
+            } else {
+                $this->execPrepared(
+                    'UPDATE inventory_items SET
+                        quantity = ?,
+                        updated_at = NOW()
+                     WHERE id = ?
+                     LIMIT 1',
+                    [$availableQty - $quantity, $stackId],
+                );
+
+                if (!empty($targetStack) && $isStackable) {
+                    $this->execPrepared(
+                        'UPDATE inventory_items SET
+                            quantity = quantity + ?,
+                            updated_at = NOW()
+                         WHERE id = ?
+                         LIMIT 1',
+                        [$quantity, (int) $targetStack->id],
+                    );
+                } else {
+                    $metadataJson = trim((string) ($stack->metadata_json ?? ''));
+                    if ($metadataJson === '') {
+                        $metadataJson = '{}';
+                    }
+
+                    $this->execPrepared(
+                        'INSERT INTO inventory_items SET
+                            owner_type = "player",
+                            owner_id = ?,
+                            item_id = ?,
+                            quantity = ?,
+                            metadata_json = ?,
+                            created_at = NOW()',
+                        [$toCharacterId, $itemId, $quantity, $metadataJson],
+                    );
+                }
+            }
+
+            $recipientName = trim(((string) ($recipient->name ?? '')) . ' ' . ((string) ($recipient->surname ?? '')));
+            if ($recipientName === '') {
+                $recipientName = 'Destinatario';
+            }
+
+            $this->commit();
+            return [
+                'success' => true,
+                'source' => 'stack',
+                'character_item_id' => $stackId,
+                'item_id' => $itemId,
+                'item_name' => (string) ($stack->item_name ?? ''),
+                'transferred_quantity' => $quantity,
+                'recipient_character_id' => $toCharacterId,
+                'recipient_name' => $recipientName,
+            ];
+        } catch (\Throwable $e) {
+            $this->rollback();
+            throw $e;
         }
     }
 

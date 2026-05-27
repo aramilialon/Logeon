@@ -307,7 +307,7 @@ class LifecycleService
     public function getCurrentPhase(int $characterId): ?array
     {
         $row = $this->firstPrepared(
-            'SELECT t.*, p.code AS phase_code, p.name AS phase_name, p.color_hex, p.icon, p.visible_to_players
+            'SELECT t.*, p.code AS phase_code, p.name AS phase_name, p.description AS phase_description, p.color_hex, p.icon, p.visible_to_players
              FROM `character_lifecycle_transitions` t
              INNER JOIN `lifecycle_phase_definitions` p ON p.id = t.to_phase_id
              WHERE t.character_id = ?

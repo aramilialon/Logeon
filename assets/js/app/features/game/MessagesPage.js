@@ -50,6 +50,10 @@ function GameMessagesPage(extension) {
             unreadPollTimer: null,
             unreadPollKey: null,
             unreadPollMs: 10000,
+            activeThreadPollTimer: null,
+            activeThreadPollKey: null,
+            activeThreadPollMs: 5000,
+            activeThreadPollInFlight: false,
 
             $root: function () {
                 return $(this.root);
@@ -189,10 +193,22 @@ function GameMessagesPage(extension) {
             },
             bind: function () {
                 var self = this;
+                let root = this.$root();
                 let form = this.$el('inbox-message-form', '#inbox-message-form');
                 if (!form.length) {
                     return;
                 }
+
+                root.off('shown.bs.modal.messagesThread.' + this.key).on('shown.bs.modal.messagesThread.' + this.key, function () {
+                    if (self.thread_id && !self.compose_mode) {
+                        self.loadThread(false, { background: true });
+                    }
+                    self.startActiveThreadPolling();
+                });
+                root.off('hidden.bs.modal.messagesThread.' + this.key).on('hidden.bs.modal.messagesThread.' + this.key, function () {
+                    self.stopActiveThreadPolling();
+                });
+
                 form.off('submit').on('submit', function (e) {
                     e.preventDefault();
                     self.send();
@@ -267,6 +283,7 @@ function GameMessagesPage(extension) {
 
                 $(window).off('beforeunload.messagesUnread.' + this.key).on('beforeunload.messagesUnread.' + this.key, function () {
                     self.stopUnreadPolling();
+                    self.stopActiveThreadPolling();
                 });
             },
             initTypePickers: function () {
@@ -309,6 +326,7 @@ function GameMessagesPage(extension) {
                 }
             },
             resetView: function () {
+                this.stopActiveThreadPolling();
                 this.$el('inbox-empty', '#inbox-empty').removeClass('d-none');
                 this.$el('inbox-thread', '#inbox-thread').addClass('d-none');
                 this.$el('inbox-compose', '#inbox-compose').addClass('d-none');
@@ -320,6 +338,7 @@ function GameMessagesPage(extension) {
             startCompose: function (other_id, other_name) {
                 this.compose_mode = true;
                 this.thread_id = null;
+                this.stopActiveThreadPolling();
                 this.$el('inbox-empty', '#inbox-empty').addClass('d-none');
                 this.$el('inbox-thread', '#inbox-thread').addClass('d-none');
                 this.$el('inbox-compose', '#inbox-compose').removeClass('d-none');
@@ -353,8 +372,10 @@ function GameMessagesPage(extension) {
                 if (this.thread_id) {
                     this.$el('inbox-thread', '#inbox-thread').removeClass('d-none');
                     this.$el('inbox-empty', '#inbox-empty').addClass('d-none');
+                    this.startActiveThreadPolling();
                 } else {
                     this.$el('inbox-empty', '#inbox-empty').removeClass('d-none');
+                    this.stopActiveThreadPolling();
                 }
             },
             loadThreads: function () {
@@ -411,6 +432,72 @@ function GameMessagesPage(extension) {
                 }
                 this.unreadPollKey = null;
             },
+            isModalVisible: function () {
+                let root = this.$root();
+                return !!(root.length && root.hasClass('show'));
+            },
+            shouldPollActiveThread: function () {
+                return this.key === 'modal'
+                    && !!this.thread_id
+                    && this.compose_mode !== true
+                    && this.isModalVisible();
+            },
+            startActiveThreadPolling: function () {
+                var self = this;
+                if (!this.shouldPollActiveThread()) {
+                    this.stopActiveThreadPolling();
+                    return;
+                }
+
+                this.stopActiveThreadPolling();
+
+                if (typeof PollManager === 'function') {
+                    this.activeThreadPollKey = 'messages.thread.' + this.key;
+                    this.activeThreadPollTimer = PollManager().start(this.activeThreadPollKey, function () {
+                        self.refreshActiveThread();
+                    }, this.activeThreadPollMs);
+                    return;
+                }
+
+                this.activeThreadPollTimer = setInterval(function () {
+                    self.refreshActiveThread();
+                }, this.activeThreadPollMs);
+            },
+            stopActiveThreadPolling: function () {
+                if (this.activeThreadPollTimer) {
+                    clearInterval(this.activeThreadPollTimer);
+                    this.activeThreadPollTimer = null;
+                }
+
+                if (this.activeThreadPollKey && typeof PollManager === 'function') {
+                    PollManager().stop(this.activeThreadPollKey);
+                }
+                this.activeThreadPollKey = null;
+                this.activeThreadPollInFlight = false;
+            },
+            refreshActiveThread: function () {
+                var self = this;
+                if (!this.shouldPollActiveThread() || this.activeThreadPollInFlight === true) {
+                    return;
+                }
+
+                this.activeThreadPollInFlight = true;
+                this.loadThread(false, {
+                    background: true,
+                    onComplete: function () {
+                        self.activeThreadPollInFlight = false;
+                    }
+                });
+            },
+            isMessageListNearBottom: function () {
+                let block = this.$el('inbox-message-list', '#inbox-message-list');
+                if (!block.length || !block[0]) {
+                    return true;
+                }
+
+                let distance = block[0].scrollHeight - (block.scrollTop() + block.innerHeight());
+                return distance <= 48;
+            },
             buildThreads: function () {
                 let block = this.$el('inbox-threads', '#inbox-threads').empty();
                 var self = this;
@@ -447,16 +534,16 @@ function GameMessagesPage(extension) {
                         body = body.substr(0, 80) + '...';
                     }
 
-                    template.find('[name="name"]').text(name.trim() === '' ? 'Sconosciuto' : name);
+                    let displayName = name.trim() === '' ? 'Sconosciuto' : name.trim();
+                    let initials = displayName.charAt(0).toUpperCase();
+                    template.find('[name="avatar-initials"]').text(initials);
+                    template.find('[name="name"]').text(displayName);
                     template.find('[name="subject"]').text(subject);
                     template.find('[name="type"]').text(type.toUpperCase());
-                    template.find('[name="type"]').toggleClass('text-bg-dark', type === 'on');
-                    template.find('[name="type"]').toggleClass('text-bg-secondary', type !== 'on');
-                    template.find('[name="body"]').text(body);
                     template.find('[name="date"]').text(this.formatDate(row.date_last_message));
                     if (row.unread_count && row.unread_count > 0) {
                         template.find('[name="unread"]').text(row.unread_count).removeClass('d-none');
-                        template.addClass('mail-thread-item--unread');
+                        template.addClass('conv-item--unread');
                     }
 
                     if (this.thread_id && this.thread_id == row.id) {
@@ -487,9 +574,11 @@ function GameMessagesPage(extension) {
                 this.$el('inbox-message-list', '#inbox-message-list').html('<div class="text-muted">Caricamento...</div>');
 
                 this.loadThread(false);
+                this.startActiveThreadPolling();
             },
-            loadThread: function (prepend) {
+            loadThread: function (prepend, options) {
                 var self = this;
+                options = options || {};
                 let payload = {
                     thread_id: self.thread_id,
                     limit: self.messages_limit
@@ -508,8 +597,9 @@ function GameMessagesPage(extension) {
                         self.messages = incoming.concat(self.messages);
                         self.buildMessages(true);
                     } else {
+                        let preserveScroll = options.background === true && !self.isMessageListNearBottom();
                         self.messages = incoming;
-                        self.buildThread();
+                        self.buildThread(preserveScroll);
                     }
 
                     self.messages_has_more = response.paging && response.paging.has_more ? true : false;
@@ -517,8 +607,17 @@ function GameMessagesPage(extension) {
                     self.updateLoadMore();
                     self.loadThreads();
                     self.loadUnread();
+                    self.startActiveThreadPolling();
+                    if (typeof options.onComplete === 'function') {
+                        options.onComplete(true);
+                    }
                 }, function (error) {
-                    self.$el('inbox-message-list', '#inbox-message-list').html('<div class="text-danger">' + self.normalizeError(error, 'Impossibile caricare la conversazione.') + '</div>');
+                    if (options.background !== true) {
+                        self.$el('inbox-message-list', '#inbox-message-list').html('<div class="text-danger">' + self.normalizeError(error, 'Impossibile caricare la conversazione.') + '</div>');
+                    }
+                    if (typeof options.onComplete === 'function') {
+                        options.onComplete(false);
+                    }
                 });
             },
             loadMore: function () {
@@ -545,7 +644,7 @@ function GameMessagesPage(extension) {
                     self.showErrorToast(error, 'Impossibile eliminare la conversazione.');
                 });
             },
-            buildThread: function () {
+            buildThread: function (preserveScroll) {
                 if (this.other) {
                     let name = this.other.name + ' ' + ((null == this.other.surname) ? '' : this.other.surname);
                     this.$el('inbox-thread-participants', '[data-role="inbox-thread-participants"]').text(name);
@@ -556,7 +655,7 @@ function GameMessagesPage(extension) {
                     this.$el('inbox-thread-subject', '[data-role="inbox-thread-subject"]').text(subject);
                 }
 
-                this.buildMessages(false);
+                this.buildMessages(preserveScroll === true);
                 this.updateLoadMore();
             },
             updateLoadMore: function () {
@@ -585,14 +684,17 @@ function GameMessagesPage(extension) {
                 for (var i in this.messages) {
                     let msg = this.messages[i];
                     let isMe = (me && msg.sender_id == me);
-                    let row = $('<div class="mail-message"></div>');
-                    let header = $('<div class="mail-message__meta"></div>');
+                    let rowCls = isMe ? 'message-bubble-row--mine' : 'message-bubble-row--theirs';
+                    let row = $('<div class="message-bubble-row ' + rowCls + '"></div>');
                     let sender = isMe ? 'Tu' : ((msg.name || '') + ' ' + (msg.surname || '')).trim();
                     let type = (msg.message_type || 'on').toUpperCase();
-                    header.text(sender + ' - ' + type + ' - ' + this.formatDate(msg.date_created));
-
-                    let body = $('<div class="mail-message__body"></div>').text(msg.body);
-                    row.append(header).append(body);
+                    let bubble = $('<div class="message-bubble"></div>');
+                    $('<div class="message-bubble__text"></div>').text(msg.body).appendTo(bubble);
+                    let meta = $('<div class="message-bubble__meta"></div>');
+                    $('<span class="message-bubble__type"></span>').text(type).appendTo(meta);
+                    $('<span></span>').text(sender + ' · ' + this.formatDate(msg.date_created)).appendTo(meta);
+                    meta.appendTo(bubble);
+                    row.append(bubble);
                     block.append(row);
                 }
 
@@ -750,4 +852,3 @@ function GameMessagesPage(extension) {
 globalWindow.GameMessagesPage = GameMessagesPage;
 export { GameMessagesPage as GameMessagesPage };
 export default GameMessagesPage;
-

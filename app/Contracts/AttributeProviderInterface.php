@@ -18,5 +18,19 @@ interface AttributeProviderInterface
 
     public function isEnabled(): bool;
 
+    public function getValue(int $characterId, string $attributeSlug): ?float;
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function getBreakdown(int $characterId, string $attributeSlug): array;
+
+    public function meetsRequirement(
+        int $characterId,
+        string $attributeSlug,
+        string $operator,
+        int|float $requiredValue
+    ): bool;
+
     public function getAttributeModifier(int $characterId, string $attributeSlug): float;
 }

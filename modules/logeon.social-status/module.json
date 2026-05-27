@@ -1,19 +1,34 @@
 {
   "id": "logeon.social-status",
-  "name": "Logeon Social Status",
+  "name": "Stati sociali",
   "version": "0.1.0",
   "vendor": "Logeon",
   "description": "Modulo Stati sociali: provider runtime e UI admin agganciati via hook.",
+  "privacy": {
+    "personal_data": false,
+    "data_categories": [],
+    "purposes": [],
+    "retention": "inherits_instance_policy",
+    "requires_consent": false,
+    "exports_user_data": false,
+    "supports_purge": true
+  },
   "category": "gameplay",
   "class": "bundled",
   "compat": {
-    "min": "0.8.0",
+    "min": "1.0.0",
     "max": ""
   },
   "requires": [],
   "entrypoints": {
     "bootstrap": "bootstrap.php",
     "routes": "routes.php"
+  },
+  "migrations": {
+    "path": "migrations"
+  },
+  "uninstall": {
+    "path": "migrations/uninstall"
   },
   "assets": {
     "admin": {

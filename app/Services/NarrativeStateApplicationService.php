@@ -456,6 +456,7 @@ class NarrativeStateApplicationService
     {
         $appliedStateId = $this->normalizeInt($payload['applied_state_id'] ?? 0, 0);
         $reason = $this->normalizeNullableText($payload['reason'] ?? null) ?? 'manual_remove';
+        $ignoreMissing = $this->normalizeInt($payload['ignore_missing'] ?? 0, 0) === 1;
 
         $this->begin();
         try {
@@ -487,9 +488,31 @@ class NarrativeStateApplicationService
                     $this->failValidation('Target stato non valido', 'state_remove_failed');
                 }
 
-                $state = $this->narrativeStateService()->findByIdOrCode($stateId, $stateCode, false);
-                if (empty($state)) {
-                    $this->failValidation('Stato narrativo non trovato', 'state_not_found');
+                $resolvedStateId = $stateId;
+                if ($resolvedStateId <= 0) {
+                    $state = $this->narrativeStateService()->findByIdOrCode(0, $stateCode, false);
+                    if (empty($state)) {
+                        if ($ignoreMissing) {
+                            $this->commit();
+                            return [
+                                'status' => 'noop',
+                                'removed_count' => 0,
+                            ];
+                        }
+                        $this->failValidation('Stato narrativo non trovato', 'state_not_found');
+                    }
+                    $resolvedStateId = (int) ($state->id ?? 0);
+                }
+
+                if ($resolvedStateId <= 0) {
+                    if ($ignoreMissing) {
+                        $this->commit();
+                        return [
+                            'status' => 'noop',
+                            'removed_count' => 0,
+                        ];
+                    }
+                    $this->failValidation('Stato narrativo non valido', 'state_not_found');
                 }
 
                 $sceneCondition = $this->targetSceneCondition($sceneId);
@@ -499,7 +522,7 @@ class NarrativeStateApplicationService
                        AND ' . $sceneCondition['sql'] . '
                        AND status = "active"';
                 $whereParams = array_merge(
-                    [(int) $state->id, $targetType, $targetId],
+                    [$resolvedStateId, $targetType, $targetId],
                     $sceneCondition['params'],
                 );
 
@@ -512,8 +535,34 @@ class NarrativeStateApplicationService
                      WHERE ' . $whereSql,
                     array_merge([$reason], $whereParams),
                 );
+
+                // Fallback staff-friendly:
+                // se la rimozione contestuale alla scena non trova righe, riprova senza filtro scena.
+                // Questo evita errori quando lo stato era stato applicato fuori scena, in altra scena
+                // o quando scene_id non e coerente con il contesto corrente di rimozione.
+                if ($affected <= 0) {
+                    $affected = $this->execPreparedCount(
+                        'UPDATE applied_narrative_states SET
+                            status = "removed",
+                            removed_at = NOW(),
+                            removal_reason = ?,
+                            date_updated = NOW()
+                         WHERE state_id = ?
+                           AND target_type = ?
+                           AND target_id = ?
+                           AND status = "active"',
+                        [$reason, $resolvedStateId, $targetType, $targetId],
+                    );
+                }
             }
             if ($affected <= 0) {
+                if ($ignoreMissing) {
+                    $this->commit();
+                    return [
+                        'status' => 'noop',
+                        'removed_count' => 0,
+                    ];
+                }
                 $this->failValidation('Rimozione stato non riuscita', 'state_remove_failed');
             }
 

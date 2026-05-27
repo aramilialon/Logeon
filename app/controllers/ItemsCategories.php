@@ -8,7 +8,6 @@ use App\Services\ItemCategoryService;
 use Core\Http\InputValidator;
 use Core\Http\RequestData;
 
-
 use Core\Logging\LoggerInterface;
 
 class ItemsCategories extends ItemsCategory
@@ -100,5 +99,3 @@ class ItemsCategories extends ItemsCategory
         return parent::delete($operator);
     }
 }
-
-

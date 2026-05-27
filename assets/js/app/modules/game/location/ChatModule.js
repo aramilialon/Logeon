@@ -21,6 +21,14 @@ function createLocationChatModule() {
             return this.request('/location/messages/send', 'sendLocationMessage', payload || {});
         },
 
+        staffNotice: function (payload) {
+            return this.request('/location/messages/staff-notice', 'sendLocationStaffNotice', payload || {});
+        },
+
+        myNarrativeStates: function (payload) {
+            return this.request('/narrative-states/my-states', 'locationMyNarrativeStates', payload || {});
+        },
+
         searchTargets: function (payload, action) {
             return this.request('/list/characters/search', action || 'searchLocationWhisperTargets', payload || {});
         },

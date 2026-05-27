@@ -149,13 +149,11 @@ class Archetypes
                 continue;
             }
 
+            $label = (string) ($row['name'] ?? ('Archetipo ' . $chapterNum));
+            $iconUrl = trim((string) ($row['icon'] ?? ''));
+            $imageUrl = trim((string) ($row['image'] ?? ''));
+
             $body = '';
-            if (!empty($row['icon'])) {
-                $icon = htmlspecialchars((string) $row['icon'], ENT_QUOTES, 'UTF-8');
-                $alt  = htmlspecialchars((string) ($row['name'] ?? 'Archetipo'), ENT_QUOTES, 'UTF-8');
-                $body .= '<img src="' . $icon . '" alt="' . $alt . '"'
-                    . ' class="rounded border mb-3" style="max-width:96px;max-height:96px;object-fit:cover;display:block;">';
-            }
             if (!empty($row['description'])) {
                 $body .= $row['description'];
             }
@@ -172,7 +170,10 @@ class Archetypes
 
             $chapters[] = [
                 'chapter'     => $chapterNum,
-                'label'       => $row['name'] ?? ('Archetipo ' . $chapterNum),
+                'label'       => $label,
+                'icon'        => $iconUrl !== '' ? $iconUrl : null,
+                'media'       => $imageUrl !== '' ? $imageUrl : ($iconUrl !== '' ? $iconUrl : null),
+                'media_alt'   => $label,
                 'body'        => $body,
                 'subchapters' => $subchapters,
             ];

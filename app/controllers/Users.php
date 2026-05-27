@@ -11,7 +11,6 @@ use Core\Http\InputValidator;
 use Core\Http\RequestData;
 use Core\Http\ResponseEmitter;
 
-
 use Core\Logging\LoggerInterface;
 use Core\SessionStore;
 
@@ -94,6 +93,9 @@ class Users extends User
             'Non puoi rimuovere il ruolo admin da un account amministratore' => 'user_admin_remove_forbidden',
             'Operazione riservata al superuser' => 'user_superuser_required',
             'Non puoi modificare i permessi dell\'account superuser' => 'user_superuser_permissions_locked',
+            'Non puoi modificare il superuser creatore' => 'user_superuser_creator_locked',
+            'Solo il superuser creatore puo assegnare nuovi superuser' => 'user_superuser_creator_assign_required',
+            'Solo il superuser creatore puo modificare altri superuser' => 'user_superuser_creator_manage_required',
             'Non puoi disconnettere il tuo account dalla lista utenti' => 'user_self_disconnect_forbidden',
             'Funzione restrizione non disponibile. Manca la colonna users.is_restricted' => 'user_restriction_feature_unavailable',
             'Non puoi restringere il tuo account attuale' => 'user_self_restrict_forbidden',
@@ -254,7 +256,17 @@ class Users extends User
         <p>Il link scade tra $expires_minutes minuti.</p>
         <p>Lo Staff</p>";
 
-        mail($user->email, 'Recupero della password', $mess);
+        $sent = (new \App\Services\MailService())->send(
+            (string) $user->email,
+            'Recupero della password',
+            $mess,
+            '',
+            '',
+            'transactional',
+        );
+        if ($sent !== true) {
+            $this->failValidation('Invio email di reset non riuscito');
+        }
 
         ResponseEmitter::emit(ApiResponse::json([
             'success' => true,
@@ -268,11 +280,18 @@ class Users extends User
         $this->requireAdmin();
         $this->requireSuperuser();
         $currentUserId = \Core\AuthGuard::api()->requireUser();
+        $current = $this->userService()->getAdminUserById((int) $currentUserId);
+        if (empty($current)) {
+            throw AppError::unauthorized('Operazione riservata al superuser');
+        }
+        $currentIsCreator = $this->userService()->isCreatorSuperuser($current);
 
         $data = $this->requestDataObject((object) [], true);
 
         $user_id = InputValidator::positiveInt($data, 'user_id', 'Utente non valido', 'user_invalid');
-        $permissions = $this->userService()->normalizePermissionsHierarchy(
+        $permissions = $this->userService()->normalizePrivilegeAssignment(
+            InputValidator::boolean($data, 'is_superuser', false) ? 1 : 0,
+            InputValidator::string($data, 'superuser_role', 'gestore'),
             InputValidator::boolean($data, 'is_administrator', false) ? 1 : 0,
             InputValidator::boolean($data, 'is_moderator', false) ? 1 : 0,
             InputValidator::boolean($data, 'is_master', false) ? 1 : 0,
@@ -282,14 +301,27 @@ class Users extends User
         if (empty($target)) {
             $this->failValidation('Utente non valido');
         }
-        if ((int) ($target->is_superuser ?? 0) === 1) {
-            $this->failValidation('Non puoi modificare i permessi dell\'account superuser');
+        $targetIsSuperuser = (int) ($target->is_superuser ?? 0) === 1;
+        $targetIsCreator = $this->userService()->isCreatorSuperuser($target);
+
+        if ($targetIsCreator) {
+            $this->failValidation('Non puoi modificare il superuser creatore');
+        }
+        if ($targetIsSuperuser && !$currentIsCreator) {
+            $this->failValidation('Solo il superuser creatore puo modificare altri superuser');
+        }
+        if ((int) $permissions['is_superuser'] === 1 && !$targetIsSuperuser && !$currentIsCreator) {
+            $this->failValidation('Solo il superuser creatore puo assegnare nuovi superuser');
         }
 
-        if ((int) $currentUserId === $user_id && (int) $permissions['is_administrator'] !== 1) {
+        if ((int) $currentUserId === $user_id && (int) $permissions['is_administrator'] !== 1 && !$targetIsSuperuser) {
             $this->failValidation('Non puoi rimuovere il ruolo admin dal tuo account attuale');
         }
-        if ((int) ($target->is_administrator ?? 0) === 1 && (int) $permissions['is_administrator'] !== 1) {
+        if (
+            !$targetIsSuperuser
+            && (int) ($target->is_administrator ?? 0) === 1
+            && (int) $permissions['is_administrator'] !== 1
+        ) {
             $this->failValidation('Non puoi rimuovere il ruolo admin da un account amministratore');
         }
 
@@ -298,13 +330,17 @@ class Users extends User
             (int) $permissions['is_administrator'],
             (int) $permissions['is_moderator'],
             (int) $permissions['is_master'],
+            (int) $permissions['is_superuser'],
+            $permissions['superuser_role'],
         );
 
         if ((int) $currentUserId === $user_id) {
             $this->setSessionValue('user_is_administrator', (int) $permissions['is_administrator']);
-            $this->setSessionValue('user_is_superuser', (int) ($target->is_superuser ?? 0));
+            $this->setSessionValue('user_is_superuser', (int) $permissions['is_superuser']);
             $this->setSessionValue('user_is_moderator', (int) $permissions['is_moderator']);
             $this->setSessionValue('user_is_master', (int) $permissions['is_master']);
+            $this->setSessionValue('user_superuser_role', (string) ($permissions['superuser_role'] ?? ''));
+            $this->setSessionValue('user_is_superuser_creator', $permissions['is_superuser'] === 1 && $permissions['superuser_role'] === 'creatore' ? 1 : 0);
         }
 
         ResponseEmitter::emit(ApiResponse::json([
@@ -476,5 +512,3 @@ class Users extends User
         }
     }
 }
-
-
