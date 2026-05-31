@@ -245,10 +245,10 @@ var AdminHowToPlay = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (!payload.id) { return; }
-        if (!confirm('Eliminare questo passo? L\'operazione non può essere annullata.')) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questo passo? L\'operazione non può essere annullata.' + '</p>', confirmLabel: 'Elimina' }))) { return; }
 
         var self = this;
         this.post('/admin/how-to-play/delete', { id: payload.id }, function () {

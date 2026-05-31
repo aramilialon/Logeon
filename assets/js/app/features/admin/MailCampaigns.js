@@ -426,13 +426,13 @@ var AdminMailCampaigns = {
         }
     },
 
-    sendNow: function () {
+    sendNow: async function () {
         var payload = this.collectPayload();
         if (!payload.id) {
             if (typeof Toast !== 'undefined') { Toast.show({ body: "Salva prima la bozza.", type: 'error' }); }
             return;
         }
-        if (!confirm("Inviare la campagna ora? I destinatari verranno accodati per l'invio immediato.")) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'warning', title: 'Conferma operazione', body: '<p>' + "Inviare la campagna ora? I destinatari verranno accodati per l'invio immediato." + '</p>', confirmLabel: 'Confermo' }))) { return; }
 
         var self = this;
         this.post('/admin/mail-campaigns/send-now', { id: payload.id }, function (response) {
@@ -446,10 +446,10 @@ var AdminMailCampaigns = {
         });
     },
 
-    cancelCampaign: function () {
+    cancelCampaign: async function () {
         var payload = this.collectPayload();
         if (!payload.id) { return; }
-        if (!confirm("Annullare l'invio di questa campagna?")) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'warning', title: 'Conferma operazione', body: '<p>' + "Annullare l'invio di questa campagna?" + '</p>', confirmLabel: 'Confermo' }))) { return; }
 
         var self = this;
         this.post('/admin/mail-campaigns/cancel', { id: payload.id }, function () {
@@ -459,10 +459,10 @@ var AdminMailCampaigns = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (!payload.id) { return; }
-        if (!confirm("Eliminare questa campagna? L'operazione non può essere annullata.")) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + "Eliminare questa campagna? L'operazione non può essere annullata." + '</p>', confirmLabel: 'Elimina' }))) { return; }
 
         var self = this;
         this.post('/admin/mail-campaigns/delete', { id: payload.id }, function () {

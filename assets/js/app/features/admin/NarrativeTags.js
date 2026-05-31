@@ -633,7 +633,7 @@ var AdminNarrativeTags = {
                     var msg = globalWindow.Request && typeof globalWindow.Request.getErrorMessage === 'function'
                         ? globalWindow.Request.getErrorMessage(err)
                         : 'Errore nella richiesta.';
-                    alert(msg);
+                    AdminDialogs.alert({ type: 'info', title: 'Avviso', body: '<p>' + msg + '</p>' });
                     if (typeof onError === 'function') { onError(err); }
                 });
             return;
@@ -658,7 +658,7 @@ var AdminNarrativeTags = {
             }).then(function (response) {
                 if (typeof onSuccess === 'function') { onSuccess(response); }
             }).catch(function (err) {
-                alert('Errore nella richiesta.');
+                AdminDialogs.alert({ type: 'info', title: 'Avviso', body: '<p>' + 'Errore nella richiesta.' + '</p>' });
                 if (typeof onError === 'function') { onError(err); }
             });
         }

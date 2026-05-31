@@ -707,12 +707,12 @@ var AdminItemEquipmentRules = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (payload.id <= 0) {
             return;
         }
-        if (!confirm('Eliminare questa regola? L\'operazione non puo essere annullata.')) {
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questa regola? L\'operazione non puo essere annullata.' + '</p>', confirmLabel: 'Elimina' }))) {
             return;
         }
         var self = this;

@@ -5,8 +5,10 @@ declare(strict_types=1);
 use App\Models\Shop;
 
 use App\Services\ShopAdminService;
+use Core\Http\ApiResponse;
 use Core\Http\InputValidator;
 use Core\Http\RequestData;
+use Core\Http\ResponseEmitter;
 
 use Core\Logging\LoggerInterface;
 
@@ -68,7 +70,9 @@ class Shops extends Shop
     public function list($echo = true)
     {
         $this->requireAdmin();
-        return parent::list($echo);
+        $payload = $this->shopAdminService()->list($this->requestDataObject());
+        ResponseEmitter::emit(ApiResponse::json($payload));
+        return $this;
     }
 
     public function create()
@@ -78,6 +82,7 @@ class Shops extends Shop
 
         $data = $this->requestDataObject();
         $this->shopAdminService()->create($data);
+        ResponseEmitter::emit(ApiResponse::json(['success' => true]));
 
         return $this;
     }
@@ -89,6 +94,7 @@ class Shops extends Shop
 
         $data = $this->requestDataObject();
         $this->shopAdminService()->update($data);
+        ResponseEmitter::emit(ApiResponse::json(['success' => true]));
 
         return $this;
     }
@@ -96,6 +102,9 @@ class Shops extends Shop
     public function delete($operator = '=')
     {
         $this->requireAdmin();
-        return parent::delete($operator);
+        $data = $this->requestDataObject();
+        $this->shopAdminService()->delete((int) ($data->id ?? 0));
+        ResponseEmitter::emit(ApiResponse::json(['success' => true]));
+        return $this;
     }
 }

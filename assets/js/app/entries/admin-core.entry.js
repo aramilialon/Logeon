@@ -1,3 +1,8 @@
+import '../../components/Dialog.js';
+import '../../components/Modal.js';
+import '../../components/Toast.js';
+import '../core/system.dialogs.js';
+import '../core/admin.dialogs.js';
 import '../features/admin/AdminImageUploader.js';
 import '../features/admin/AdminFilterLive.js';
 import '../features/admin/AdminUpdateNotice.js';

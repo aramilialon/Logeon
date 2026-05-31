@@ -360,35 +360,27 @@ var AdminMaps = {
         return this;
     },
 
-    remove: function () {
+    remove: async function () {
         var id = parseInt(this.getField('id') || '0', 10) || 0;
         if (id <= 0) return this;
 
-        var self = this;
-        Dialog('warning', {
+        if (!(await AdminDialogs.confirmPromise({
+            type: 'danger',
             title: 'Conferma eliminazione',
             body: '<p>Vuoi eliminare questa mappa?</p>',
-            buttons: [
-                {
-                    text: 'Annulla',
-                    class: 'btn btn-secondary',
-                    dismiss: true
-                },
-                {
-                    text: 'Elimina',
-                    class: 'btn btn-danger',
-                    click: function () {
-                        self.post('/admin/maps/delete', { id: id }, function () {
-                            Toast.show({ body: 'Mappa eliminata.', type: 'success' });
-                            self.modal.hide();
-                            self.loadMapOptions(function () {
-                                self.reload();
-                            });
-                        });
-                    }
-                }
-            ]
-        }).show();
+            confirmLabel: 'Elimina'
+        }))) {
+            return this;
+        }
+
+        var self = this;
+        this.post('/admin/maps/delete', { id: id }, function () {
+            Toast.show({ body: 'Mappa eliminata.', type: 'success' });
+            self.modal.hide();
+            self.loadMapOptions(function () {
+                self.reload();
+            });
+        });
 
         return this;
     },

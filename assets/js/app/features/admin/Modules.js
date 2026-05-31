@@ -1283,11 +1283,7 @@ var AdminModules = {
             return;
         }
 
-        if (globalWindow.confirm((title || 'Conferma') + '\n\n' + String(body || '').replace(/<[^>]+>/g, ''))) {
-            if (typeof onConfirm === 'function') {
-                onConfirm();
-            }
-        } else if (typeof onCancel === 'function') {
+        if (typeof onCancel === 'function') {
             onCancel();
         }
     },

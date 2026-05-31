@@ -340,13 +340,13 @@ var AdminNarrativeDelegationGrants = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         if (!this.editingRow) { return; }
         var self = this;
         var id   = parseInt(this.getField('id'), 10) || 0;
         if (!id) { return; }
 
-        if (!globalWindow.confirm('Eliminare questo permesso narrativo?')) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questo permesso narrativo?' + '</p>', confirmLabel: 'Elimina' }))) { return; }
 
         this.post('/admin/narrative-delegation/grants/delete', { data: { id: id } }, function () {
             self.modal.hide();

@@ -393,7 +393,7 @@ var AdminEquipmentSlots = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (payload.id <= 0) {
             return;
@@ -402,7 +402,7 @@ var AdminEquipmentSlots = {
             Toast.show({ body: 'Gli slot core non possono essere eliminati: puoi disattivarli.', type: 'warning' });
             return;
         }
-        if (!confirm('Eliminare questo slot? Verranno rimosse anche le regole associate e gli oggetti equipaggiati in questo slot verranno sganciati.')) {
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questo slot? Verranno rimosse anche le regole associate e gli oggetti equipaggiati in questo slot verranno sganciati.' + '</p>', confirmLabel: 'Elimina' }))) {
             return;
         }
 

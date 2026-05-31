@@ -326,7 +326,7 @@ var AdminCurrencies = {
         return this;
     },
 
-    remove: function () {
+    remove: async function () {
         var id = parseInt(this.getModalField('id') || '0', 10) || 0;
         if (id <= 0) {
             return this;
@@ -340,29 +340,21 @@ var AdminCurrencies = {
             return this;
         }
 
-        var self = this;
-        Dialog('warning', {
+        if (!(await AdminDialogs.confirmPromise({
+            type: 'danger',
             title: 'Conferma eliminazione',
             body: '<p>Vuoi eliminare questa valuta?</p>',
-            buttons: [
-                {
-                    text: 'Annulla',
-                    class: 'btn btn-secondary',
-                    dismiss: true
-                },
-                {
-                    text: 'Elimina',
-                    class: 'btn btn-danger',
-                    click: function () {
-                        self.post(self.endpointDelete(), { id: id }, function () {
-                            Toast.show({ body: 'Valuta eliminata.', type: 'success' });
-                            self.modal.hide();
-                            self.reloadGridKeepingPosition();
-                        });
-                    }
-                }
-            ]
-        }).show();
+            confirmLabel: 'Elimina'
+        }))) {
+            return this;
+        }
+
+        var self = this;
+        this.post(this.endpointDelete(), { id: id }, function () {
+            Toast.show({ body: 'Valuta eliminata.', type: 'success' });
+            self.modal.hide();
+            self.reloadGridKeepingPosition();
+        });
 
         return this;
     },

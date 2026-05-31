@@ -338,10 +338,10 @@ var AdminGuilds = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (!payload.id) { return; }
-        if (!confirm('Eliminare questa gilda e tutti i suoi ruoli? L\'operazione non può essere annullata.')) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questa gilda e tutti i suoi ruoli? L\'operazione non può essere annullata.' + '</p>', confirmLabel: 'Elimina' }))) { return; }
 
         var self = this;
         this.post('/admin/guilds/admin-delete', { id: payload.id }, function () {
@@ -506,9 +506,9 @@ var AdminGuilds = {
         });
     },
 
-    removeRole: function (id) {
+    removeRole: async function (id) {
         if (!id) { return; }
-        if (!confirm('Eliminare questo ruolo?')) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questo ruolo?' + '</p>', confirmLabel: 'Elimina' }))) { return; }
         var self = this;
         this.post('/admin/guilds/roles-delete', { id: id }, function () {
             if (typeof Toast !== 'undefined') { Toast.show({ body: 'Ruolo eliminato.', type: 'success' }); }

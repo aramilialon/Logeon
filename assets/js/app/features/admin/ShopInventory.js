@@ -590,29 +590,25 @@ var AdminShopInventory = {
         return this;
     },
 
-    remove: function () {
+    remove: async function () {
         var id = parseInt(this.getField('id') || '0', 10) || 0;
         if (id <= 0) { return this; }
 
-        var self = this;
-        Dialog('warning', {
+        if (!(await AdminDialogs.confirmPromise({
+            type: 'danger',
             title: 'Conferma eliminazione',
             body: '<p>Vuoi eliminare questa voce dall\'inventario?</p>',
-            buttons: [
-                { text: 'Annulla', class: 'btn btn-secondary', dismiss: true },
-                {
-                    text: 'Elimina',
-                    class: 'btn btn-danger',
-                    click: function () {
-                        self.post('/admin/inventory/delete', { id: id }, function () {
-                            Toast.show({ body: 'Voce inventario eliminata.', type: 'success' });
-                            self.modal.hide();
-                            self.reloadGridKeepingPosition();
-                        });
-                    }
-                }
-            ]
-        }).show();
+            confirmLabel: 'Elimina'
+        }))) {
+            return this;
+        }
+
+        var self = this;
+        this.post('/admin/inventory/delete', { id: id }, function () {
+            Toast.show({ body: 'Voce inventario eliminata.', type: 'success' });
+            self.modal.hide();
+            self.reloadGridKeepingPosition();
+        });
 
         return this;
     },

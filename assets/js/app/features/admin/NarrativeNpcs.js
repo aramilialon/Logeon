@@ -348,13 +348,13 @@ var AdminNarrativeNpcs = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         if (!this.editingRow) { return; }
         var self = this;
         var id   = parseInt(this.getField('id'), 10) || 0;
         if (!id) { return; }
 
-        if (!globalWindow.confirm('Eliminare questo PNG?')) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questo PNG?' + '</p>', confirmLabel: 'Elimina' }))) { return; }
 
         this.post('/admin/narrative-npcs/delete', { id: id }, function () {
             self.modal.hide();

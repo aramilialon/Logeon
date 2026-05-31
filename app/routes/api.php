@@ -158,6 +158,14 @@ $route->group('/admin', function ($route) {
     $route->apiPost('/core-currencies/update', 'Currencies@update');
     $route->apiPost('/core-currencies/delete', 'Currencies@delete');
 
+    // Compatibility aliases: the public API contract and older admin clients use
+    // /admin/currencies/*, while the consolidated core page currently uses
+    // /admin/core-currencies/*. Keep both to avoid missing API regressions.
+    $route->apiPost('/currencies/list', 'Currencies@list');
+    $route->apiPost('/currencies/create', 'Currencies@create');
+    $route->apiPost('/currencies/update', 'Currencies@update');
+    $route->apiPost('/currencies/delete', 'Currencies@delete');
+
     $route->apiPost('/shops/list', 'Shops@list');
     $route->apiPost('/shops/create', 'Shops@create');
     $route->apiPost('/shops/update', 'Shops@update');
@@ -199,6 +207,15 @@ $route->group('/admin', function ($route) {
     $route->apiPost('/how-to-play/create', 'HowToPlays@create');
     $route->apiPost('/how-to-play/update', 'HowToPlays@update');
     $route->apiPost('/how-to-play/delete', 'HowToPlays@delete');
+
+    // Bundled novelty/news compatibility routes. The admin registry and bundled
+    // AdminNews feature are part of the core admin shell, so these endpoints
+    // must not disappear when module route registration is skipped.
+    $noveltyController = \Modules\Logeon\Novelty\Controllers\Novelties::class;
+    $route->apiPost('/news/list', $noveltyController . '@adminList');
+    $route->apiPost('/news/create', $noveltyController . '@create');
+    $route->apiPost('/news/update', $noveltyController . '@update');
+    $route->apiPost('/news/delete', $noveltyController . '@adminDelete');
 
     $route->apiPost('/characters/name-requests/list', 'Characters@listNameRequests');
     $route->apiPost('/characters/loanface-requests/list', 'Characters@listLoanfaceRequests');
@@ -501,6 +518,7 @@ $route->group('/narrative-tags', function ($route) {
 $route->group('/list', function ($route) {
     $route->apiPost('/nationalities', 'Nationalities@list');
     $route->apiPost('/narrative-tags', 'NarrativeTags@publicList');
+    $route->apiPost('/news', \Modules\Logeon\Novelty\Controllers\Novelties::class . '@list');
     $route->apiPost('/maps', 'Maps@list');
     $route->apiPost('/locations', 'Locations@list');
     $route->apiPost('/profile/bag', 'Inventory@bag');

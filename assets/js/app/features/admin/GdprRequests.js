@@ -480,7 +480,7 @@ var AdminGdprRequests = {
             return;
         }
         if (type === 'error' || type === 'warning') {
-            globalWindow.alert(message);
+            AdminDialogs.alert({ type: 'info', title: 'Avviso', body: '<p>' + message + '</p>' });
         }
     },
 

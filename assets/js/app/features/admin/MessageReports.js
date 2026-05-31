@@ -385,7 +385,7 @@ var AdminMessageReports = {
             return;
         }
         if (type === 'error' || type === 'warning') {
-            alert(message);
+            AdminDialogs.alert({ type: 'info', title: 'Avviso', body: '<p>' + message + '</p>' });
         }
     },
 

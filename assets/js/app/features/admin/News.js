@@ -293,12 +293,12 @@ var AdminNews = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (!payload.id) {
             return;
         }
-        if (!confirm('Eliminare questa novità? L\'operazione non può essere annullata.')) {
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questa novità? L\'operazione non può essere annullata.' + '</p>', confirmLabel: 'Elimina' }))) {
             return;
         }
 

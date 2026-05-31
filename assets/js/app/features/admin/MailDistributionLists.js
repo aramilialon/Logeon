@@ -454,10 +454,10 @@ var AdminMailDistributionLists = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (!payload.id) { return; }
-        if (!confirm("Eliminare questa lista? L'operazione non può essere annullata.")) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + "Eliminare questa lista? L'operazione non può essere annullata." + '</p>', confirmLabel: 'Elimina' }))) { return; }
 
         var self = this;
         this.post('/admin/mail-lists/delete', { id: payload.id }, function () {
@@ -487,8 +487,8 @@ var AdminMailDistributionLists = {
         });
     },
 
-    removeMember: function (memberId) {
-        if (!confirm('Rimuovere questo destinatario?')) { return; }
+    removeMember: async function (memberId) {
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Rimuovere questo destinatario?' + '</p>', confirmLabel: 'Elimina' }))) { return; }
         var self   = this;
         var listId = this.editingRow ? this.editingRow.id : 0;
 

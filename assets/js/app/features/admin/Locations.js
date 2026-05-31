@@ -577,35 +577,27 @@ var AdminLocations = {
         return this;
     },
 
-    remove: function () {
+    remove: async function () {
         var id = parseInt(this.getModalField('id') || '0', 10) || 0;
         if (id <= 0) { return this; }
 
-        var self = this;
-        Dialog('warning', {
+        if (!(await AdminDialogs.confirmPromise({
+            type: 'danger',
             title: 'Conferma eliminazione',
             body: '<p>Vuoi eliminare questo luogo? L\'operazione è irreversibile.</p>',
-            buttons: [
-                {
-                    text: 'Annulla',
-                    class: 'btn btn-secondary',
-                    dismiss: true
-                },
-                {
-                    text: 'Elimina',
-                    class: 'btn btn-danger',
-                    click: function () {
-                        self.post('/admin/locations/delete', { id: id }, function () {
-                            if (typeof Toast !== 'undefined') {
-                                Toast.show({ body: 'Luogo eliminato.', type: 'success' });
-                            }
-                            self.modal.hide();
-                            self.reloadGridKeepingPosition();
-                        });
-                    }
-                }
-            ]
-        }).show();
+            confirmLabel: 'Elimina'
+        }))) {
+            return this;
+        }
+
+        var self = this;
+        this.post('/admin/locations/delete', { id: id }, function () {
+            if (typeof Toast !== 'undefined') {
+                Toast.show({ body: 'Luogo eliminato.', type: 'success' });
+            }
+            self.modal.hide();
+            self.reloadGridKeepingPosition();
+        });
 
         return this;
     },

@@ -466,12 +466,12 @@ var AdminJobs = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (!payload.id) {
             return;
         }
-        if (!confirm('Eliminare questo lavoro? L\'operazione non può essere annullata.')) {
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questo lavoro? L\'operazione non può essere annullata.' + '</p>', confirmLabel: 'Elimina' }))) {
             return;
         }
 

@@ -328,10 +328,10 @@ var AdminJobsLevels = {
         });
     },
 
-    remove: function () {
+    remove: async function () {
         var payload = this.collectPayload();
         if (!payload.id) { return; }
-        if (!confirm('Eliminare questo livello? L\'operazione non può essere annullata.')) { return; }
+        if (!(await AdminDialogs.confirmPromise({ type: 'danger', title: 'Conferma eliminazione', body: '<p>' + 'Eliminare questo livello? L\'operazione non può essere annullata.' + '</p>', confirmLabel: 'Elimina' }))) { return; }
 
         var self = this;
         this.post('/admin/jobs-levels/delete', { id: payload.id }, function () {
