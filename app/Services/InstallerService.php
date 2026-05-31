@@ -189,7 +189,9 @@ class InstallerService
     public function getInstallState()
     {
         return [
-            'installed' => $this->isInstalled(),
+            // Stato readonly per il wizard installer:
+            // non deve creare lock file tramite auto-detect legacy.
+            'installed' => $this->isLocked(),
             'lock_file' => $this->getInstallLockPath(),
         ];
     }
