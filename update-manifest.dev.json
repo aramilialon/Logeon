@@ -32,8 +32,8 @@
       },
       "changelog_url": "https://github.com/Gekis-Geko/Logeon/releases/tag/v1.0.0",
       "notes": [
-        "Manifest ufficiale del canale stable.",
-        "Aggiornare URL asset, checksum e size_bytes a ogni nuova release."
+        "Manifest locale di staging per validare la Fase 1 dell'updater.",
+        "Nessuna applicazione update automatica in questa fase."
       ]
     }
   ]
