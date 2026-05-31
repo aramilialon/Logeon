@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS `mail_messages` (
     `distribution_list_id` INT UNSIGNED NULL DEFAULT NULL,
     `subject`              VARCHAR(500)   NOT NULL DEFAULT '',
     `body_html`            LONGTEXT       NOT NULL,
-    `body_text`            TEXT           NOT NULL DEFAULT '',
+    `body_text`            TEXT           NOT NULL,
     `category`             ENUM('transactional','system','announcement','newsletter') NOT NULL DEFAULT 'announcement',
     `status`               ENUM('draft','scheduled','queued','sending','sent','failed','cancelled') NOT NULL DEFAULT 'draft',
     `scheduled_at`         DATETIME       NULL DEFAULT NULL,
