@@ -163,6 +163,56 @@
                         </table>
                     </div>
                 </div>
+
+                <div class="d-none mt-4" data-role="admin-guilds-members-section">
+                    <hr class="my-4" />
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">Membri</h6>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title mb-3">Aggiungi membro</h6>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-12 col-md-5" style="position:relative">
+                                    <label class="form-label form-label-sm">Cerca personaggio</label>
+                                    <input type="text" class="form-control form-control-sm" id="admin-guilds-member-search" autocomplete="off" placeholder="Nome personaggio...">
+                                    <div id="admin-guilds-member-suggestions" class="list-group position-absolute w-100" style="z-index:1060;display:none;top:100%;left:0;"></div>
+                                    <input type="hidden" id="admin-guilds-member-character-id" value="">
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label form-label-sm">Ruolo</label>
+                                    <select class="form-select form-select-sm" id="admin-guilds-member-role">
+                                        <option value="">— predefinito —</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-3">
+                                    <button type="button" class="btn btn-sm btn-primary w-100" data-action="admin-guilds-member-add">
+                                        <i class="bi bi-person-plus me-1"></i>Aggiungi
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Personaggio</th>
+                                    <th>Ruolo</th>
+                                    <th class="text-center" style="width:110px">Data iscrizione</th>
+                                    <th style="width:60px"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-guilds-members-tbody">
+                                <tr data-role="admin-guilds-members-empty">
+                                    <td colspan="4" class="text-muted text-center">Nessun membro.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

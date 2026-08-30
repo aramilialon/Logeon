@@ -1283,4 +1283,96 @@ class Guilds extends Guild
         $this->guildEventAdminService()->delete($id);
         ResponseEmitter::emit(ApiResponse::json(['status' => 'ok']));
     }
+
+    public function adminMembersList(): void
+    {
+        $this->requireAdmin();
+        $data = $this->requestDataObject();
+        $guildId = isset($data->guild_id) ? (int) $data->guild_id : 0;
+        if ($guildId <= 0) {
+            $this->failValidation('Gilda non valida');
+        }
+        $members = $this->guildService()->listMembers($guildId);
+        ResponseEmitter::emit(ApiResponse::json(['members' => $members]));
+    }
+
+    public function adminAddMember(): void
+    {
+        $this->requireAdmin();
+        $data = $this->requestDataObject();
+        $guildId = isset($data->guild_id) ? (int) $data->guild_id : 0;
+        $characterId = isset($data->character_id) ? (int) $data->character_id : 0;
+        $roleId = isset($data->role_id) ? (int) $data->role_id : 0;
+
+        if ($guildId <= 0 || $characterId <= 0) {
+            $this->failValidation('Dati non validi');
+        }
+
+        $guild = $this->guildService()->getGuild($guildId);
+        if (empty($guild)) {
+            $this->failNotFound('Gilda non trovata');
+        }
+
+        if ($this->guildService()->getMemberCount($characterId) >= 2) {
+            $this->failValidation('Il personaggio ha gia due gilde');
+        }
+
+        $alreadyMember = $this->guildService()->getMembership($characterId, $guildId);
+        if (!empty($alreadyMember)) {
+            $this->failValidation('Il personaggio e gia membro della gilda');
+        }
+
+        if (empty($roleId)) {
+            $roleId = $this->guildService()->getDefaultRole($guildId);
+        }
+
+        if (empty($roleId)) {
+            $this->failValidation('Nessun ruolo disponibile per questa gilda');
+        }
+
+        $role = $this->guildService()->getRoleInGuild($guildId, $roleId);
+        if (empty($role)) {
+            $this->failValidation('Ruolo non valido');
+        }
+
+        if ((int) $role->is_leader === 1 && $this->guildService()->hasLeader($guildId)) {
+            $this->failValidation('La gilda ha gia un capo');
+        }
+
+        $isPrimary = ($this->guildService()->getMemberCount($characterId) === 0) ? 1 : 0;
+        $this->guildService()->addMember($guildId, $characterId, $roleId, $isPrimary);
+
+        if ((int) $role->is_leader === 1) {
+            $this->guildService()->setGuildLeader($guildId, $characterId);
+        }
+
+        $this->guildService()->logEvent($guildId, 'member_added_by_admin', null, $characterId, [
+            'role_id' => $roleId,
+        ]);
+
+        ResponseEmitter::emit(ApiResponse::json(['status' => 'ok']));
+    }
+
+    public function adminRemoveMember(): void
+    {
+        $this->requireAdmin();
+        $data = $this->requestDataObject();
+        $guildId = isset($data->guild_id) ? (int) $data->guild_id : 0;
+        $characterId = isset($data->character_id) ? (int) $data->character_id : 0;
+
+        if ($guildId <= 0 || $characterId <= 0) {
+            $this->failValidation('Dati non validi');
+        }
+
+        $member = $this->guildService()->getMembership($characterId, $guildId);
+        if (empty($member)) {
+            $this->failValidation('Il personaggio non e membro di questa gilda');
+        }
+
+        $this->guildService()->removeMember($guildId, $characterId);
+
+        $this->guildService()->logEvent($guildId, 'member_removed_by_admin', null, $characterId);
+
+        ResponseEmitter::emit(ApiResponse::json(['status' => 'ok']));
+    }
 }
