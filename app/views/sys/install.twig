@@ -1,4 +1,23 @@
-{% include 'layouts/header.twig' %}
+<!DOCTYPE html>
+<html lang="{{ APP.lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="description" content="{{ APP.description }}">
+    <meta name="title" content="{{ APP.name }}">
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+    {% set pilot_bundle_version = FRONTEND_ASSET_VERSION|default('20260403') %}
+    <title>{{ APP.name }} - Installer</title>
+    <link rel="stylesheet" href="/assets/css/framework.css?v={{ pilot_bundle_version }}">
+    <link rel="stylesheet" href="/assets/css/style.css?v={{ pilot_bundle_version }}">
+    <link rel="stylesheet" href="/assets/css/custom.css?v={{ pilot_bundle_version }}">
+    <script type="text/javascript" src="/assets/js/jquery/jquery.min.js"></script>
+    <script type="text/javascript" src="/assets/js/services/Request.js?v={{ pilot_bundle_version }}"></script>
+    <script type="text/javascript" src="/assets/js/app/core/system.pages.js?v={{ pilot_bundle_version }}"></script>
+</head>
+<body class="{{ theme_body_classes() }}" data-theme-active="{{ theme_active() ? '1' : '0' }}" data-theme-context="{{ THEME_CONTEXT }}"{% if theme_active() %} data-theme-id="{{ theme_id() }}"{% endif %}>
 
 <section id="installer-page" class="container py-4 ui-page">
     <div class="row justify-content-center">
@@ -275,3 +294,5 @@
         </div>
     </div>
 </section>
+</body>
+</html>
