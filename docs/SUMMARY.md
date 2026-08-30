@@ -3,6 +3,7 @@
 * [Panoramica](README.md)
 
 * **Installazione e avvio**
+  * [Guida installazione da sorgente](guida-installazione-da-sorgente.md)
   * [Guida personalizzazione gioco](guida-personalizzazione-gioco.md)
   * [Guida PWA installabile](guida-pwa-installabile.md)
   * [Guida temi e layout](guida-temi-layout.md)
