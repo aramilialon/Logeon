@@ -148,7 +148,7 @@ function getBuildOptions(group) {
     outdir: group.outdir,
     bundle: true,
     format: 'esm',
-    splitting: true,
+    splitting: false,
     platform: 'browser',
     target: ['es2020'],
     sourcemap: !isRelease,
@@ -157,7 +157,6 @@ function getBuildOptions(group) {
     metafile: true,
     charset: 'utf8',
     entryNames: group.entryNames || '[name]',
-    chunkNames: 'chunks/[name]-[hash]',
     assetNames: 'assets/[name]-[hash]'
   };
 }
