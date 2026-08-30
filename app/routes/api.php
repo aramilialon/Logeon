@@ -266,6 +266,9 @@ $route->group('/admin', function ($route) {
     $route->apiPost('/guilds/events-create', 'Guilds@adminEventCreate');
     $route->apiPost('/guilds/events-update', 'Guilds@adminEventUpdate');
     $route->apiPost('/guilds/events-delete', 'Guilds@adminEventDelete');
+    $route->apiPost('/guilds/admin-members', 'Guilds@adminMembersList');
+    $route->apiPost('/guilds/admin-add-member', 'Guilds@adminAddMember');
+    $route->apiPost('/guilds/admin-remove-member', 'Guilds@adminRemoveMember');
 
     $route->apiPost('/guild-roles/list', 'GuildRoles@list');
     $route->apiPost('/guild-roles/create', 'GuildRoles@create');

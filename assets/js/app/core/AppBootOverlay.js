@@ -12,7 +12,7 @@ function createOverlayController() {
         idleTimer: null,
         safetyTimer: null,
         config: {
-            showDelayMs: 150,
+            showDelayMs: 1000,
             minVisibleMs: 260,
             idleGraceMs: 320,
             safetyTimeoutMs: 12000

@@ -12,6 +12,13 @@ var AdminGuilds = {
     roleForm: null,
     rolesTbody: null,
     rolesSection: null,
+    membersTbody: null,
+    membersSection: null,
+    memberSearchInput: null,
+    memberCharacterId: null,
+    memberSuggestionsBox: null,
+    memberRoleSelect: null,
+    memberSearchTimer: null,
     rows: [],
     rowsById: {},
     alignments: [],
@@ -35,6 +42,12 @@ var AdminGuilds = {
         this.roleForm     = this.root.querySelector('#admin-guilds-role-form');
         this.rolesTbody   = this.root.querySelector('#admin-guilds-roles-tbody');
         this.rolesSection = this.root.querySelector('[data-role="admin-guilds-roles-section"]');
+        this.membersTbody       = this.root.querySelector('#admin-guilds-members-tbody');
+        this.membersSection     = this.root.querySelector('[data-role="admin-guilds-members-section"]');
+        this.memberSearchInput  = this.root.querySelector('#admin-guilds-member-search');
+        this.memberCharacterId  = this.root.querySelector('#admin-guilds-member-character-id');
+        this.memberSuggestionsBox = this.root.querySelector('#admin-guilds-member-suggestions');
+        this.memberRoleSelect   = this.root.querySelector('#admin-guilds-member-role');
 
         if (!this.filtersForm || !this.modalNode || !this.modalForm) {
             return this;
@@ -43,6 +56,7 @@ var AdminGuilds = {
         this.modal = new bootstrap.Modal(this.modalNode);
         this.bind();
         this.bindIconPreview();
+        this.bindMemberSearch();
         this.initGrid();
         this.loadAlignments(function () {
             this.loadGrid();
@@ -98,6 +112,13 @@ var AdminGuilds = {
                 event.preventDefault();
                 var rid = parseInt(trigger.getAttribute('data-id') || '0', 10);
                 self.removeRole(rid);
+            } else if (action === 'admin-guilds-member-add') {
+                event.preventDefault();
+                self.addMember();
+            } else if (action === 'admin-guilds-member-remove') {
+                event.preventDefault();
+                var rmCharId = parseInt(trigger.getAttribute('data-character-id') || '0', 10);
+                self.removeMember(rmCharId);
             }
         });
     },
@@ -255,6 +276,7 @@ var AdminGuilds = {
         this.toggleDelete(false);
         this.hideRoleForm();
         if (this.rolesSection) { this.rolesSection.classList.add('d-none'); }
+        if (this.membersSection) { this.membersSection.classList.add('d-none'); }
         this.fillAlignmentSelects();
         this.modal.show();
     },
@@ -275,8 +297,10 @@ var AdminGuilds = {
         this.toggleDelete(true);
         this.hideRoleForm();
         if (this.rolesSection) { this.rolesSection.classList.remove('d-none'); }
+        if (this.membersSection) { this.membersSection.classList.remove('d-none'); }
         this.fillAlignmentSelects();
         this.loadRoles(this.editingGuildId);
+        this.loadMembers(this.editingGuildId);
         this.modal.show();
     },
 
@@ -366,6 +390,7 @@ var AdminGuilds = {
         if (!this.rolesTbody) { return; }
         var self = this;
         this.rolesTbody.innerHTML = '';
+        this.renderMemberRoleOptions(Array.isArray(roles) ? roles : []);
 
         if (!roles || !roles.length) {
             var emptyRow = document.createElement('tr');
@@ -569,6 +594,140 @@ var AdminGuilds = {
         if (!iconInput) { return; }
         iconInput.addEventListener('input', function () {
             self.updateIconPreview('admin-guilds-icon-preview', iconInput.value.trim());
+        });
+    },
+
+    // ── Members ────────────────────────────────────────────────────────────
+
+    loadMembers: function (guildId) {
+        var self = this;
+        if (!this.membersTbody) { return; }
+        this.membersTbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center small">Caricamento...</td></tr>';
+        this.post('/admin/guilds/admin-members', { guild_id: guildId }, function (res) {
+            self.renderMembers(res && res.members ? res.members : []);
+        }, function () {
+            if (self.membersTbody) {
+                self.membersTbody.innerHTML = '<tr><td colspan="4" class="text-danger text-center small">Errore nel caricamento dei membri.</td></tr>';
+            }
+        });
+    },
+
+    renderMembers: function (members) {
+        if (!this.membersTbody) { return; }
+        if (!members || members.length === 0) {
+            this.membersTbody.innerHTML = '<tr data-role="admin-guilds-members-empty"><td colspan="4" class="text-muted text-center">Nessun membro.</td></tr>';
+            return;
+        }
+        var self = this;
+        var html = '';
+        for (var i = 0; i < members.length; i++) {
+            var m = members[i];
+            var fullName = self.escapeHtml((m.name || '') + (m.surname ? ' ' + m.surname : ''));
+            var roleName = self.escapeHtml(m.role_name || '—');
+            var dateJoined = m.date_joined ? m.date_joined.substring(0, 10) : '—';
+            html += '<tr>'
+                + '<td>' + fullName + '</td>'
+                + '<td>' + roleName + (m.is_leader ? ' <span class="badge bg-warning text-dark ms-1">Leader</span>' : '') + (m.is_officer ? ' <span class="badge bg-secondary ms-1">Officer</span>' : '') + '</td>'
+                + '<td class="text-center small text-muted">' + self.escapeHtml(dateJoined) + '</td>'
+                + '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" data-action="admin-guilds-member-remove" data-character-id="' + self.escapeAttr(String(m.character_id)) + '" title="Rimuovi"><i class="bi bi-person-dash"></i></button></td>'
+                + '</tr>';
+        }
+        this.membersTbody.innerHTML = html;
+    },
+
+    renderMemberRoleOptions: function (roles) {
+        if (!this.memberRoleSelect) { return; }
+        var html = '<option value="">— predefinito —</option>';
+        for (var i = 0; i < roles.length; i++) {
+            var r = roles[i];
+            html += '<option value="' + this.escapeAttr(String(r.id)) + '">' + this.escapeHtml(r.name || '') + '</option>';
+        }
+        this.memberRoleSelect.innerHTML = html;
+    },
+
+    bindMemberSearch: function () {
+        var self = this;
+        if (!this.memberSearchInput) { return; }
+        this.memberSearchInput.addEventListener('input', function () {
+            var query = (self.memberSearchInput.value || '').trim();
+            if (self.memberCharacterId) { self.memberCharacterId.value = ''; }
+            if (self.memberSearchTimer) { clearTimeout(self.memberSearchTimer); }
+            if (query.length < 2) {
+                if (self.memberSuggestionsBox) { self.memberSuggestionsBox.style.display = 'none'; }
+                return;
+            }
+            self.memberSearchTimer = setTimeout(function () {
+                self.post('/admin/characters/list', { query: { name: query }, page: 1, results: 10 }, function (res) {
+                    var rows = (res && res.dataset) ? res.dataset : [];
+                    self.showMemberSuggestions(rows);
+                });
+            }, 300);
+        });
+
+        if (this.memberSearchInput) {
+            this.memberSearchInput.addEventListener('blur', function () {
+                setTimeout(function () {
+                    if (self.memberSuggestionsBox) { self.memberSuggestionsBox.style.display = 'none'; }
+                }, 200);
+            });
+        }
+    },
+
+    showMemberSuggestions: function (rows) {
+        if (!this.memberSuggestionsBox) { return; }
+        if (!rows || rows.length === 0) {
+            this.memberSuggestionsBox.style.display = 'none';
+            return;
+        }
+        var self = this;
+        var html = '';
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            var fullName = (r.name || '') + (r.surname ? ' ' + r.surname : '');
+            html += '<button type="button" class="list-group-item list-group-item-action list-group-item-dark py-1 px-2 small"'
+                + ' data-character-id="' + self.escapeAttr(String(r.id)) + '"'
+                + ' data-character-name="' + self.escapeAttr(fullName) + '">'
+                + self.escapeHtml(fullName)
+                + '</button>';
+        }
+        this.memberSuggestionsBox.innerHTML = html;
+        this.memberSuggestionsBox.style.display = '';
+
+        this.memberSuggestionsBox.querySelectorAll('[data-character-id]').forEach(function (btn) {
+            btn.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                var charId = btn.getAttribute('data-character-id');
+                var charName = btn.getAttribute('data-character-name');
+                if (self.memberSearchInput) { self.memberSearchInput.value = charName; }
+                if (self.memberCharacterId) { self.memberCharacterId.value = charId; }
+                if (self.memberSuggestionsBox) { self.memberSuggestionsBox.style.display = 'none'; }
+            });
+        });
+    },
+
+    addMember: function () {
+        var self = this;
+        var characterId = this.memberCharacterId ? parseInt(this.memberCharacterId.value || '0', 10) : 0;
+        var roleId = this.memberRoleSelect ? parseInt(this.memberRoleSelect.value || '0', 10) : 0;
+        if (!characterId) {
+            if (typeof Toast !== 'undefined') { Toast.show({ body: 'Seleziona un personaggio dalla lista.', type: 'warning' }); }
+            return;
+        }
+        this.post('/admin/guilds/admin-add-member', { guild_id: this.editingGuildId, character_id: characterId, role_id: roleId }, function () {
+            if (self.memberSearchInput) { self.memberSearchInput.value = ''; }
+            if (self.memberCharacterId) { self.memberCharacterId.value = ''; }
+            self.loadMembers(self.editingGuildId);
+            if (typeof Toast !== 'undefined') { Toast.show({ body: 'Membro aggiunto.', type: 'success' }); }
+        });
+    },
+
+    removeMember: function (characterId) {
+        var self = this;
+        if (!characterId) { return; }
+        if (!confirm('Rimuovere questo membro dalla gilda?')) { return; }
+        this.post('/admin/guilds/admin-remove-member', { guild_id: this.editingGuildId, character_id: characterId }, function () {
+            self.loadMembers(self.editingGuildId);
+            if (typeof Toast !== 'undefined') { Toast.show({ body: 'Membro rimosso.', type: 'success' }); }
         });
     }
 };
